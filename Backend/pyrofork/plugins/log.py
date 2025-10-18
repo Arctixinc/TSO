@@ -114,8 +114,12 @@ async def log_command(client: Client, message: Message):
             [
                 InlineKeyboardButton("📜 Show here", callback_data="log_show"),
                 InlineKeyboardButton("🌐 Open URL", url=paste_url)
+            ],
+            [
+                InlineKeyboardButton("⏹ Close", callback_data="log_close")
             ]
         ])
+        # Replace this part in /log command when sending document
 
         await message.reply_document(
             document=path,
