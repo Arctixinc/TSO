@@ -138,21 +138,29 @@ async def log_show_handler(client: Client, query: CallbackQuery):
         async with aiofiles.open(path, "r") as f:
             content = await f.read()
 
+        # Split content into pages
         pages = chunk_text(content)
+
+        # Take last 20 lines for preview
+        lines = content.strip().splitlines()
+        preview_lines = lines[-20:] if len(lines) > 20 else lines
+        preview_text = "\n".join(preview_lines)
+        preview_text = f"<pre>{preview_text}</pre>"
+
         paste_url = query.message.reply_markup.inline_keyboard[0][1].url
 
-        # Send new text message with first page
+        # Send preview as new message
         msg = await query.message.reply_text(
-            f"<pre>{pages[0]}</pre>",
-            reply_markup=build_markup(0, len(pages), paste_url)
+            preview_text,
+            reply_markup=build_markup(len(pages)-1, len(pages), paste_url)  # start at last page
         )
 
-        LOG_CACHE[msg.id] = {"pages": pages, "url": paste_url, "index": 0}
+        LOG_CACHE[msg.id] = {"pages": pages, "url": paste_url, "index": len(pages)-1}
 
-        await query.answer("Log opened ✅")
+        await query.answer("Preview loaded ✅")
 
     except Exception as e:
-        await query.answer("Error loading log.", show_alert=True)
+        await query.answer("Error loading log preview.", show_alert=True)
         print(f"Error in log_show_handler: {e}")
 
 @Client.on_callback_query(filters.regex("^log_next$"))
@@ -189,7 +197,7 @@ async def log_prev_handler(client: Client, query: CallbackQuery):
 
 @Client.on_callback_query(filters.regex("^log_refresh$"))
 async def log_refresh_handler(client: Client, query: CallbackQuery):
-    """Refresh log content and update the online paste URL only if changed."""
+    """Refresh log content and update the online paste URL only if content changed."""
     try:
         path = ospath.abspath("log.txt")
         async with aiofiles.open(path, "r") as f:
@@ -200,41 +208,33 @@ async def log_refresh_handler(client: Client, query: CallbackQuery):
         if not data:
             return await query.answer("Session expired.", show_alert=True)
 
-        # Preserve current page index
         current_index = data["index"]
 
-        # Check if content changed
         old_content = "".join(data["pages"]) if "pages" in data else ""
         if content != old_content:
             # Content changed → repaste online
             yaso_url = await paste_to_yaso(content)
             paste_url = yaso_url if not yaso_url.startswith("Error") else await paste_to_spacebin(content)
         else:
-            # Content same → keep old URL
             paste_url = data["url"]
 
-        # Split text into pages
         pages = chunk_text(content)
         total_pages = len(pages)
         if current_index >= total_pages:
-            current_index = total_pages - 1  # adjust if file got shorter
+            current_index = total_pages - 1
 
-        # Update cache with new pages and URL
         LOG_CACHE[msg_id] = {"pages": pages, "url": paste_url, "index": current_index}
 
-        # Update message
-        await query.message.edit_text(
-            f"<pre>{pages[current_index]}</pre>",
-            reply_markup=build_markup(current_index, total_pages, paste_url)
-        )
+        new_text = f"<pre>{pages[current_index]}</pre>"
+        if query.message.text != new_text:
+            await query.message.edit_text(new_text, reply_markup=build_markup(current_index, total_pages, paste_url))
 
         await query.answer("✅ Log refreshed")
 
     except Exception as e:
         await query.answer("Error refreshing log.", show_alert=True)
         print(f"Error in log_refresh_handler: {e}")
-        
-    
+
 @Client.on_callback_query(filters.regex("^log_close$"))
 async def log_close_handler(client: Client, query: CallbackQuery):
     msg_id = query.message.id
