@@ -29,7 +29,7 @@ async def process_file():
 for _ in range(1):
     create_task(process_file())
 
-
+@Client.on_edited_message(filters.channel & (filters.document | filters.video))
 @Client.on_message(filters.channel & (filters.document | filters.video))
 async def file_receive_handler(client: Client, message: Message):
     if str(message.chat.id) in Telegram.AUTH_CHANNEL:
