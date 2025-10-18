@@ -68,22 +68,28 @@ def chunk_text(text: str, chunk_size=3500):
     return [text[i:i + chunk_size] for i in range(0, len(text), chunk_size)]
 
 def build_markup(index: int, total: int, url: str):
+    """Advanced but clean inline keyboard with page indicator."""
     buttons = []
 
+    # Navigation Row
     nav_row = []
     if index > 0:
         nav_row.append(InlineKeyboardButton("⏮ Prev", callback_data="log_prev"))
+    nav_row.append(InlineKeyboardButton(f"📄 {index + 1}/{total}", callback_data="log_null"))
     if index < total - 1:
-        nav_row.append(InlineKeyboardButton("⏭ Next", callback_data="log_next"))
+        nav_row.append(InlineKeyboardButton("Next ⏭", callback_data="log_next"))
     if nav_row:
         buttons.append(nav_row)
 
+    # Actions Row
     buttons.append([
         InlineKeyboardButton("🔄 Refresh", callback_data="log_refresh"),
         InlineKeyboardButton("🌐 Open URL", url=url)
     ])
 
-    buttons.append([InlineKeyboardButton("⏹ Close", callback_data="log_close")])
+    # Close Row
+    buttons.append([InlineKeyboardButton("❌ Close", callback_data="log_close")])
+
     return InlineKeyboardMarkup(buttons)
 
 # -------------------------------
@@ -248,3 +254,7 @@ async def log_close_handler(client: Client, query: CallbackQuery):
     LOG_CACHE.pop(msg_id, None)
     await query.message.delete()
     await query.answer("Closed.")
+
+@Client.on_callback_query(filters.regex("^log_null$"))
+async def log_null_handler(client: Client, query: CallbackQuery):
+    await query.answer()
