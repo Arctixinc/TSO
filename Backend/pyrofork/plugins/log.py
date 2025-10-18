@@ -189,6 +189,7 @@ async def log_prev_handler(client: Client, query: CallbackQuery):
 
 @Client.on_callback_query(filters.regex("^log_refresh$"))
 async def log_refresh_handler(client: Client, query: CallbackQuery):
+    """Refresh log content and update the online paste URL."""
     try:
         path = ospath.abspath("log.txt")
         async with aiofiles.open(path, "r") as f:
@@ -199,16 +200,34 @@ async def log_refresh_handler(client: Client, query: CallbackQuery):
         if not data:
             return await query.answer("Session expired.", show_alert=True)
 
-        pages = chunk_text(content)
-        LOG_CACHE[msg_id] = {"pages": pages, "url": data["url"], "index": 0}
+        # Preserve current page index
+        current_index = data["index"]
 
-        await query.message.edit_text(f"<pre>{pages[0]}</pre>", reply_markup=build_markup(0, len(pages), data["url"]))
-        await query.answer("✅ Log refreshed")
+        # Repaste log online
+        yaso_url = await paste_to_yaso(content)
+        paste_url = yaso_url if not yaso_url.startswith("Error") else await paste_to_spacebin(content)
+
+        # Split text into pages
+        pages = chunk_text(content)
+        total_pages = len(pages)
+        if current_index >= total_pages:
+            current_index = total_pages - 1  # adjust if file got shorter
+
+        # Update cache with new pages and URL
+        LOG_CACHE[msg_id] = {"pages": pages, "url": paste_url, "index": current_index}
+
+        # Update message
+        await query.message.edit_text(
+            f"<pre>{pages[current_index]}</pre>",
+            reply_markup=build_markup(current_index, total_pages, paste_url)
+        )
+
+        await query.answer("✅ Log refreshed and URL updated")
 
     except Exception as e:
         await query.answer("Error refreshing log.", show_alert=True)
         print(f"Error in log_refresh_handler: {e}")
-
+    
 @Client.on_callback_query(filters.regex("^log_close$"))
 async def log_close_handler(client: Client, query: CallbackQuery):
     msg_id = query.message.id
