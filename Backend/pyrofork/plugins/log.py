@@ -11,6 +11,7 @@ from pyrogram.types import (
     InlineKeyboardButton,
     CallbackQuery
 )
+from pyrogram.errors import MessageNotModified
 from Backend.helper.custom_filter import CustomFilters
 
 # -------------------------------
@@ -197,7 +198,6 @@ async def log_prev_handler(client: Client, query: CallbackQuery):
 
 @Client.on_callback_query(filters.regex("^log_refresh$"))
 async def log_refresh_handler(client: Client, query: CallbackQuery):
-    """Refresh log content and update the online paste URL only if content changed."""
     try:
         path = ospath.abspath("log.txt")
         async with aiofiles.open(path, "r") as f:
@@ -212,7 +212,6 @@ async def log_refresh_handler(client: Client, query: CallbackQuery):
 
         old_content = "".join(data["pages"]) if "pages" in data else ""
         if content != old_content:
-            # Content changed → repaste online
             yaso_url = await paste_to_yaso(content)
             paste_url = yaso_url if not yaso_url.startswith("Error") else await paste_to_spacebin(content)
         else:
@@ -226,13 +225,17 @@ async def log_refresh_handler(client: Client, query: CallbackQuery):
         LOG_CACHE[msg_id] = {"pages": pages, "url": paste_url, "index": current_index}
 
         new_text = f"<pre>{pages[current_index]}</pre>"
-        if query.message.text != new_text:
-            await query.message.edit_text(new_text, reply_markup=build_markup(current_index, total_pages, paste_url))
 
-        await query.answer("✅ Log refreshed")
+        try:
+            # Try editing message
+            await query.message.edit_text(new_text, reply_markup=build_markup(current_index, total_pages, paste_url))
+            await query.answer("✅ Log refreshed")
+        except MessageNotModified:
+            # Friendly message if nothing changed
+            await query.answer("ℹ️ No updates in the log", show_alert=False)
 
     except Exception as e:
-        await query.answer("Error refreshing log.", show_alert=True)
+        await query.answer("⚠️ Error refreshing log", show_alert=True)
         print(f"Error in log_refresh_handler: {e}")
 
 @Client.on_callback_query(filters.regex("^log_close$"))
