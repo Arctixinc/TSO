@@ -13,17 +13,14 @@ from pyrogram.types import (
 )
 from Backend.helper.custom_filter import CustomFilters
 
-
 # -------------------------------
-#  HELPERS
+# HELPERS
 # -------------------------------
 
 async def generate_random_string(length=32):
     return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
 
-
 async def paste_to_spacebin(content: str):
-    """Async paste to spaceb.in"""
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(
@@ -39,9 +36,7 @@ async def paste_to_spacebin(content: str):
     except Exception as e:
         return f"Error: {e}"
 
-
 async def paste_to_yaso(content: str):
-    """Async paste to yaso.su"""
     try:
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False)) as session:
             async with session.post("https://api.yaso.su/v1/auth/guest") as auth:
@@ -63,20 +58,15 @@ async def paste_to_yaso(content: str):
     except Exception as e:
         return f"Error: {e}"
 
-
 # -------------------------------
-#  PAGINATION STATE
+# PAGINATION STATE
 # -------------------------------
 LOG_CACHE = {}  # message_id -> {"pages": [...], "url": str, "index": int}
 
-
 def chunk_text(text: str, chunk_size=3500):
-    """Split text into safe Telegram-sized chunks."""
     return [text[i:i + chunk_size] for i in range(0, len(text), chunk_size)]
 
-
 def build_markup(index: int, total: int, url: str):
-    """Build inline keyboard dynamically based on page position."""
     buttons = []
 
     nav_row = []
@@ -84,25 +74,20 @@ def build_markup(index: int, total: int, url: str):
         nav_row.append(InlineKeyboardButton("⏮ Prev", callback_data="log_prev"))
     if index < total - 1:
         nav_row.append(InlineKeyboardButton("⏭ Next", callback_data="log_next"))
-
     if nav_row:
         buttons.append(nav_row)
 
-    # Second row: refresh and external link
     buttons.append([
         InlineKeyboardButton("🔄 Refresh", callback_data="log_refresh"),
         InlineKeyboardButton("🌐 Open URL", url=url)
     ])
 
-    # Third row: close
     buttons.append([InlineKeyboardButton("⏹ Close", callback_data="log_close")])
     return InlineKeyboardMarkup(buttons)
 
-
 # -------------------------------
-#  MAIN COMMAND
+# COMMAND
 # -------------------------------
-
 @Client.on_message(filters.command(["log", "logs"]) & filters.private & CustomFilters.owner, group=10)
 async def log_command(client: Client, message: Message):
     try:
@@ -116,13 +101,14 @@ async def log_command(client: Client, message: Message):
         yaso_url = await paste_to_yaso(content)
         paste_url = yaso_url if not yaso_url.startswith("Error") else await paste_to_spacebin(content)
 
-        # If small enough, show directly
         if len(content) < 3500:
+            # Small logs → show directly
             return await message.reply_text(
                 f"<pre>{content}</pre>",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🌐 Open URL", url=paste_url)]]),
             )
 
+        # Large logs → send as document with buttons
         markup = InlineKeyboardMarkup([
             [
                 InlineKeyboardButton("📜 Show here", callback_data="log_show"),
@@ -141,9 +127,8 @@ async def log_command(client: Client, message: Message):
         await message.reply_text(f"⚠️ Error: {e}")
         print(f"Error in /log command: {e}")
 
-
 # -------------------------------
-#  CALLBACK HANDLERS
+# CALLBACKS
 # -------------------------------
 
 @Client.on_callback_query(filters.regex("^log_show$"))
@@ -154,22 +139,21 @@ async def log_show_handler(client: Client, query: CallbackQuery):
             content = await f.read()
 
         pages = chunk_text(content)
-        msg_id = query.message.id
         paste_url = query.message.reply_markup.inline_keyboard[0][1].url
 
-        LOG_CACHE[msg_id] = {"pages": pages, "url": paste_url, "index": 0}
+        # Send new text message with first page
+        msg = await query.message.reply_text(
+            f"<pre>{pages[0]}</pre>",
+            reply_markup=build_markup(0, len(pages), paste_url)
+        )
 
-        text = f"<pre>{pages[0]}</pre>"
-        markup = build_markup(0, len(pages), paste_url)
+        LOG_CACHE[msg.id] = {"pages": pages, "url": paste_url, "index": 0}
 
-        await query.message.edit_caption(None)
-        await query.message.edit_text(text, reply_markup=markup)
-        await query.answer()
+        await query.answer("Log opened ✅")
 
     except Exception as e:
         await query.answer("Error loading log.", show_alert=True)
         print(f"Error in log_show_handler: {e}")
-
 
 @Client.on_callback_query(filters.regex("^log_next$"))
 async def log_next_handler(client: Client, query: CallbackQuery):
@@ -187,7 +171,6 @@ async def log_next_handler(client: Client, query: CallbackQuery):
     await query.message.edit_text(f"<pre>{page}</pre>", reply_markup=markup)
     await query.answer()
 
-
 @Client.on_callback_query(filters.regex("^log_prev$"))
 async def log_prev_handler(client: Client, query: CallbackQuery):
     msg_id = query.message.id
@@ -204,33 +187,27 @@ async def log_prev_handler(client: Client, query: CallbackQuery):
     await query.message.edit_text(f"<pre>{page}</pre>", reply_markup=markup)
     await query.answer()
 
-
 @Client.on_callback_query(filters.regex("^log_refresh$"))
 async def log_refresh_handler(client: Client, query: CallbackQuery):
-    """Re-read the file and update cached pages."""
     try:
         path = ospath.abspath("log.txt")
         async with aiofiles.open(path, "r") as f:
             content = await f.read()
 
-        pages = chunk_text(content)
         msg_id = query.message.id
         data = LOG_CACHE.get(msg_id)
-
         if not data:
             return await query.answer("Session expired.", show_alert=True)
 
+        pages = chunk_text(content)
         LOG_CACHE[msg_id] = {"pages": pages, "url": data["url"], "index": 0}
-        page = pages[0]
 
-        markup = build_markup(0, len(pages), data["url"])
-        await query.message.edit_text(f"<pre>{page}</pre>", reply_markup=markup)
+        await query.message.edit_text(f"<pre>{pages[0]}</pre>", reply_markup=build_markup(0, len(pages), data["url"]))
         await query.answer("✅ Log refreshed")
 
     except Exception as e:
         await query.answer("Error refreshing log.", show_alert=True)
         print(f"Error in log_refresh_handler: {e}")
-
 
 @Client.on_callback_query(filters.regex("^log_close$"))
 async def log_close_handler(client: Client, query: CallbackQuery):
