@@ -67,6 +67,8 @@ def chunk_text(text: str, chunk_size=3500):
 # -------------------------------
 LOG_CACHE = {}  # message_id -> {"pages": [...], "url": str, "index": int, "selector_start": int}
 
+MAX_PASTE_PAGES = 120  # Only last 120 pages for paste
+
 # -------------------------------
 # SAFE ANSWER FUNCTION
 # -------------------------------
@@ -109,18 +111,21 @@ def build_main_markup(index: int, total: int, url: str):
 
     return InlineKeyboardMarkup(buttons)
 
-def build_selector_markup(msg_id: int, window_size=25):
+def build_selector_markup(msg_id: int):
     data = LOG_CACHE.get(msg_id)
     if not data:
         return None
 
     pages = data["pages"]
     url = data["url"]
+    total_pages = len(pages)
+
+    # Dynamic window size
+    window_size = 50 if total_pages > 100 else 25
     start = data.get("selector_start", 0)
-    end = min(start + window_size, len(pages))
+    end = min(start + window_size, total_pages)
 
     buttons = []
-    
     buttons.append([InlineKeyboardButton("📌 Select page number from below", callback_data="selector_null")])
 
     # Grid of page numbers (max 5 per row)
@@ -138,14 +143,15 @@ def build_selector_markup(msg_id: int, window_size=25):
     if start > 0:
         selector_nav.append(InlineKeyboardButton("⬅ Prev", callback_data="selector_prev"))
     selector_nav.append(InlineKeyboardButton("🔙 Back", callback_data="selector_back"))
-    if end < len(pages):
+    if end < total_pages:
         selector_nav.append(InlineKeyboardButton("Next ➡", callback_data="selector_next"))
     buttons.append(selector_nav)
 
     # Close and URL row
-    buttons.append([InlineKeyboardButton("❌ Close", callback_data="log_close"),
-                    InlineKeyboardButton("🌐 Open URL", url=url)])
-
+    buttons.append([
+        InlineKeyboardButton("❌ Close", callback_data="log_close"),
+        InlineKeyboardButton("🌐 Open URL", url=url)
+    ])
     return InlineKeyboardMarkup(buttons)
 
 # -------------------------------
@@ -161,12 +167,23 @@ async def log_command(client: Client, message: Message):
         async with aiofiles.open(path, "r") as f:
             content = await f.read()
 
-        yaso_url = await paste_to_yaso(content)
-        paste_url = yaso_url if not yaso_url.startswith("Error") else await paste_to_spacebin(content)
-
+        # Split into pages
         pages = chunk_text(content)
+
+        # Determine what to paste
+        if len(pages) > MAX_PASTE_PAGES:
+            paste_content = "".join(pages[-MAX_PASTE_PAGES:])
+        else:
+            paste_content = content
+
+        # Upload to Yaso first, fallback to Spacebin
+        yaso_url = await paste_to_yaso(paste_content)
+        paste_url = yaso_url if not yaso_url.startswith("Error") else await paste_to_spacebin(paste_content)
+
+        # Prepare pagination cache for all pages
         temp_cache = {"pages": pages, "url": paste_url, "index": len(pages)-1, "selector_start": 0}
 
+        # If small content, send full content directly
         if len(content) < 3500:
             sent_msg = await message.reply_text(
                 f"<pre>{content}</pre>",
@@ -175,6 +192,7 @@ async def log_command(client: Client, message: Message):
             LOG_CACHE[sent_msg.id] = temp_cache
             return
 
+        # Preview last ~20 lines
         lines = content.strip().splitlines()
         preview_lines = lines[-20:] if len(lines) > 20 else lines
         preview_text = "<pre>" + "\n".join(preview_lines) + "</pre>"
@@ -182,6 +200,7 @@ async def log_command(client: Client, message: Message):
         markup = build_main_markup(len(pages)-1, len(pages), paste_url)
         sent_msg = await message.reply_text(preview_text, reply_markup=markup, quote=True)
         LOG_CACHE[sent_msg.id] = temp_cache
+
     except Exception as e:
         await message.reply_text(f"⚠️ Error: {e}")
         print(f"Error in /log command: {e}")
@@ -216,7 +235,11 @@ async def selector_prev(client, query: CallbackQuery):
     data = LOG_CACHE.get(msg_id)
     if not data:
         return await safe_answer(query, "Session expired", show_alert=True)
-    data["selector_start"] = max(0, data.get("selector_start", 0) - 25)
+
+    total_pages = len(data["pages"])
+    window_size = 50 if total_pages > 100 else 25
+
+    data["selector_start"] = max(0, data.get("selector_start", 0) - window_size)
     await query.message.edit_reply_markup(build_selector_markup(msg_id))
     await safe_answer(query)
 
@@ -226,7 +249,11 @@ async def selector_next(client, query: CallbackQuery):
     data = LOG_CACHE.get(msg_id)
     if not data:
         return await safe_answer(query, "Session expired", show_alert=True)
-    data["selector_start"] = min(len(data["pages"]) - 1, data.get("selector_start", 0) + 25)
+
+    total_pages = len(data["pages"])
+    window_size = 50 if total_pages > 100 else 25
+
+    data["selector_start"] = min(len(data["pages"]) - window_size, data.get("selector_start", 0) + window_size)
     await query.message.edit_reply_markup(build_selector_markup(msg_id))
     await safe_answer(query)
 
@@ -239,6 +266,10 @@ async def selector_back(client, query: CallbackQuery):
     markup = build_main_markup(data["index"], len(data["pages"]), data["url"])
     await query.message.edit_reply_markup(markup)
     await safe_answer(query)
+
+@Client.on_callback_query(filters.regex("^selector_null$"))
+async def selector_null(client, query: CallbackQuery):
+    await safe_answer(query, "📌 Select page number from below ⬇️")
 
 # -------------------------------
 # NAVIGATION HANDLERS
@@ -289,8 +320,13 @@ async def log_refresh_handler(client, query: CallbackQuery):
         async with aiofiles.open(path, "r") as f:
             content = await f.read()
 
-        yaso_url = await paste_to_yaso(content)
-        paste_url = yaso_url if not yaso_url.startswith("Error") else await paste_to_spacebin(content)
+        if len(chunk_text(content)) > MAX_PASTE_PAGES:
+            paste_content = "".join(chunk_text(content)[-MAX_PASTE_PAGES:])
+        else:
+            paste_content = content
+
+        yaso_url = await paste_to_yaso(paste_content)
+        paste_url = yaso_url if not yaso_url.startswith("Error") else await paste_to_spacebin(paste_content)
 
         pages = chunk_text(content)
         current_index = min(data["index"], len(pages) - 1)
@@ -313,7 +349,3 @@ async def log_close_handler(client, query: CallbackQuery):
     LOG_CACHE.pop(msg_id, None)
     await query.message.delete()
     await safe_answer(query, "Closed.")
-
-@Client.on_callback_query(filters.regex("^selector_null$"))
-async def selector_null(client, query: CallbackQuery):
-    await safe_answer(query, "📌 Select page number from below ⬇️")
