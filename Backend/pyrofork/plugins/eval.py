@@ -143,7 +143,7 @@ async def shell_handler(_, message: Message):
 
 
 # ---------------- CALLBACKS ----------------
-@Client.on_callback_query(filters.regex("^upload:(.+)$") & filters.user(OWNER_ID))
+@Client.on_callback_query(filters.regex("^upload:(.+)$") & CustomFilters.owner)
 async def upload_callback(_, query):
     data = query.data.split("upload:", 1)[1]
     cmd_type, cmd_input = data.split("|", 1)
