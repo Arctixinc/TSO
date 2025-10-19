@@ -166,7 +166,7 @@ async def upload_callback(_, query):
     )
 
 
-@Client.on_callback_query(filters.regex("^close$") & filters.user(OWNER_ID))
+@Client.on_callback_query(filters.regex("^close$") & CustomFilters.owner)
 async def close_callback(_, query):
     await query.answer("🗑 Closed")
     await query.message.delete()
