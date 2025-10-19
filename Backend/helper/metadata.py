@@ -142,7 +142,7 @@ async def fetch_tv_metadata(title, season, episode, encoded_string, year=None, q
         
         tv_id = tmdb_result.id
         try:
-            tv_details = await tmdb.tv(tv_id).details()
+            tv_details = await tmdb.tv(tv_id).details(append_to_response="external_ids")
         except Exception as e:
             LOGGER.warning(f"TMDb TV details failed for {title}: {e}")
             return None
@@ -158,7 +158,7 @@ async def fetch_tv_metadata(title, season, episode, encoded_string, year=None, q
     if use_tmdb and tv_details:
         return {
             "tmdb_id": tv_details.id,
-            "imdb_id": "",
+            "imdb_id": tv_details.external_ids.imdb_id,
             "title": tv_details.name,
             "year": getattr(tv_details.first_air_date, "year", 0),
             "rate": getattr(tv_details, "vote_average", 0) or 0,
@@ -225,7 +225,7 @@ async def fetch_movie_metadata(title, encoded_string, year=None, quality=None, d
             return None
         
         try:
-            movie_details = await tmdb.movie(tmdb_result.id).details()
+            movie_details = await tmdb.movie(tmdb_result.id).details(append_to_response="external_ids")
         except Exception as e:
             LOGGER.warning(f"TMDb movie details failed for {title}: {e}")
             return None
@@ -234,7 +234,7 @@ async def fetch_movie_metadata(title, encoded_string, year=None, quality=None, d
     if use_tmdb and movie_details:
         return {
             "tmdb_id": movie_details.id,
-            "imdb_id": "",
+            "imdb_id": movie_details.external_ids.imdb_id,
             "title": movie_details.title,
             "year": getattr(movie_details.release_date, "year", 0),
             "rate": getattr(movie_details, "vote_average", 0) or 0,
