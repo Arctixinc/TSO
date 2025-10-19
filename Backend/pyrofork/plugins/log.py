@@ -120,6 +120,9 @@ def build_main_markup(index: int, total: int, url: str):
 
     return InlineKeyboardMarkup(buttons)
 
+# -------------------------------
+# SELECTOR MARKUP (with ⏮ / ⏭)
+# -------------------------------
 def build_selector_markup(msg_id: int):
     data = LOG_CACHE.get(msg_id)
     if not data:
@@ -129,16 +132,15 @@ def build_selector_markup(msg_id: int):
     url = data["url"]
     total_pages = len(pages)
 
-    # Dynamic window size capped to total_pages
+    # Adaptive window size
     window_size = 25 if total_pages <= 100 else 50
-
     start = data.get("selector_start", 0)
     end = min(start + window_size, total_pages)
 
     buttons = []
-    buttons.append([InlineKeyboardButton("📌 Select page number from below", callback_data="selector_null")])
+    buttons.append([InlineKeyboardButton("📌 Select Page Number", callback_data="selector_null")])
 
-    # Grid of page numbers (max 5 per row)
+    # Page number buttons
     row = []
     for i in range(start, end):
         row.append(InlineKeyboardButton(str(i + 1), callback_data=f"log_page_{i}"))
@@ -148,16 +150,18 @@ def build_selector_markup(msg_id: int):
     if row:
         buttons.append(row)
 
-    # Selector navigation row
+    # Selector navigation row with ⏮ / ⬅ / ➡ / ⏭
     selector_nav = []
     if start > 0:
-        selector_nav.append(InlineKeyboardButton("⬅ Prev", callback_data="selector_prev"))
+        selector_nav.append(InlineKeyboardButton("⏮", callback_data="selector_first"))
+        selector_nav.append(InlineKeyboardButton("⬅", callback_data="selector_prev"))
     selector_nav.append(InlineKeyboardButton("🔙 Back", callback_data="selector_back"))
     if end < total_pages:
-        selector_nav.append(InlineKeyboardButton("Next ➡", callback_data="selector_next"))
+        selector_nav.append(InlineKeyboardButton("➡", callback_data="selector_next"))
+        selector_nav.append(InlineKeyboardButton("⏭", callback_data="selector_last"))
     buttons.append(selector_nav)
 
-    # Close and URL row
+    # Footer buttons
     buttons.append([
         InlineKeyboardButton("❌ Close", callback_data="log_close"),
         InlineKeyboardButton("🌐 Open URL", url=url),
@@ -251,44 +255,64 @@ async def page_button(client, query: CallbackQuery):
     except Exception as e:
         LOGGER.exception(f"Error in page_button: {e}")
 
+
+        
+# -------------------------------
+# SELECTOR NAVIGATION HANDLERS
+# -------------------------------
 @Client.on_callback_query(filters.regex("^selector_prev$"))
 async def selector_prev(client, query: CallbackQuery):
-    try:
-        msg_id = query.message.id
-        data = LOG_CACHE.get(msg_id)
-        if not data:
-            return await safe_answer(query, "Session expired", show_alert=True)
+    msg_id = query.message.id
+    data = LOG_CACHE.get(msg_id)
+    if not data:
+        return await safe_answer(query, "Session expired", show_alert=True)
 
-        total_pages = len(data["pages"])
-        # Dynamic window size capped
-        window_size = 25 if total_pages <= 100 else 50
-    
-        # Move prev window and clamp to 0
-        data["selector_start"] = max(0, data.get("selector_start", 0) - window_size)
-        await query.message.edit_reply_markup(build_selector_markup(msg_id))
-        await safe_answer(query)
-    except Exception as e:
-        LOGGER.exception(f"Error in selector_prev: {e}")
+    total_pages = len(data["pages"])
+    window_size = 25 if total_pages <= 100 else 50
+    data["selector_start"] = max(0, data.get("selector_start", 0) - window_size)
+    await query.message.edit_reply_markup(build_selector_markup(msg_id))
+    await safe_answer(query)
 
 
 @Client.on_callback_query(filters.regex("^selector_next$"))
 async def selector_next(client, query: CallbackQuery):
-    try:
-        msg_id = query.message.id
-        data = LOG_CACHE.get(msg_id)
-        if not data:
-            return await safe_answer(query, "Session expired", show_alert=True)
+    msg_id = query.message.id
+    data = LOG_CACHE.get(msg_id)
+    if not data:
+        return await safe_answer(query, "Session expired", show_alert=True)
 
-        total_pages = len(data["pages"])
-        # Dynamic window size capped
-        window_size = 25 if total_pages <= 100 else 50
-        data["selector_start"] = min(len(data["pages"]) - window_size, data.get("selector_start", 0) + window_size)
+    total_pages = len(data["pages"])
+    window_size = 25 if total_pages <= 100 else 50
+    new_start = data.get("selector_start", 0) + window_size
+    data["selector_start"] = min(new_start, max(0, total_pages - window_size))
+    await query.message.edit_reply_markup(build_selector_markup(msg_id))
+    await safe_answer(query)
 
-        # Move next window and clamp to max
-        await query.message.edit_reply_markup(build_selector_markup(msg_id))
-        await safe_answer(query)
-    except Exception as e:
-        LOGGER.exception(f"Error in selector_next: {e}")
+
+@Client.on_callback_query(filters.regex("^selector_first$"))
+async def selector_first(client, query: CallbackQuery):
+    msg_id = query.message.id
+    data = LOG_CACHE.get(msg_id)
+    if not data:
+        return await safe_answer(query, "Session expired", show_alert=True)
+
+    data["selector_start"] = 0
+    await query.message.edit_reply_markup(build_selector_markup(msg_id))
+    await safe_answer(query, "Jumped to first window")
+
+
+@Client.on_callback_query(filters.regex("^selector_last$"))
+async def selector_last(client, query: CallbackQuery):
+    msg_id = query.message.id
+    data = LOG_CACHE.get(msg_id)
+    if not data:
+        return await safe_answer(query, "Session expired", show_alert=True)
+
+    total_pages = len(data["pages"])
+    window_size = 25 if total_pages <= 100 else 50
+    data["selector_start"] = max(0, total_pages - window_size)
+    await query.message.edit_reply_markup(build_selector_markup(msg_id))
+    await safe_answer(query, "Jumped to last window")
 
 @Client.on_callback_query(filters.regex("^selector_back$"))
 async def selector_back(client, query: CallbackQuery):
