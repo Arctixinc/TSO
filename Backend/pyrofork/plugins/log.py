@@ -13,6 +13,7 @@ from pyrogram.types import (
 )
 from pyrogram.errors import MessageNotModified
 from Backend.helper.custom_filter import CustomFilters
+from Backend.logger import LOGGER  # <-- Added logger import
 
 # -------------------------------
 # HELPERS
@@ -31,10 +32,14 @@ async def paste_to_spacebin(content: str):
                 if r.status == 201:
                     data = await r.json()
                     doc_id = data.get("payload", {}).get("id")
+                    LOGGER.info(f"Spacebin paste success: {doc_id}")
                     return f"https://spaceb.in/{doc_id}"
                 else:
-                    return f"Error: {(await r.json()).get('error', 'Unknown error')}"
+                    error_msg = (await r.json()).get('error', 'Unknown error')
+                    LOGGER.warning(f"Spacebin paste failed: {error_msg}")
+                    return f"Error: {error_msg}"
     except Exception as e:
+        LOGGER.exception(f"Exception in paste_to_spacebin: {e}")
         return f"Error: {e}"
 
 async def paste_to_yaso(content: str):
@@ -42,6 +47,7 @@ async def paste_to_yaso(content: str):
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False)) as session:
             async with session.post("https://api.yaso.su/v1/auth/guest") as auth:
                 auth.raise_for_status()
+                LOGGER.info("Yaso guest auth successful")
 
             async with session.post(
                 "https://api.yaso.su/v1/records",
@@ -55,8 +61,11 @@ async def paste_to_yaso(content: str):
             ) as paste:
                 paste.raise_for_status()
                 result = await paste.json()
-                return f"https://yaso.su/raw/{result.get('url')}"
+                url = result.get("url")
+                LOGGER.info(f"Yaso paste successful: {url}")
+                return f"https://yaso.su/raw/{url}"
     except Exception as e:
+        LOGGER.exception(f"Exception in paste_to_yaso: {e}")
         return f"Error: {e}"
 
 def chunk_text(text: str, chunk_size=3500):
@@ -66,7 +75,6 @@ def chunk_text(text: str, chunk_size=3500):
 # PAGINATION STATE
 # -------------------------------
 LOG_CACHE = {}  # message_id -> {"pages": [...], "url": str, "index": int, "selector_start": int}
-
 MAX_PASTE_PAGES = 120  # Only last 120 pages for paste
 
 # -------------------------------
@@ -75,8 +83,8 @@ MAX_PASTE_PAGES = 120  # Only last 120 pages for paste
 async def safe_answer(query: CallbackQuery, text: str = None, show_alert: bool = False):
     try:
         await query.answer(text=text, show_alert=show_alert)
-    except Exception:
-        pass
+    except Exception as e:
+        LOGGER.debug(f"safe_answer failed: {e}")
 
 # -------------------------------
 # MARKUPS
@@ -162,10 +170,13 @@ async def log_command(client: Client, message: Message):
     try:
         path = ospath.abspath("log.txt")
         if not ospath.exists(path):
+            LOGGER.warning("Log file not found")
             return await message.reply_text("> ❌ Log file not found.")
 
         async with aiofiles.open(path, "r") as f:
             content = await f.read()
+
+        LOGGER.info(f"Read log file, length: {len(content)} characters")
 
         # Split into pages
         pages = chunk_text(content)
@@ -176,20 +187,19 @@ async def log_command(client: Client, message: Message):
         else:
             paste_content = content
 
-        # Upload to Yaso first, fallback to Spacebin
         yaso_url = await paste_to_yaso(paste_content)
         paste_url = yaso_url if not yaso_url.startswith("Error") else await paste_to_spacebin(paste_content)
+        LOGGER.info(f"Paste URL: {paste_url}")
 
-        # Prepare pagination cache for all pages
         temp_cache = {"pages": pages, "url": paste_url, "index": len(pages)-1, "selector_start": 0}
 
-        # If small content, send full content directly
         if len(content) < 3500:
             sent_msg = await message.reply_text(
                 f"<pre>{content}</pre>",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🌐 Open URL", url=paste_url)]]),
             )
             LOG_CACHE[sent_msg.id] = temp_cache
+            LOGGER.debug(f"Sent small log directly, message_id: {sent_msg.id}")
             return
 
         # Preview last ~20 lines
@@ -200,122 +210,150 @@ async def log_command(client: Client, message: Message):
         markup = build_main_markup(len(pages)-1, len(pages), paste_url)
         sent_msg = await message.reply_text(preview_text, reply_markup=markup, quote=True)
         LOG_CACHE[sent_msg.id] = temp_cache
+        LOGGER.debug(f"Sent paginated log, message_id: {sent_msg.id}")
 
     except Exception as e:
+        LOGGER.exception(f"Error in /log command: {e}")
         await message.reply_text(f"⚠️ Error: {e}")
-        print(f"Error in /log command: {e}")
 
 # -------------------------------
 # CALLBACK HANDLERS
 # -------------------------------
 @Client.on_callback_query(filters.regex("^log_null$"))
 async def open_selector(client, query: CallbackQuery):
-    markup = build_selector_markup(query.message.id)
-    if markup:
-        await query.message.edit_reply_markup(markup)
-    await safe_answer(query)
+    try:
+        markup = build_selector_markup(query.message.id)
+        if markup:
+            await query.message.edit_reply_markup(markup)
+        await safe_answer(query)
+        LOGGER.debug(f"Opened selector for message_id {query.message.id}")
+    except Exception as e:
+        LOGGER.exception(f"Error in open_selector: {e}")
 
 @Client.on_callback_query(filters.regex(r"^log_page_(\d+)$"))
 async def page_button(client, query: CallbackQuery):
-    msg_id = query.message.id
-    page_index = int(query.data.split("_")[-1])
-    data = LOG_CACHE.get(msg_id)
-    if not data:
-        return await safe_answer(query, "Session expired", show_alert=True)
+    try:
+        msg_id = query.message.id
+        page_index = int(query.data.split("_")[-1])
+        data = LOG_CACHE.get(msg_id)
+        if not data:
+            return await safe_answer(query, "Session expired", show_alert=True)
 
-    data["index"] = page_index
-    markup = build_main_markup(data["index"], len(data["pages"]), data["url"])
-    page_content = data["pages"][data["index"]]
-    await query.message.edit_text(f"<pre>{page_content}</pre>", reply_markup=markup)
-    await safe_answer(query, f"Page {page_index + 1}")
+        data["index"] = page_index
+        markup = build_main_markup(data["index"], len(data["pages"]), data["url"])
+        page_content = data["pages"][data["index"]]
+        await query.message.edit_text(f"<pre>{page_content}</pre>", reply_markup=markup)
+        await safe_answer(query, f"Page {page_index + 1}")
+        LOGGER.debug(f"Page changed to {page_index+1} for message_id {msg_id}")
+    except Exception as e:
+        LOGGER.exception(f"Error in page_button: {e}")
 
 @Client.on_callback_query(filters.regex("^selector_prev$"))
 async def selector_prev(client, query: CallbackQuery):
-    msg_id = query.message.id
-    data = LOG_CACHE.get(msg_id)
-    if not data:
-        return await safe_answer(query, "Session expired", show_alert=True)
+    try:
+        msg_id = query.message.id
+        data = LOG_CACHE.get(msg_id)
+        if not data:
+            return await safe_answer(query, "Session expired", show_alert=True)
 
-    total_pages = len(data["pages"])
-    window_size = 50 if total_pages > 100 else 25
-
-    data["selector_start"] = max(0, data.get("selector_start", 0) - window_size)
-    await query.message.edit_reply_markup(build_selector_markup(msg_id))
-    await safe_answer(query)
+        total_pages = len(data["pages"])
+        window_size = 50 if total_pages > 100 else 25
+        data["selector_start"] = max(0, data.get("selector_start", 0) - window_size)
+        await query.message.edit_reply_markup(build_selector_markup(msg_id))
+        await safe_answer(query)
+        LOGGER.debug(f"Selector moved prev window for message_id {msg_id}")
+    except Exception as e:
+        LOGGER.exception(f"Error in selector_prev: {e}")
 
 @Client.on_callback_query(filters.regex("^selector_next$"))
 async def selector_next(client, query: CallbackQuery):
-    msg_id = query.message.id
-    data = LOG_CACHE.get(msg_id)
-    if not data:
-        return await safe_answer(query, "Session expired", show_alert=True)
+    try:
+        msg_id = query.message.id
+        data = LOG_CACHE.get(msg_id)
+        if not data:
+            return await safe_answer(query, "Session expired", show_alert=True)
 
-    total_pages = len(data["pages"])
-    window_size = 50 if total_pages > 100 else 25
-
-    data["selector_start"] = min(len(data["pages"]) - window_size, data.get("selector_start", 0) + window_size)
-    await query.message.edit_reply_markup(build_selector_markup(msg_id))
-    await safe_answer(query)
+        total_pages = len(data["pages"])
+        window_size = 50 if total_pages > 100 else 25
+        data["selector_start"] = min(len(data["pages"]) - window_size, data.get("selector_start", 0) + window_size)
+        await query.message.edit_reply_markup(build_selector_markup(msg_id))
+        await safe_answer(query)
+        LOGGER.debug(f"Selector moved next window for message_id {msg_id}")
+    except Exception as e:
+        LOGGER.exception(f"Error in selector_next: {e}")
 
 @Client.on_callback_query(filters.regex("^selector_back$"))
 async def selector_back(client, query: CallbackQuery):
-    msg_id = query.message.id
-    data = LOG_CACHE.get(msg_id)
-    if not data:
-        return await safe_answer(query, "Session expired", show_alert=True)
-    markup = build_main_markup(data["index"], len(data["pages"]), data["url"])
-    await query.message.edit_reply_markup(markup)
-    await safe_answer(query)
+    try:
+        msg_id = query.message.id
+        data = LOG_CACHE.get(msg_id)
+        if not data:
+            return await safe_answer(query, "Session expired", show_alert=True)
+        markup = build_main_markup(data["index"], len(data["pages"]), data["url"])
+        await query.message.edit_reply_markup(markup)
+        await safe_answer(query)
+        LOGGER.debug(f"Selector back to main markup for message_id {msg_id}")
+    except Exception as e:
+        LOGGER.exception(f"Error in selector_back: {e}")
 
 @Client.on_callback_query(filters.regex("^selector_null$"))
 async def selector_null(client, query: CallbackQuery):
-    await safe_answer(query, "📌 Select page number from below ⬇️")
+    try:
+        await safe_answer(query, "📌 Select page number from below ⬇️")
+        LOGGER.debug(f"Selector null pressed for message_id {query.message.id}")
+    except Exception as e:
+        LOGGER.exception(f"Error in selector_null: {e}")
 
 # -------------------------------
 # NAVIGATION HANDLERS
 # -------------------------------
 @Client.on_callback_query(filters.regex(r"^log_(prev|next|prev2|next2)$"))
 async def navigation_handler(client, query: CallbackQuery):
-    msg_id = query.message.id
-    data = LOG_CACHE.get(msg_id)
-    if not data:
-        return await safe_answer(query, "Session expired", show_alert=True)
+    try:
+        msg_id = query.message.id
+        data = LOG_CACHE.get(msg_id)
+        if not data:
+            return await safe_answer(query, "Session expired", show_alert=True)
 
-    if query.data == "log_prev" and data["index"] > 0:
-        data["index"] -= 1
-    elif query.data == "log_next" and data["index"] + 1 < len(data["pages"]):
-        data["index"] += 1
-    elif query.data == "log_prev2":
-        data["index"] = max(0, data["index"] - 2)
-    elif query.data == "log_next2":
-        data["index"] = min(len(data["pages"]) - 1, data["index"] + 2)
-    else:
-        return await safe_answer(query, "Cannot navigate further", show_alert=False)
+        if query.data == "log_prev" and data["index"] > 0:
+            data["index"] -= 1
+        elif query.data == "log_next" and data["index"] + 1 < len(data["pages"]):
+            data["index"] += 1
+        elif query.data == "log_prev2":
+            data["index"] = max(0, data["index"] - 2)
+        elif query.data == "log_next2":
+            data["index"] = min(len(data["pages"]) - 1, data["index"] + 2)
+        else:
+            return await safe_answer(query, "Cannot navigate further", show_alert=False)
 
-    page = data["pages"][data["index"]]
-    markup = build_main_markup(data["index"], len(data["pages"]), data["url"])
-    await query.message.edit_text(f"<pre>{page}</pre>", reply_markup=markup)
-    await safe_answer(query)
+        page = data["pages"][data["index"]]
+        markup = build_main_markup(data["index"], len(data["pages"]), data["url"])
+        await query.message.edit_text(f"<pre>{page}</pre>", reply_markup=markup)
+        await safe_answer(query)
+        LOGGER.debug(f"Navigation to page {data['index']+1} for message_id {msg_id}")
+    except Exception as e:
+        LOGGER.exception(f"Error in navigation_handler: {e}")
 
 # -------------------------------
 # REFRESH HANDLER
 # -------------------------------
 @Client.on_callback_query(filters.regex("^log_refresh$"))
 async def log_refresh_handler(client, query: CallbackQuery):
-    msg_id = query.message.id
-    data = LOG_CACHE.get(msg_id)
-    if not data:
-        return await safe_answer(query, "Session expired", show_alert=True)
-
-    # Temporarily change only the refresh button
-    markup = build_main_markup(data["index"], len(data["pages"]), data["url"])
-    for row in markup.inline_keyboard:
-        for btn in row:
-            if btn.callback_data == "log_refresh":
-                btn.text = "⏳ Refreshing..."
-    await query.message.edit_reply_markup(markup)
-
     try:
+        msg_id = query.message.id
+        data = LOG_CACHE.get(msg_id)
+        if not data:
+            return await safe_answer(query, "Session expired", show_alert=True)
+
+        # Temporarily change only the refresh button
+        markup = build_main_markup(data["index"], len(data["pages"]), data["url"])
+        for row in markup.inline_keyboard:
+            for btn in row:
+                if btn.callback_data == "log_refresh":
+                    btn.text = "⏳ Refreshing..."
+        await query.message.edit_reply_markup(markup)
+        LOGGER.debug(f"Refresh started for message_id {msg_id}")
+
         path = ospath.abspath("log.txt")
         async with aiofiles.open(path, "r") as f:
             content = await f.read()
@@ -334,18 +372,23 @@ async def log_refresh_handler(client, query: CallbackQuery):
 
         page_content = pages[current_index]
         await query.message.edit_text(f"<pre>{page_content}</pre>",
-                                      reply_markup=build_main_markup(current_index, len(pages), paste_url))
+                                     reply_markup=build_main_markup(current_index, len(pages), paste_url))
         await safe_answer(query, "✅ Log refreshed")
+        LOGGER.info(f"Refresh completed for message_id {msg_id}")
     except Exception as e:
         await safe_answer(query, "⚠️ Error refreshing log", show_alert=True)
-        print(f"Error in log_refresh_handler: {e}")
+        LOGGER.exception(f"Error in log_refresh_handler: {e}")
 
 # -------------------------------
 # CLOSE HANDLER
 # -------------------------------
 @Client.on_callback_query(filters.regex("^log_close$"))
 async def log_close_handler(client, query: CallbackQuery):
-    msg_id = query.message.id
-    LOG_CACHE.pop(msg_id, None)
-    await query.message.delete()
-    await safe_answer(query, "Closed.")
+    try:
+        msg_id = query.message.id
+        LOG_CACHE.pop(msg_id, None)
+        await query.message.delete()
+        await safe_answer(query, "Closed.")
+        LOGGER.debug(f"Closed log message_id {msg_id}")
+    except Exception as e:
+        LOGGER.exception(f"Error in log_close_handler: {e}")
