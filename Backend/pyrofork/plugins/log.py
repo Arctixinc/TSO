@@ -68,6 +68,15 @@ def chunk_text(text: str, chunk_size=3500):
 LOG_CACHE = {}  # message_id -> {"pages": [...], "url": str, "index": int, "selector_start": int}
 
 # -------------------------------
+# SAFE ANSWER FUNCTION
+# -------------------------------
+async def safe_answer(query: CallbackQuery, text: str = None, show_alert: bool = False):
+    try:
+        await query.answer(text=text, show_alert=show_alert)
+    except Exception:
+        pass
+
+# -------------------------------
 # MARKUPS
 # -------------------------------
 def build_main_markup(index: int, total: int, url: str):
@@ -159,7 +168,6 @@ async def log_command(client: Client, message: Message):
         temp_cache = {"pages": pages, "url": paste_url, "index": len(pages)-1, "selector_start": 0}
 
         if len(content) < 3500:
-            # Small logs → show directly
             sent_msg = await message.reply_text(
                 f"<pre>{content}</pre>",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🌐 Open URL", url=paste_url)]]),
@@ -167,15 +175,13 @@ async def log_command(client: Client, message: Message):
             LOG_CACHE[sent_msg.id] = temp_cache
             return
 
-        # Large logs → show preview last 20 lines first
         lines = content.strip().splitlines()
         preview_lines = lines[-20:] if len(lines) > 20 else lines
         preview_text = "<pre>" + "\n".join(preview_lines) + "</pre>"
 
         markup = build_main_markup(len(pages)-1, len(pages), paste_url)
         sent_msg = await message.reply_text(preview_text, reply_markup=markup, quote=True)
-        LOG_CACHE[sent_msg.id] = temp_cache  # **Key fixed to sent message ID**
-
+        LOG_CACHE[sent_msg.id] = temp_cache
     except Exception as e:
         await message.reply_text(f"⚠️ Error: {e}")
         print(f"Error in /log command: {e}")
@@ -188,7 +194,7 @@ async def open_selector(client, query: CallbackQuery):
     markup = build_selector_markup(query.message.id)
     if markup:
         await query.message.edit_reply_markup(markup)
-    await query.answer()
+    await safe_answer(query)
 
 @Client.on_callback_query(filters.regex(r"^log_page_(\d+)$"))
 async def page_button(client, query: CallbackQuery):
@@ -196,135 +202,118 @@ async def page_button(client, query: CallbackQuery):
     page_index = int(query.data.split("_")[-1])
     data = LOG_CACHE.get(msg_id)
     if not data:
-        return await query.answer("Session expired", show_alert=True)
+        return await safe_answer(query, "Session expired", show_alert=True)
 
     data["index"] = page_index
     markup = build_main_markup(data["index"], len(data["pages"]), data["url"])
     page_content = data["pages"][data["index"]]
     await query.message.edit_text(f"<pre>{page_content}</pre>", reply_markup=markup)
-    await query.answer(f"Page {page_index + 1}")
+    await safe_answer(query, f"Page {page_index + 1}")
 
 @Client.on_callback_query(filters.regex("^selector_prev$"))
 async def selector_prev(client, query: CallbackQuery):
     msg_id = query.message.id
     data = LOG_CACHE.get(msg_id)
     if not data:
-        return await query.answer("Session expired", show_alert=True)
+        return await safe_answer(query, "Session expired", show_alert=True)
     data["selector_start"] = max(0, data.get("selector_start", 0) - 25)
     await query.message.edit_reply_markup(build_selector_markup(msg_id))
-    await query.answer()
+    await safe_answer(query)
 
 @Client.on_callback_query(filters.regex("^selector_next$"))
 async def selector_next(client, query: CallbackQuery):
     msg_id = query.message.id
     data = LOG_CACHE.get(msg_id)
     if not data:
-        return await query.answer("Session expired", show_alert=True)
+        return await safe_answer(query, "Session expired", show_alert=True)
     data["selector_start"] = min(len(data["pages"]) - 1, data.get("selector_start", 0) + 25)
     await query.message.edit_reply_markup(build_selector_markup(msg_id))
-    await query.answer()
+    await safe_answer(query)
 
 @Client.on_callback_query(filters.regex("^selector_back$"))
 async def selector_back(client, query: CallbackQuery):
     msg_id = query.message.id
     data = LOG_CACHE.get(msg_id)
     if not data:
-        return await query.answer("Session expired", show_alert=True)
+        return await safe_answer(query, "Session expired", show_alert=True)
     markup = build_main_markup(data["index"], len(data["pages"]), data["url"])
     await query.message.edit_reply_markup(markup)
-    await query.answer()
+    await safe_answer(query)
 
 # -------------------------------
-# Single-step & Double-step navigation
+# NAVIGATION HANDLERS
 # -------------------------------
-@Client.on_callback_query(filters.regex("^log_prev$"))
-async def log_prev_handler(client, query: CallbackQuery):
+@Client.on_callback_query(filters.regex(r"^log_(prev|next|prev2|next2)$"))
+async def navigation_handler(client, query: CallbackQuery):
     msg_id = query.message.id
     data = LOG_CACHE.get(msg_id)
-    if not data: return await query.answer("Session expired", show_alert=True)
-    if data["index"] == 0: return await query.answer("Already at first page", show_alert=False)
-    data["index"] -= 1
-    page = data["pages"][data["index"]]
-    markup = build_main_markup(data["index"], len(data["pages"]), data["url"])
-    await query.message.edit_text(f"<pre>{page}</pre>", reply_markup=markup)
-    await query.answer()
+    if not data:
+        return await safe_answer(query, "Session expired", show_alert=True)
 
-@Client.on_callback_query(filters.regex("^log_next$"))
-async def log_next_handler(client, query: CallbackQuery):
-    msg_id = query.message.id
-    data = LOG_CACHE.get(msg_id)
-    if not data: return await query.answer("Session expired", show_alert=True)
-    if data["index"] + 1 >= len(data["pages"]): return await query.answer("No more pages", show_alert=False)
-    data["index"] += 1
-    page = data["pages"][data["index"]]
-    markup = build_main_markup(data["index"], len(data["pages"]), data["url"])
-    await query.message.edit_text(f"<pre>{page}</pre>", reply_markup=markup)
-    await query.answer()
+    if query.data == "log_prev" and data["index"] > 0:
+        data["index"] -= 1
+    elif query.data == "log_next" and data["index"] + 1 < len(data["pages"]):
+        data["index"] += 1
+    elif query.data == "log_prev2":
+        data["index"] = max(0, data["index"] - 2)
+    elif query.data == "log_next2":
+        data["index"] = min(len(data["pages"]) - 1, data["index"] + 2)
+    else:
+        return await safe_answer(query, "Cannot navigate further", show_alert=False)
 
-@Client.on_callback_query(filters.regex("^log_prev2$"))
-async def log_prev2_handler(client, query: CallbackQuery):
-    msg_id = query.message.id
-    data = LOG_CACHE.get(msg_id)
-    if not data: return await query.answer("Session expired", show_alert=True)
-    data["index"] = max(0, data["index"] - 2)
     page = data["pages"][data["index"]]
     markup = build_main_markup(data["index"], len(data["pages"]), data["url"])
     await query.message.edit_text(f"<pre>{page}</pre>", reply_markup=markup)
-    await query.answer()
-
-@Client.on_callback_query(filters.regex("^log_next2$"))
-async def log_next2_handler(client, query: CallbackQuery):
-    msg_id = query.message.id
-    data = LOG_CACHE.get(msg_id)
-    if not data: return await query.answer("Session expired", show_alert=True)
-    data["index"] = min(len(data["pages"]) - 1, data["index"] + 2)
-    page = data["pages"][data["index"]]
-    markup = build_main_markup(data["index"], len(data["pages"]), data["url"])
-    await query.message.edit_text(f"<pre>{page}</pre>", reply_markup=markup)
-    await query.answer()
+    await safe_answer(query)
 
 # -------------------------------
-# Refresh log
+# REFRESH HANDLER
 # -------------------------------
 @Client.on_callback_query(filters.regex("^log_refresh$"))
 async def log_refresh_handler(client, query: CallbackQuery):
+    msg_id = query.message.id
+    data = LOG_CACHE.get(msg_id)
+    if not data:
+        return await safe_answer(query, "Session expired", show_alert=True)
+
+    # Temporarily change only the refresh button
+    markup = build_main_markup(data["index"], len(data["pages"]), data["url"])
+    for row in markup.inline_keyboard:
+        for btn in row:
+            if btn.callback_data == "log_refresh":
+                btn.text = "⏳ Refreshing..."
+    await query.message.edit_reply_markup(markup)
+
     try:
         path = ospath.abspath("log.txt")
         async with aiofiles.open(path, "r") as f:
             content = await f.read()
 
-        msg_id = query.message.id
-        data = LOG_CACHE.get(msg_id)
-        if not data: return await query.answer("Session expired", show_alert=True)
-
         yaso_url = await paste_to_yaso(content)
         paste_url = yaso_url if not yaso_url.startswith("Error") else await paste_to_spacebin(content)
 
         pages = chunk_text(content)
-        current_index = min(data["index"], len(pages)-1)
+        current_index = min(data["index"], len(pages) - 1)
         LOG_CACHE[msg_id] = {"pages": pages, "url": paste_url, "index": current_index, "selector_start": 0}
 
         page_content = pages[current_index]
-        try:
-            await query.message.edit_text(f"<pre>{page_content}</pre>", reply_markup=build_main_markup(current_index, len(pages), paste_url))
-            await query.answer("✅ Log refreshed")
-        except MessageNotModified:
-            await query.answer("ℹ️ No updates in the log", show_alert=False)
-
+        await query.message.edit_text(f"<pre>{page_content}</pre>",
+                                      reply_markup=build_main_markup(current_index, len(pages), paste_url))
+        await safe_answer(query, "✅ Log refreshed")
     except Exception as e:
-        await query.answer("⚠️ Error refreshing log", show_alert=True)
+        await safe_answer(query, "⚠️ Error refreshing log", show_alert=True)
         print(f"Error in log_refresh_handler: {e}")
 
 # -------------------------------
-# Close
+# CLOSE HANDLER
 # -------------------------------
 @Client.on_callback_query(filters.regex("^log_close$"))
-async def log_close_handler(client: Client, query: CallbackQuery):
+async def log_close_handler(client, query: CallbackQuery):
     msg_id = query.message.id
     LOG_CACHE.pop(msg_id, None)
     await query.message.delete()
-    await query.answer("Closed.")
+    await safe_answer(query, "Closed.")
 
 @Client.on_callback_query(filters.regex("^selector_null$"))
 async def selector_null(client, query: CallbackQuery):
-    await query.answer("📌 Select page number from below ⬇️", show_alert=False)
+    await safe_answer(query, "📌 Select page number from below ⬇️")
