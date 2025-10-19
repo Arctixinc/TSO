@@ -6,7 +6,7 @@
     <title>{% block title %}Telegram Stremio{% endblock %}</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
-    
+
     <script>
         tailwind.config = {
             theme: {
@@ -33,64 +33,107 @@
         .theme-text-secondary { color: {{ theme.colors.text_secondary }}; }
     </style>
 </head>
-<body class="min-h-screen">
-    <!-- Navigation -->
-    <nav class="theme-card shadow-lg border-b">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between items-center h-16">
-                <div class="flex items-center space-x-4">
-                    <h1 class="text-2xl font-bold text-primary">Telegram Stremio</h1>
-                    {% if current_user %}
-                    <div class="hidden md:flex space-x-4">
-                        <a href="/" class="text-text hover:text-primary px-3 py-2 rounded-md transition-colors">Dashboard</a>
-                        <a href="/media/manage" class="text-text hover:text-primary px-3 py-2 rounded-md transition-colors">Media</a>
-                    </div>
-                    {% endif %}
-                </div>
-                
-                <div class="flex items-center space-x-4">
-                    <!-- Theme Selector -->
-                    <div class="relative">
-                        <form method="post" action="/set-theme" id="theme-form">
-                            <select name="theme" onchange="document.getElementById('theme-form').submit()" class="theme-card border border-gray-300 rounded-md px-3 py-2 text-sm">
-                                {% for theme_key, theme_data in themes.items() %}
-                                <option value="{{ theme_key }}" {% if current_theme == theme_key %}selected{% endif %}>
-                                    {{ theme_data.name }}
-                                </option>
-                                {% endfor %}
-                            </select>
-                        </form>
-                    </div>
-                    
-                    {% if current_user %}
-                    <div class="flex items-center space-x-4">
-                        <span class="text-sm theme-text-secondary">{{ current_user }}</span>
-                        <a href="/logout" class="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 transition-colors">Logout</a>
-                    </div>
-                    {% else %}
-                    <a href="/login" class="theme-primary text-white px-4 py-2 rounded-md hover:opacity-90 transition-opacity">Login</a>
-                    {% endif %}
-                </div>
+<body class="min-h-screen flex">
+
+    <!-- Sidebar -->
+    {% if current_user %}
+    <aside class="theme-card w-64 hidden md:flex flex-col h-screen shadow-lg border-r">
+        <div class="p-6 flex items-center space-x-2 border-b">
+            <i class="fa-solid fa-tv text-primary text-xl"></i>
+            <h1 class="text-xl font-bold text-primary">Telegram Stremio</h1>
+        </div>
+
+        <nav class="flex-1 px-4 py-6 space-y-2">
+            <a href="/" class="flex items-center space-x-3 px-4 py-2 rounded-lg hover:bg-primary/10 transition">
+                <i class="fa-solid fa-gauge text-primary"></i>
+                <span>Dashboard</span>
+            </a>
+            <a href="/media/manage" class="flex items-center space-x-3 px-4 py-2 rounded-lg hover:bg-primary/10 transition">
+                <i class="fa-solid fa-photo-film text-primary"></i>
+                <span>Media</span>
+            </a>
+            <a href="/status" class="flex items-center space-x-3 px-4 py-2 rounded-lg hover:bg-primary/10 transition">
+                <i class="fa-solid fa-signal text-primary"></i>
+                <span>Status</span>
+            </a>
+            <a href="/stremio" class="flex items-center space-x-3 px-4 py-2 rounded-lg hover:bg-primary/10 transition">
+                <i class="fa-solid fa-book-open text-primary"></i>
+                <span>Guide</span>
+            </a>
+        </nav>
+
+        <div class="border-t p-4">
+            <div class="flex items-center justify-between">
+                <span class="text-sm theme-text-secondary truncate">{{ current_user }}</span>
+                <a href="/logout" class="bg-red-600 text-white px-3 py-1 rounded-md hover:bg-red-700 text-sm transition">Logout</a>
             </div>
         </div>
-    </nav>
+    </aside>
+    {% endif %}
 
-    <!-- Main Content -->
-    <main class="flex-1">
-        {% block content %}{% endblock %}
-    </main>
+    <!-- Main Content Area -->
+    <div class="flex-1 flex flex-col min-h-screen">
+        
+        <!-- Top Bar -->
+        <header class="theme-card border-b shadow-sm flex items-center justify-between px-4 py-3 md:py-4">
+            <div class="flex items-center space-x-3 md:hidden">
+                <!-- Mobile Sidebar Toggle -->
+                <button id="menu-toggle" class="text-primary focus:outline-none">
+                    <i class="fa-solid fa-bars text-xl"></i>
+                </button>
+                <h1 class="text-lg font-bold text-primary">Telegram Stremio</h1>
+            </div>
 
-    <!-- Footer -->
-    <footer class="theme-card border-t mt-auto">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-            <div class="flex justify-between items-center">
+            <div class="flex items-center space-x-4 ml-auto">
+                <!-- Theme Selector -->
+                <form method="post" action="/set-theme" id="theme-form">
+                    <select name="theme" onchange="document.getElementById('theme-form').submit()" 
+                        class="theme-card border border-gray-300 rounded-md px-3 py-2 text-sm">
+                        {% for theme_key, theme_data in themes.items() %}
+                        <option value="{{ theme_key }}" {% if current_theme == theme_key %}selected{% endif %}>
+                            {{ theme_data.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </form>
+
+                {% if not current_user %}
+                <a href="/login" class="theme-primary text-white px-4 py-2 rounded-md hover:opacity-90 transition">
+                    Login
+                </a>
+                {% endif %}
+            </div>
+        </header>
+
+        <!-- Page Content -->
+        <main class="flex-1 p-6">
+            {% block content %}{% endblock %}
+        </main>
+
+        <!-- Footer -->
+        <footer class="theme-card border-t mt-auto">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
                 <p class="theme-text-secondary text-sm">© 2025 Telegram Stremio. All rights reserved.</p>
                 <div class="flex space-x-4">
-                    <a href="/status" class="theme-text-secondary hover:text-primary text-sm transition-colors">Status</a>
-                    <a href="/stremio" class="theme-text-secondary hover:text-primary text-sm transition-colors">Stremio Guide</a>
+                    <a href="/status" class="theme-text-secondary hover:text-primary text-sm transition">Status</a>
+                    <a href="/stremio" class="theme-text-secondary hover:text-primary text-sm transition">Stremio Guide</a>
                 </div>
             </div>
-        </div>
-    </footer>
+        </footer>
+    </div>
+
+    <!-- Mobile Sidebar Script -->
+    <script>
+        const toggle = document.getElementById('menu-toggle');
+        const sidebar = document.querySelector('aside');
+        if (toggle && sidebar) {
+            toggle.addEventListener('click', () => {
+                sidebar.classList.toggle('hidden');
+                sidebar.classList.toggle('absolute');
+                sidebar.classList.toggle('z-50');
+                sidebar.classList.toggle('md:flex');
+            });
+        }
+    </script>
 </body>
 </html>
