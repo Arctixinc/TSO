@@ -111,7 +111,8 @@ def build_main_markup(index: int, total: int, url: str):
     # Actions row
     buttons.append([
         InlineKeyboardButton("🔄 Refresh", callback_data="log_refresh"),
-        InlineKeyboardButton("🌐 Open URL", url=url)
+        InlineKeyboardButton("🌐 Open URL", url=url),
+        InlineKeyboardButton("📤 Send Log File", callback_data="log_sendfile")  # NEW BUTTON
     ])
 
     # Close row
@@ -169,7 +170,8 @@ def build_selector_markup(msg_id: int):
     # Close and URL row
     buttons.append([
         InlineKeyboardButton("❌ Close", callback_data="log_close"),
-        InlineKeyboardButton("🌐 Open URL", url=url)
+        InlineKeyboardButton("🌐 Open URL", url=url),
+        InlineKeyboardButton("📤 Send Log File", callback_data="log_sendfile")  # NEW BUTTON
     ])
     return InlineKeyboardMarkup(buttons)
 
@@ -412,6 +414,24 @@ async def log_refresh_handler(client, query: CallbackQuery):
     except Exception as e:
         await safe_answer(query, "⚠️ Error refreshing log", show_alert=True)
         LOGGER.exception(f"Error in log_refresh_handler: {e}")
+
+# -------------------------------
+# SEND LOG FILE HANDLER
+# -------------------------------
+@Client.on_callback_query(filters.regex("^log_sendfile$"))
+async def send_log_file(client, query: CallbackQuery):
+    try:
+        path = ospath.abspath("log.txt")
+        if not ospath.exists(path):
+            return await safe_answer(query, "❌ Log file not found.", show_alert=True)
+
+        await query.message.reply_document(path, caption="📄 Full log file")
+        await safe_answer(query, "Sent log file!")
+        LOGGER.info(f"Sent log file for message_id {query.message.id}")
+    except Exception as e:
+        await safe_answer(query, "⚠️ Failed to send log file.", show_alert=True)
+        LOGGER.exception(f"Error in send_log_file: {e}")
+
 
 # -------------------------------
 # CLOSE HANDLER
