@@ -75,7 +75,7 @@ def chunk_text(text: str, chunk_size=3500):
 # PAGINATION STATE
 # -------------------------------
 LOG_CACHE = {}  # message_id -> {"pages": [...], "url": str, "index": int, "selector_start": int}
-MAX_PASTE_PAGES = 120  # Only last 120 pages for paste
+MAX_PASTE_PAGES = 100  # Only last 100 pages for paste
 
 # -------------------------------
 # SAFE ANSWER FUNCTION
