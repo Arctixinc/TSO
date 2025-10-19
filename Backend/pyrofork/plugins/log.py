@@ -129,7 +129,18 @@ def build_selector_markup(msg_id: int):
     total_pages = len(pages)
 
     # Dynamic window size
-    window_size = 50 if total_pages > 100 else 25
+    # window_size = 50 if total_pages > 100 else 25
+    window_size = 50 if total_pages <= 50 else \
+              100 if total_pages <= 100 else \
+              200 if total_pages <= 200 else \
+              300 if total_pages <= 300 else \
+              400 if total_pages <= 400 else \
+              500 if total_pages <= 500 else \
+              600 if total_pages <= 600 else \
+              700 if total_pages <= 700 else \
+              800 if total_pages <= 800 else \
+              900 if total_pages <= 900 else 1000
+    
     start = data.get("selector_start", 0)
     end = min(start + window_size, total_pages)
 
