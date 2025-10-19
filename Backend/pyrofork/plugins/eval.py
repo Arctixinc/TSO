@@ -1,21 +1,18 @@
 import asyncio
 import io
-import contextlib
+import sys
+import os
 import traceback
-import random
-import string
 import aiohttp
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message
-from io import StringIO
+from io import BytesIO
 from Backend.helper.custom_filter import CustomFilters
-
-
 
 # ---------------- HELPERS ----------------
 async def generate_random_string(length=32):
+    import random, string
     return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
-
 
 async def paste_to_spacebin(content: str):
     try:
@@ -32,7 +29,6 @@ async def paste_to_spacebin(content: str):
                     return f"Error: {(await r.json()).get('error', 'Unknown error')}"
     except Exception as e:
         return f"Error: {e}"
-
 
 async def paste_to_yaso(content: str):
     try:
@@ -55,7 +51,6 @@ async def paste_to_yaso(content: str):
     except Exception as e:
         return f"Error: {e}"
 
-
 async def run_shell(cmd: str, timeout: int = 60) -> str:
     try:
         proc = await asyncio.create_subprocess_shell(
@@ -68,35 +63,49 @@ async def run_shell(cmd: str, timeout: int = 60) -> str:
         except asyncio.TimeoutError:
             proc.kill()
             return "❌ Timeout reached while executing command."
-        if stderr:
-            return stderr.decode()
-        return stdout.decode() or "✅ Command executed successfully, but no output."
+        return (stdout.decode() or "") + (stderr.decode() or "")
     except Exception as e:
         return f"⚠ Error running command:\n{e}"
 
+async def aexec(code, client, message):
+    env = {}
+    exec(
+        "async def __aexec(client, message):\n"
+        + "\n".join(f"    {line}" for line in code.split("\n")),
+        env
+    )
+    return await env["__aexec"](client, message)
 
-async def evaluate_code(code: str) -> str:
-    stdout = StringIO()
-    code = code.strip("` ")
+async def evaluate_code(client, message, code: str) -> str:
+    old_stdout, old_stderr = sys.stdout, sys.stderr
+    redirected_output = sys.stdout = io.StringIO()
+    redirected_error = sys.stderr = io.StringIO()
+    exc = None
+
     try:
-        with contextlib.redirect_stdout(stdout):
-            exec(
-                f"async def __aexec():\n"
-                + "\n".join(f"    {line}" for line in code.split("\n"))
-            )
-            result = await locals()["__aexec"]()
+        await aexec(code, client, message)
     except Exception:
-        result = traceback.format_exc()
-    output = stdout.getvalue()
-    return (output + str(result)) or "✅ Code executed successfully, but no output."
+        exc = traceback.format_exc()
 
+    stdout = redirected_output.getvalue()
+    stderr = redirected_error.getvalue()
+    sys.stdout, sys.stderr = old_stdout, old_stderr
 
+    if exc:
+        return exc
+    elif stderr:
+        return stderr
+    elif stdout:
+        return stdout
+    else:
+        return "✅ Success"
+
+# ---------------- BUTTONS ----------------
 def initial_button(cmd_type: str, cmd_input: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("📤 Upload to URL", callback_data=f"upload:{cmd_type}|{cmd_input}")],
         [InlineKeyboardButton("🗑 Close", callback_data="close")]
     ])
-
 
 def url_button(url: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
@@ -104,11 +113,9 @@ def url_button(url: str) -> InlineKeyboardMarkup:
         [InlineKeyboardButton("🗑 Close", callback_data="close")]
     ])
 
-
 async def send_output(message: Message, text: str, cmd_type: str, cmd_input: str):
-    """Send output with upload button if long."""
+    """Send output with upload button if too long"""
     if len(text) > 2000:
-        # Show "Upload to URL" button first
         await message.reply_text(
             f"**📤 {cmd_type.upper()} Output:**\nLong output detected.",
             reply_markup=initial_button(cmd_type, cmd_input)
@@ -119,28 +126,41 @@ async def send_output(message: Message, text: str, cmd_type: str, cmd_input: str
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🗑 Close", callback_data="close")]])
         )
 
-
 # ---------------- COMMAND HANDLERS ----------------
 @Client.on_message(filters.command("eval") & CustomFilters.owner)
-async def eval_handler(_, message: Message):
-    if len(message.command) < 2:
-        return await message.reply("❗Usage: `/eval <code>`", quote=True)
-    code = message.text.split(None, 1)[1]
-    output = await evaluate_code(code)
-    # Store the result in the message data for later upload
+async def eval_handler(client, message: Message):
+    status_msg = await message.reply_text("Processing ...")
+    # Get code from reply file or command
+    if message.reply_to_message and message.reply_to_message.document and \
+        message.reply_to_message.document.file_name.endswith(('.py', '.txt')):
+        path = await message.reply_to_message.download()
+        with open(path, "r") as f:
+            code = f.read()
+        try: os.remove(path)
+        except: pass
+    else:
+        try:
+            code = message.text.split(None, 1)[1]
+        except:
+            await status_msg.edit("❗Usage: `/eval <code>`")
+            return
+    output = await evaluate_code(client, message, code)
     message._output_data = output
     await send_output(message, output, "eval", code)
-
+    await status_msg.delete()
 
 @Client.on_message(filters.command("sh") & CustomFilters.owner)
-async def shell_handler(_, message: Message):
-    if len(message.command) < 2:
-        return await message.reply("❗Usage: `/sh <command>`", quote=True)
-    cmd = message.text.split(None, 1)[1]
+async def shell_handler(client, message: Message):
+    status_msg = await message.reply_text("Processing ...")
+    try:
+        cmd = message.text.split(None, 1)[1]
+    except:
+        await status_msg.edit("❗Usage: `/sh <command>`")
+        return
     output = await run_shell(cmd)
     message._output_data = output
     await send_output(message, output, "sh", cmd)
-
+    await status_msg.delete()
 
 # ---------------- CALLBACKS ----------------
 @Client.on_callback_query(filters.regex("^upload:(.+)$") & CustomFilters.owner)
@@ -148,27 +168,20 @@ async def upload_callback(_, query):
     data = query.data.split("upload:", 1)[1]
     cmd_type, cmd_input = data.split("|", 1)
     await query.answer("⏳ Uploading...")
-
-    # Access stored output from the message
     output = getattr(query.message, "_output_data", None)
     if not output:
         return await query.answer("❌ Output not found.", show_alert=True)
 
-    # Upload to yaso first, fallback to spaceb
     paste_url = await paste_to_yaso(output)
     if paste_url.startswith("Error"):
         paste_url = await paste_to_spacebin(output)
 
-    # Edit message with URL button
     await query.message.edit_text(
         f"**📤 {cmd_type.upper()} Output Uploaded!**",
         reply_markup=url_button(paste_url)
     )
 
-
 @Client.on_callback_query(filters.regex("^close$") & CustomFilters.owner)
 async def close_callback(_, query):
     await query.answer("🗑 Closed")
     await query.message.delete()
-
-                                  
