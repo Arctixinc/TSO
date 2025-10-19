@@ -130,22 +130,9 @@ def build_selector_markup(msg_id: int):
     total_pages = len(pages)
 
     # Dynamic window size capped to total_pages
-    window_size = min(
-        50 if total_pages <= 50 else
-        100 if total_pages <= 100 else
-        200 if total_pages <= 200 else
-        300 if total_pages <= 300 else
-        400 if total_pages <= 400 else
-        500 if total_pages <= 500 else
-        600 if total_pages <= 600 else
-        700 if total_pages <= 700 else
-        800 if total_pages <= 800 else
-        900 if total_pages <= 900 else 1000,
-        total_pages
-    )
+    window_size = 25 if total_pages <= 100 else 50
 
-    # Ensure selector_start is within bounds
-    start = min(max(data.get("selector_start", 0), 0), max(total_pages - 1, 0))
+    start = data.get("selector_start", 0)
     end = min(start + window_size, total_pages)
 
     buttons = []
@@ -274,20 +261,8 @@ async def selector_prev(client, query: CallbackQuery):
 
         total_pages = len(data["pages"])
         # Dynamic window size capped
-        window_size = min(
-            50 if total_pages <= 50 else
-            100 if total_pages <= 100 else
-            200 if total_pages <= 200 else
-            300 if total_pages <= 300 else
-            400 if total_pages <= 400 else
-            500 if total_pages <= 500 else
-            600 if total_pages <= 600 else
-            700 if total_pages <= 700 else
-            800 if total_pages <= 800 else
-            900 if total_pages <= 900 else 1000,
-            total_pages
-        )
-
+        window_size = 25 if total_pages <= 100 else 50
+    
         # Move prev window and clamp to 0
         data["selector_start"] = max(0, data.get("selector_start", 0) - window_size)
         await query.message.edit_reply_markup(build_selector_markup(msg_id))
@@ -306,22 +281,10 @@ async def selector_next(client, query: CallbackQuery):
 
         total_pages = len(data["pages"])
         # Dynamic window size capped
-        window_size = min(
-            50 if total_pages <= 50 else
-            100 if total_pages <= 100 else
-            200 if total_pages <= 200 else
-            300 if total_pages <= 300 else
-            400 if total_pages <= 400 else
-            500 if total_pages <= 500 else
-            600 if total_pages <= 600 else
-            700 if total_pages <= 700 else
-            800 if total_pages <= 800 else
-            900 if total_pages <= 900 else 1000,
-            total_pages
-        )
+        window_size = 25 if total_pages <= 100 else 50
+        data["selector_start"] = min(len(data["pages"]) - window_size, data.get("selector_start", 0) + window_size)
 
         # Move next window and clamp to max
-        data["selector_start"] = min(data.get("selector_start", 0) + window_size, total_pages - window_size)
         await query.message.edit_reply_markup(build_selector_markup(msg_id))
         await safe_answer(query)
     except Exception as e:
