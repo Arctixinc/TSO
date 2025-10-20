@@ -149,14 +149,20 @@ async def eval_handler(client, message: Message):
     await send_output(message, output, "eval", code)
     await status_msg.delete()
 
-@Client.on_message(filters.command("sh") & CustomFilters.owner)
+@Client.on_message(filters.command(["sh","shell"]) & CustomFilters.owner)
 async def shell_handler(client, message: Message):
     status_msg = await message.reply_text("Processing ...")
-    try:
-        cmd = message.text.split(None, 1)[1]
-    except:
-        await status_msg.edit("❗Usage: `/sh <command>`")
+
+    # ✅ Properly check for empty command
+    if len(message.text.split()) < 2:
+        await status_msg.edit(
+            "❗Usage: `/sh <command>`",
+            parse_mode="markdown",
+            disable_web_page_preview=True
+        )
         return
+
+    cmd = message.text.split(None, 1)[1]
     output = await run_shell(cmd)
     message._output_data = output
     await send_output(message, output, "sh", cmd)
