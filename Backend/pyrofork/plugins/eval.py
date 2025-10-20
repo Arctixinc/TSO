@@ -1,4 +1,3 @@
-
 import asyncio
 from io import BytesIO
 import io
@@ -9,7 +8,7 @@ import traceback
 from pyrogram import Client, filters
 from Backend.helper.custom_filter import CustomFilters
 
-
+@Client.on_edited_message(filters.command(['shell','sh']) & CustomFilters.owner)
 @Client.on_message(filters.command(['shell','sh']) & CustomFilters.owner)
 async def execution(bot, message):
     status_message = await message.reply_text("Processing ...")
@@ -49,7 +48,9 @@ async def execution(bot, message):
 
     await status_message.delete()
     
-@Client.on_message(filters.command(['eval']), CustomFilters.owner)
+
+@Client.on_edited_message(filters.command(['eval']) & CustomFilters.owner)
+@Client.on_message(filters.command(['eval']) & CustomFilters.owner)
 async def eval(client, message):
     replied = message.reply_to_message
     status_message = await message.reply_text("Processing ...")
