@@ -142,31 +142,45 @@ async def eval_handler(client, message: Message):
         try:
             code = message.text.split(None, 1)[1]
         except:
-            await status_msg.edit("❗Usage: `/eval <code>`")
+            await status_msg.edit("❗Usage: `/eval code`")
             return
     output = await evaluate_code(client, message, code)
     message._output_data = output
     await send_output(message, output, "eval", code)
     await status_msg.delete()
 
-@Client.on_message(filters.command(["sh","shell"]) & CustomFilters.owner)
+@Client.on_message(filters.command(["sh", "shell"]) & CustomFilters.owner)
 async def shell_handler(client, message: Message):
     status_msg = await message.reply_text("Processing ...")
 
-    # ✅ Properly check for empty command
-    if len(message.text.split()) < 2:
-        await status_msg.edit(
-            "❗Usage: `/sh <command>`",
-            parse_mode="markdown",
-            disable_web_page_preview=True
-        )
-        return
+    if (
+        message.reply_to_message
+        and message.reply_to_message.document
+        and message.reply_to_message.document.file_name.endswith(('.sh', '.txt'))
+    ):
+        path = await message.reply_to_message.download()
+        with open(path, "r") as f:
+            cmd = f.read().strip()
+        try:
+            os.remove(path)
+        except:
+            pass
+    else:
+        parts = message.text.split(None, 1)
+        if len(parts) < 2:
+            await status_msg.edit(
+                "❗Usage: `/sh <command>`",
+                parse_mode=None,
+                disable_web_page_preview=True
+            )
+            return
+        cmd = parts[1]
 
-    cmd = message.text.split(None, 1)[1]
     output = await run_shell(cmd)
     message._output_data = output
     await send_output(message, output, "sh", cmd)
     await status_msg.delete()
+
 
 # ---------------- CALLBACKS ----------------
 @Client.on_callback_query(filters.regex("^upload:(.+)$") & CustomFilters.owner)
