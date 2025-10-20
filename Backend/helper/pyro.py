@@ -155,7 +155,10 @@ commands = [
     BotCommand("set", "🎬 Manually add IMDb metadata"),
     BotCommand("log", "📄 Send the log file"),
     BotCommand("restart", "♻️ Restart the bot"),
+    BotCommand("eval", "🧠 Execute Python code safely"),
+    BotCommand("shell", "💻 Run shell commands on the server"),
 ]
+
 
 
 async def setup_bot_commands(bot: Client):
