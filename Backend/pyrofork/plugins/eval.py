@@ -3,6 +3,7 @@ import io
 import os
 import sys
 import traceback
+import html
 from io import BytesIO
 from pyrogram import Client, filters
 from pyrogram.enums.parse_mode import ParseMode
@@ -58,15 +59,20 @@ async def shell_handler(client, message):
         )
         stdout, stderr = await process.communicate()
 
-        o = stdout.decode() or "No Output"
-        e = stderr.decode() or "No Error"
+        o = stdout.decode().strip() or "No Output"
+        e = stderr.decode().strip() or "No Error"
+
+        # Escape for HTML safety
+        cmd_html = html.escape(cmd)
+        o_html = html.escape(o)
+        e_html = html.escape(e)
 
         output = (
             f"<b>💻 Shell Executed</b>\n\n"
-            f"<b>🧾 Command:</b> <code>{cmd}</code>\n"
+            f"<b>🧾 Command:</b> <code>{cmd_html}</code>\n"
             f"<b>📌 PID:</b> <code>{process.pid}</code>\n\n"
-            f"<b>⚠️ STDERR:</b>\n<code>{e}</code>\n\n"
-            f"<b>✅ STDOUT:</b>\n<code>{o}</code>"
+            f"<b>⚠️ STDERR:</b>\n<code>{e_html}</code>\n\n"
+            f"<b>✅ STDOUT:</b>\n<code>{o_html}</code>"
         )
 
         if len(output) > 4096:
@@ -79,13 +85,16 @@ async def shell_handler(client, message):
                     disable_notification=True
                 )
         else:
-            await message.reply_text(output, parse_mode=ParseMode.MARKDOWN)
+            await message.reply_text(output, parse_mode=ParseMode.HTML)
 
         LOGGER.info("Shell command executed successfully.")
 
     except Exception as err:
         LOGGER.error(f"Error during shell execution: {err}", exc_info=True)
-        await message.reply_text(f"⚠️ Error: <code>{err}</code>", parse_mode=ParseMode.MARKDOWN)
+        await message.reply_text(
+            f"⚠️ Error: <code>{html.escape(str(err))}</code>",
+            parse_mode=ParseMode.HTML
+        )
 
     finally:
         await status_message.delete()
@@ -142,8 +151,8 @@ async def eval_handler(client, message):
             exc = traceback.format_exc()
             LOGGER.error("Exception during eval execution", exc_info=True)
 
-        stdout = sys.stdout.getvalue()
-        stderr = sys.stderr.getvalue()
+        stdout = sys.stdout.getvalue().strip()
+        stderr = sys.stderr.getvalue().strip()
         sys.stdout, sys.stderr = old_stdout, old_stderr
 
         if exc:
@@ -155,10 +164,14 @@ async def eval_handler(client, message):
         else:
             evaluation = "✅ Success"
 
+        # Escape output for safe HTML display
+        cmd_html = html.escape(cmd)
+        evaluation_html = html.escape(evaluation)
+
         final_output = (
             f"<b>🧠 EVAL</b>\n\n"
-            f"<b>📜 Code:</b>\n<code>{cmd.strip()}</code>\n\n"
-            f"<b>🖨 Output:</b>\n<code>{evaluation.strip()}</code>"
+            f"<b>📜 Code:</b>\n<code>{cmd_html}</code>\n\n"
+            f"<b>🖨 Output:</b>\n<code>{evaluation_html}</code>"
         )
 
         if len(final_output) > 4096:
@@ -171,13 +184,16 @@ async def eval_handler(client, message):
                     disable_notification=True
                 )
         else:
-            await message.reply_text(final_output, parse_mode=ParseMode.MARKDOWN)
+            await message.reply_text(final_output, parse_mode=ParseMode.HTML)
 
         LOGGER.info("Eval executed successfully.")
 
     except Exception as err:
         LOGGER.error(f"Error during eval handling: {err}", exc_info=True)
-        await message.reply_text(f"⚠️ Error: <code>{err}</code>", parse_mode=ParseMode.MARKDOWN)
+        await message.reply_text(
+            f"⚠️ Error: <code>{html.escape(str(err))}</code>",
+            parse_mode=ParseMode.HTML
+        )
 
     finally:
         await status_message.delete()
