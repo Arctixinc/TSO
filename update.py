@@ -5,6 +5,8 @@ from subprocess import run as srun, PIPE
 from dotenv import load_dotenv
 from datetime import datetime
 import pytz
+import requests
+from io import StringIO
 
 IST = pytz.timezone("Asia/Kolkata")
 
@@ -13,6 +15,7 @@ class ISTFormatter(Formatter):
         dt = datetime.fromtimestamp(record.created, IST)
         return dt.strftime(datefmt or "%d-%b-%y %I:%M:%S %p")
 
+# ---------- Logging Setup ----------
 log_file = "log.txt"
 if ospath.exists(log_file):
     with open(log_file, "w") as f:
@@ -27,8 +30,28 @@ stream_handler.setFormatter(formatter)
 
 basicConfig(handlers=[file_handler, stream_handler], level=INFO)
 
-load_dotenv("config.env")
+# ---------- Load .env ----------
+CONF_GIST_URL = environ.get("CONF_GIST_URL", "").strip()  # optional: set this in Heroku or host
+if CONF_GIST_URL:
+    try:
+        resp = requests.get(CONF_GIST_URL, timeout=10)
+        if resp.status_code == 200:
+            env_content = StringIO(resp.text)
+            load_dotenv(stream=env_content)
+            log_info("Loaded .env from Gist URL")
+        else:
+            log_error(f"❌ Failed to fetch env from Gist | Status code: {resp.status_code}")
+            log_info("⚠️ Falling back to local config.env")
+            load_dotenv("config.env")
+    except requests.RequestException as e:
+        log_error(f"❌ Exception while fetching env from Gist: {e}")
+        log_info("⚠️ Falling back to local config.env")
+        load_dotenv("config.env")
+else:
+    load_dotenv("config.env")
+    log_info("⚠️ Loaded local config.env (Gist URL not provided)")
 
+# ---------- Git Upstream Update ----------
 UPSTREAM_REPO = environ.get("UPSTREAM_REPO", "").strip() or None
 UPSTREAM_BRANCH = environ.get("UPSTREAM_BRANCH", "").strip() or "master"
 
