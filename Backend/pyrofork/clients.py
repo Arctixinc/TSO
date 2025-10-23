@@ -42,25 +42,34 @@ async def initialize_clients():
     all_tokens = TokenParser.parse_from_env()
     
     if not all_tokens:
-        LOGGER.info("No additional Bot Clients found, Using default client")
+        LOGGER.info("No additional Bot Clients found, using default client")
         return
 
     tasks = [create_task(start_client(i, token)) for i, token in all_tokens.items()]
     results = await gather(*tasks, return_exceptions=True)
 
     clients = {}
-    for result in results:
+    failed_clients = []
+
+    for idx, result in enumerate(results, start=1):
+        token_index = list(all_tokens.keys())[idx-1]  # Keep track of token index
         if isinstance(result, Exception):
-            # Log if a task itself failed (rare)
-            LOGGER.error(f"Client task failed with exception: {result}")
-        elif result is not None:
+            LOGGER.error(f"Client {token_index} task failed with exception: {result}")
+            failed_clients.append(token_index)
+        elif result is None:
+            failed_clients.append(token_index)
+        else:
             client_id, client = result
             clients[client_id] = client
 
     multi_clients.update(clients)
 
+    if clients:
+        LOGGER.info(f"Successfully started clients: {list(clients.keys())}")
+    if failed_clients:
+        LOGGER.warning(f"Failed to start clients (check tokens): {failed_clients}")
+
     if len(multi_clients) > 1:
         LOGGER.info(f"Multi-Client Mode Enabled with {len(multi_clients)} clients")
     else:
         LOGGER.info("No additional clients were initialized, using default client")
-        
