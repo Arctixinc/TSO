@@ -40,17 +40,27 @@ async def start_client(client_id, token):
 async def initialize_clients():
     multi_clients[0], work_loads[0] = StreamBot, 0
     all_tokens = TokenParser.parse_from_env()
+    
     if not all_tokens:
         LOGGER.info("No additional Bot Clients found, Using default client")
         return
 
     tasks = [create_task(start_client(i, token)) for i, token in all_tokens.items()]
-    clients = await gather(*tasks)
-    clients = {client_id: client for client_id, client in clients if client} 
+    results = await gather(*tasks, return_exceptions=True)
+
+    clients = {}
+    for result in results:
+        if isinstance(result, Exception):
+            # Log if a task itself failed (rare)
+            LOGGER.error(f"Client task failed with exception: {result}")
+        elif result is not None:
+            client_id, client = result
+            clients[client_id] = client
+
     multi_clients.update(clients)
-    
-    if len(multi_clients) != 1:
+
+    if len(multi_clients) > 1:
         LOGGER.info(f"Multi-Client Mode Enabled with {len(multi_clients)} clients")
     else:
         LOGGER.info("No additional clients were initialized, using default client")
-
+        
