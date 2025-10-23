@@ -1,5 +1,6 @@
 from asyncio import gather, create_task
 from pyrogram import Client
+from pyrogram.errors import AccessTokenExpired
 from Backend.logger import LOGGER
 from Backend.config import Telegram
 from Backend.pyrofork.bot import multi_clients, work_loads, StreamBot
@@ -33,6 +34,9 @@ async def start_client(client_id, token):
         ).start()
         work_loads[client_id] = 0
         return client_id, client
+    except AccessTokenExpired:
+        LOGGER.warning(f"Bot Client {client_id} token has expired. Skipping this client.")
+        return None
     except Exception as e:
         LOGGER.error(f"Failed to start Client - {client_id} Error: {e}", exc_info=True)
         return None
