@@ -1,4 +1,5 @@
-from asyncio import gather, create_task
+from typing import Dict, Tuple, Optional
+from asyncio import gather, create_task, sleep
 from pyrogram import Client
 from pyrogram.errors import AccessTokenExpired, FloodWait
 from Backend.logger import LOGGER
@@ -20,28 +21,39 @@ class TokenParser:
         }
         return tokens
 
-async def start_client(client_id, token):
+async def start_client(client_id: int, token: str) -> Optional[Tuple[int, Client]]:
     try:
-        LOGGER.info(f"Starting - Bot Client {client_id}")
-        client = await Client(
+        LOGGER.info(f"[Client {client_id}] Starting initialization...")
+        client = Client(
             name=str(client_id),
             api_id=Telegram.API_ID,
             api_hash=Telegram.API_HASH,
             bot_token=token,
-            sleep_threshold=100,
+            sleep_threshold=120,
             no_updates=True,
             in_memory=True
-        ).start()
+        )
+        await client.start()
         work_loads[client_id] = 0
+        LOGGER.info(f"[Client {client_id}] Started successfully.")
         return client_id, client
+
     except AccessTokenExpired:
-        LOGGER.warning(f"Bot Client {client_id} token has expired. Skipping this client.")
+        LOGGER.warning(f"[Client {client_id}] Token has expired — skipping.")
         return None
     except FloodWait as e:
-        LOGGER.warning(f"Bot Client {client_id} hit FloodWait ({e.value}s). Skipping this client.")
-        return None
+        LOGGER.warning(f"[Client {client_id}] FloodWait: waiting {e.value}s before retrying...")
+        await sleep(e.value)
+        try:
+            await client.start()
+            work_loads[client_id] = 0
+            LOGGER.info(f"[Client {client_id}] Started successfully after FloodWait.")
+            return client_id, client
+        except Exception as err:
+            LOGGER.error(f"[Client {client_id}] Retry after FloodWait failed: {err}", exc_info=True)
+            return None
     except Exception as e:
-        LOGGER.error(f"Failed to start Client - {client_id} Error: {e}", exc_info=True)
+        LOGGER.error(f"[Client {client_id}] Failed to start — {e}", exc_info=True)
         return None
 
 async def initialize_clients():
