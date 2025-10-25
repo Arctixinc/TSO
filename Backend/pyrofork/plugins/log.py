@@ -78,6 +78,11 @@ LOG_CACHE = {}  # message_id -> {"pages": [...], "url": str, "index": int, "sele
 MAX_PASTE_PAGES = 100  # Only last 100 pages for paste
 
 # -------------------------------
+# CONSTANTS
+# -------------------------------
+LOG_CONTEXT_LOST_MSG = "⚠️ Log data not available — please reopen logs."
+
+# -------------------------------
 # SAFE ANSWER FUNCTION
 # -------------------------------
 async def safe_answer(query: CallbackQuery, text: str = None, show_alert: bool = False):
@@ -244,7 +249,7 @@ async def page_button(client, query: CallbackQuery):
         page_index = int(query.data.split("_")[-1])
         data = LOG_CACHE.get(msg_id)
         if not data:
-            return await safe_answer(query, "Session expired", show_alert=True)
+            return await safe_answer(query, LOG_CONTEXT_LOST_MSG, show_alert=True)
 
         data["index"] = page_index
         markup = build_main_markup(data["index"], len(data["pages"]), data["url"])
@@ -265,7 +270,7 @@ async def selector_prev(client, query: CallbackQuery):
     msg_id = query.message.id
     data = LOG_CACHE.get(msg_id)
     if not data:
-        return await safe_answer(query, "Session expired", show_alert=True)
+        return await safe_answer(query, LOG_CONTEXT_LOST_MSG, show_alert=True)
 
     total_pages = len(data["pages"])
     window_size = 25 if total_pages <= 100 else 50
@@ -279,7 +284,7 @@ async def selector_next(client, query: CallbackQuery):
     msg_id = query.message.id
     data = LOG_CACHE.get(msg_id)
     if not data:
-        return await safe_answer(query, "Session expired", show_alert=True)
+        return await safe_answer(query, LOG_CONTEXT_LOST_MSG, show_alert=True)
 
     total_pages = len(data["pages"])
     window_size = 25 if total_pages <= 100 else 50
@@ -294,7 +299,7 @@ async def selector_first(client, query: CallbackQuery):
     msg_id = query.message.id
     data = LOG_CACHE.get(msg_id)
     if not data:
-        return await safe_answer(query, "Session expired", show_alert=True)
+        return await safe_answer(query, LOG_CONTEXT_LOST_MSG, show_alert=True)
 
     data["selector_start"] = 0
     await query.message.edit_reply_markup(build_selector_markup(msg_id))
@@ -306,7 +311,7 @@ async def selector_last(client, query: CallbackQuery):
     msg_id = query.message.id
     data = LOG_CACHE.get(msg_id)
     if not data:
-        return await safe_answer(query, "Session expired", show_alert=True)
+        return await safe_answer(query, LOG_CONTEXT_LOST_MSG, show_alert=True)
 
     total_pages = len(data["pages"])
     window_size = 25 if total_pages <= 100 else 50
@@ -320,7 +325,7 @@ async def selector_back(client, query: CallbackQuery):
         msg_id = query.message.id
         data = LOG_CACHE.get(msg_id)
         if not data:
-            return await safe_answer(query, "Session expired", show_alert=True)
+            return await safe_answer(query, LOG_CONTEXT_LOST_MSG, show_alert=True)
         markup = build_main_markup(data["index"], len(data["pages"]), data["url"])
         await query.message.edit_reply_markup(markup)
         await safe_answer(query)
@@ -345,7 +350,7 @@ async def navigation_handler(client, query: CallbackQuery):
         msg_id = query.message.id
         data = LOG_CACHE.get(msg_id)
         if not data:
-            return await safe_answer(query, "Session expired", show_alert=True)
+            return await safe_answer(query, LOG_CONTEXT_LOST_MSG, show_alert=True)
 
         if query.data == "log_prev" and data["index"] > 0:
             data["index"] -= 1
@@ -375,7 +380,7 @@ async def log_refresh_handler(client, query: CallbackQuery):
         msg_id = query.message.id
         data = LOG_CACHE.get(msg_id)
         if not data:
-            return await safe_answer(query, "Session expired", show_alert=True)
+            return await safe_answer(query, LOG_CONTEXT_LOST_MSG, show_alert=True)
 
         # Temporarily change only the refresh button
         markup = build_main_markup(data["index"], len(data["pages"]), data["url"])
