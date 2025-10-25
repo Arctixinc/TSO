@@ -35,7 +35,7 @@ async def start_client(client_id: int, token: str) -> Optional[Tuple[int, Client
         )
         await client.start()
         work_loads[client_id] = 0
-        LOGGER.info(f"[Client {client_id}] Started successfully.")
+        # LOGGER.info(f"[Client {client_id}] Started successfully.")
         return client_id, client
 
     except AccessTokenExpired:
