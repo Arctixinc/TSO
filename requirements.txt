@@ -10,3 +10,4 @@ tgcrypto
 themoviedb
 uvicorn
 psutil
+pymongo
