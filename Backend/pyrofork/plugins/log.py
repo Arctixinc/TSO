@@ -383,6 +383,7 @@ async def log_refresh_handler(client, query: CallbackQuery):
         # If cache expired, regenerate the log
         if not data:
             await safe_answer(query, "♻️ Regenerating log...", show_alert=True)
+            await asyncio.sleep(1.5)
 
             path = ospath.abspath("log.txt")
             if not ospath.exists(path):
