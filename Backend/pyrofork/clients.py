@@ -26,7 +26,7 @@ async def start_client(client_id: int, token: str) -> Optional[Tuple[int, Client
         LOGGER.info(f"[Client {client_id}] Starting initialization...")
         c_name =str(client_id),
         client = Client(
-            name=f"sessions/{c_name}"
+            name=f"sessions/{c_name}",
             api_id=Telegram.API_ID,
             api_hash=Telegram.API_HASH,
             bot_token=token,
