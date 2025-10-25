@@ -31,7 +31,7 @@ async def start_client(client_id: int, token: str) -> Optional[Tuple[int, Client
             bot_token=token,
             sleep_threshold=120,
             no_updates=True,
-            in_memory=True
+            in_memory=False
         )
         await client.start()
         work_loads[client_id] = 0
