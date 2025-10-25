@@ -380,9 +380,9 @@ async def log_refresh_handler(client, query: CallbackQuery):
         msg_id = query.message.id
         data = LOG_CACHE.get(msg_id)
 
-        # If cache expired, trigger fresh log send
+        # If cache expired, regenerate the log
         if not data:
-            await safe_answer(query, "♻️ Log context expired — generating fresh logs...", show_alert=True)
+            await safe_answer(query, "♻️ Regenerating log...", show_alert=True)
 
             path = ospath.abspath("log.txt")
             if not ospath.exists(path):
@@ -393,7 +393,7 @@ async def log_refresh_handler(client, query: CallbackQuery):
 
             LOGGER.info("Reinitializing log due to expired context.")
 
-            # Prepare pages
+            # Split into pages
             pages = chunk_text(content)
             paste_content = "".join(pages[-MAX_PASTE_PAGES:]) if len(pages) > MAX_PASTE_PAGES else content
 
@@ -401,6 +401,7 @@ async def log_refresh_handler(client, query: CallbackQuery):
             yaso_url = await paste_to_yaso(paste_content)
             paste_url = yaso_url if not yaso_url.startswith("Error") else await paste_to_spacebin(paste_content)
 
+            # Preview last ~20 lines
             preview_lines = content.strip().splitlines()[-20:]
             preview_text = "<pre>" + "\n".join(preview_lines) + "</pre>"
             markup = build_main_markup(len(pages)-1, len(pages), paste_url)
@@ -408,7 +409,13 @@ async def log_refresh_handler(client, query: CallbackQuery):
             sent_msg = await query.message.reply_text(preview_text, reply_markup=markup, quote=True)
             LOG_CACHE[sent_msg.id] = {"pages": pages, "url": paste_url, "index": len(pages)-1, "selector_start": 0}
 
-            LOGGER.info(f"New log reloaded after expired refresh for message_id {sent_msg.id}")
+            # Delete the old expired message
+            try:
+                await query.message.delete()
+            except Exception:
+                pass
+
+            LOGGER.info(f"New log regenerated and sent for message_id {sent_msg.id}")
             return
 
         # --- Normal refresh (cache exists) ---
