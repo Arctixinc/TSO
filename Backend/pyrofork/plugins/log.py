@@ -379,10 +379,39 @@ async def log_refresh_handler(client, query: CallbackQuery):
     try:
         msg_id = query.message.id
         data = LOG_CACHE.get(msg_id)
-        if not data:
-            return await safe_answer(query, LOG_CONTEXT_LOST_MSG, show_alert=True)
 
-        # Temporarily change only the refresh button
+        # If cache expired, trigger fresh log send
+        if not data:
+            await safe_answer(query, "♻️ Log context expired — generating fresh logs...", show_alert=True)
+
+            path = ospath.abspath("log.txt")
+            if not ospath.exists(path):
+                return await query.message.reply_text("> ❌ Log file not found.")
+
+            async with aiofiles.open(path, "r") as f:
+                content = await f.read()
+
+            LOGGER.info("Reinitializing log due to expired context.")
+
+            # Prepare pages
+            pages = chunk_text(content)
+            paste_content = "".join(pages[-MAX_PASTE_PAGES:]) if len(pages) > MAX_PASTE_PAGES else content
+
+            # Try Yaso first, fallback to Spacebin
+            yaso_url = await paste_to_yaso(paste_content)
+            paste_url = yaso_url if not yaso_url.startswith("Error") else await paste_to_spacebin(paste_content)
+
+            preview_lines = content.strip().splitlines()[-20:]
+            preview_text = "<pre>" + "\n".join(preview_lines) + "</pre>"
+            markup = build_main_markup(len(pages)-1, len(pages), paste_url)
+
+            sent_msg = await query.message.reply_text(preview_text, reply_markup=markup, quote=True)
+            LOG_CACHE[sent_msg.id] = {"pages": pages, "url": paste_url, "index": len(pages)-1, "selector_start": 0}
+
+            LOGGER.info(f"New log reloaded after expired refresh for message_id {sent_msg.id}")
+            return
+
+        # --- Normal refresh (cache exists) ---
         markup = build_main_markup(data["index"], len(data["pages"]), data["url"])
         for row in markup.inline_keyboard:
             for btn in row:
@@ -395,10 +424,7 @@ async def log_refresh_handler(client, query: CallbackQuery):
         async with aiofiles.open(path, "r") as f:
             content = await f.read()
 
-        if len(chunk_text(content)) > MAX_PASTE_PAGES:
-            paste_content = "".join(chunk_text(content)[-MAX_PASTE_PAGES:])
-        else:
-            paste_content = content
+        paste_content = "".join(chunk_text(content)[-MAX_PASTE_PAGES:]) if len(chunk_text(content)) > MAX_PASTE_PAGES else content
 
         yaso_url = await paste_to_yaso(paste_content)
         paste_url = yaso_url if not yaso_url.startswith("Error") else await paste_to_spacebin(paste_content)
@@ -408,10 +434,10 @@ async def log_refresh_handler(client, query: CallbackQuery):
         LOG_CACHE[msg_id] = {"pages": pages, "url": paste_url, "index": current_index, "selector_start": 0}
 
         page_content = pages[current_index]
-        await query.message.edit_text(f"<pre>{page_content}</pre>",
-                                     reply_markup=build_main_markup(current_index, len(pages), paste_url))
+        await query.message.edit_text(f"<pre>{page_content}</pre>", reply_markup=build_main_markup(current_index, len(pages), paste_url))
         await safe_answer(query, "✅ Log refreshed")
         LOGGER.info(f"Refresh completed for message_id {msg_id}")
+
     except Exception as e:
         await safe_answer(query, "⚠️ Error refreshing log", show_alert=True)
         LOGGER.exception(f"Error in log_refresh_handler: {e}")
