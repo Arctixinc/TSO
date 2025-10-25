@@ -42,16 +42,8 @@ async def start_client(client_id: int, token: str) -> Optional[Tuple[int, Client
         LOGGER.warning(f"[Client {client_id}] Token has expired — skipping.")
         return None
     except FloodWait as e:
-        LOGGER.warning(f"[Client {client_id}] FloodWait: waiting {e.value}s before retrying...")
-        await sleep(e.value)
-        try:
-            await client.start()
-            work_loads[client_id] = 0
-            LOGGER.info(f"[Client {client_id}] Started successfully after FloodWait.")
-            return client_id, client
-        except Exception as err:
-            LOGGER.error(f"[Client {client_id}] Retry after FloodWait failed: {err}", exc_info=True)
-            return None
+        LOGGER.warning(f"[Client {client_id}] FloodWait: must wait {e.value}s — skipping.")
+        return None
     except Exception as e:
         LOGGER.error(f"[Client {client_id}] Failed to start — {e}", exc_info=True)
         return None
