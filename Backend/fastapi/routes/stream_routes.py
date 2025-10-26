@@ -105,10 +105,9 @@ async def media_streamer(
     if not file_id.file_name and "/" in mime_type:
         file_name = f"{secrets.token_hex(2)}.{mime_type.split('/')[1]}"
 
-    # Log streaming info
     LOGGER.info(
         f"Streaming file {file_name} | ChatID: {chat_id} | MsgID: {message_id} | "
-        f"Range: {start}-{end}/{file_size} | Using client {index}"
+        f"Range: {start}-{end}/{file_size} | Using client {index} | Chunks: {part_count}"
     )
 
     headers = {
@@ -127,7 +126,7 @@ async def media_streamer(
     else:
         status_code = 200
 
-    # Return only headers for HEAD requests
+    # HEAD request returns only headers
     if request.method == "HEAD":
         async def empty_iterator():
             if False:
@@ -139,20 +138,29 @@ async def media_streamer(
             media_type=mime_type,
         )
 
-    # Return actual streaming response for GET
-    body = streamer.yield_file(
-        file_id=file_id,
-        index=index,
-        offset=offset,
-        first_part_cut=first_part_cut,
-        last_part_cut=last_part_cut,
-        part_count=part_count,
-        chunk_size=chunk_size,
-    )
+    # Wrap the original generator to log per-chunk progress
+    async def logging_body():
+        async for chunk_index, chunk in enumerate(
+            streamer.yield_file(
+                file_id=file_id,
+                index=index,
+                offset=offset,
+                first_part_cut=first_part_cut,
+                last_part_cut=last_part_cut,
+                part_count=part_count,
+                chunk_size=chunk_size,
+            ),
+            start=1
+        ):
+            LOGGER.info(
+                f"Streaming chunk {chunk_index}/{part_count} | "
+                f"bytes {offset + (chunk_index-1)*chunk_size}-{offset + (chunk_index-1)*chunk_size + len(chunk) -1}"
+            )
+            yield chunk
 
     return StreamingResponse(
         status_code=status_code,
-        content=body,
+        content=logging_body(),
         headers=headers,
         media_type=mime_type,
     )
