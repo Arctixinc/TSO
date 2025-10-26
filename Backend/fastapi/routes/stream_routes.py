@@ -119,9 +119,12 @@ async def media_streamer(
 
     # Return only headers for HEAD requests
     if request.method == "HEAD":
+        async def empty_iterator():
+            if False:
+                yield b""
         return StreamingResponse(
             status_code=status_code,
-            content=None,
+            content=empty_iterator(),
             headers=headers,
             media_type=mime_type,
         )
