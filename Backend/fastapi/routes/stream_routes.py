@@ -5,6 +5,7 @@ from typing import Tuple
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import StreamingResponse
 
+from Backend.logger import LOGGER
 from Backend.helper.encrypt import decode_string
 from Backend.helper.exceptions import InvalidHash
 from Backend.helper.custom_dl import ByteStreamer
@@ -74,16 +75,19 @@ async def media_streamer(
     # Select the least loaded client
     index = min(work_loads, key=work_loads.get)
     client = multi_clients[index]
+    LOGGER.info(f"Selected client {index} for ChatID: {chat_id}, MsgID: {message_id}")
 
     # Reuse or create ByteStreamer for this client
     streamer = class_cache.get(client)
     if not streamer:
         streamer = ByteStreamer(client)
         class_cache[client] = streamer
+        LOGGER.info(f"Created new ByteStreamer for client {index}")
 
     # Get file properties
     file_id = await streamer.get_file_properties(chat_id, message_id)
     if file_id.unique_id[:6] != secure_hash:
+        LOGGER.warning(f"Invalid hash for ChatID: {chat_id}, MsgID: {message_id}")
         raise InvalidHash
 
     file_size = file_id.file_size
@@ -100,6 +104,12 @@ async def media_streamer(
     mime_type = file_id.mime_type or mimetypes.guess_type(file_name)[0] or "application/octet-stream"
     if not file_id.file_name and "/" in mime_type:
         file_name = f"{secrets.token_hex(2)}.{mime_type.split('/')[1]}"
+
+    # Log streaming info
+    LOGGER.info(
+        f"Streaming file {file_name} | ChatID: {chat_id} | MsgID: {message_id} | "
+        f"Range: {start}-{end}/{file_size} | Using client {index}"
+    )
 
     headers = {
         "Content-Type": mime_type,
