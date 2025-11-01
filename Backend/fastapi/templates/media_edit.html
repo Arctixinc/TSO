@@ -208,8 +208,7 @@
         {% if media_type == 'movie' and media_details.telegram %}
         <!-- Movie Qualities (sorted by quality) -->
         <div class="space-y-3">
-            {% set sorted_qualities = media_details.telegram|sort(attribute='quality') %}
-            {% for quality in sorted_qualities %}
+            {% for quality in media_details.telegram %}
             <div class="flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:p-4 bg-gray-50 rounded-lg border gap-3 sm:gap-0">
                 <div class="flex-1">
                     <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
@@ -267,8 +266,7 @@
                                     <!-- Episode Qualities (sorted by quality) -->
                                     {% if episode.telegram %}
                                     <div class="space-y-2">
-                                        {% set sorted_episode_qualities = episode.telegram|sort(attribute='quality') %}
-                                        {% for quality in sorted_episode_qualities %}
+                                        {% for quality in media_details.telegram %}
                                         <div class="flex flex-col sm:flex-row sm:items-center justify-between bg-white border border-gray-200 rounded-md p-3 gap-2 sm:gap-0">
                                             <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
                                                 <span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-800 w-fit">
