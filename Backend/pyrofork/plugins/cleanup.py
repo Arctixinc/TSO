@@ -21,7 +21,6 @@ async def cleanup_broken_links(client: Client, message: Message):
         args = message.text.split()
         delete_mode = len(args) > 1 and args[1].lower() == "delete"
 
-        # Initial message
         mode_text = "🧹 Cleanup Mode (deleting broken entries...)" if delete_mode else "🔍 Scan Mode (report only)"
         status_msg = await message.reply_text(
             f"{mode_text}\n\n📊 Checking all database entries...\n⏳ This may take a while...",
@@ -75,22 +74,24 @@ async def cleanup_broken_links(client: Client, message: Message):
                             f"{'🧹 Deleting broken links...' if delete_mode else '🔍 Scanning for broken links...'}\n"
                             f"📊 Checked: `{checked}`\n"
                             f"❌ Broken: `{len(broken_entries)}`\n"
-                            f"{'🗑️ Deleted' if delete_mode else '💾 Pending Deletion'}: `{total_deleted}`\n"
+                            f"🗑️ Deleted: `{total_deleted}`\n"
                             f"🎬 Movies: `{total_movies}`\n"
                             f"📺 Shows: `{total_tv}`",
                             parse_mode=ParseMode.MARKDOWN
                         )
-                    await asleep(0.1)
+                        await asleep(0.1)
 
                 # Handle deletion/update
                 if delete_mode and len(valid_telegram) != len(telegram_data):
+                    deleted_count = len(telegram_data) - len(valid_telegram)
+                    total_deleted += deleted_count
+
                     if valid_telegram:
                         await db.dbs[db_key]["movie"].update_one(
                             {"tmdb_id": tmdb_id}, {"$set": {"telegram": valid_telegram}}
                         )
                     else:
                         await db.dbs[db_key]["movie"].delete_one({"tmdb_id": tmdb_id})
-                    total_deleted += len(telegram_data) - len(valid_telegram)
 
             # TV SHOWS
             LOGGER.info(f"Checking TV shows in {db_key}...")
@@ -100,6 +101,7 @@ async def cleanup_broken_links(client: Client, message: Message):
             for show in shows:
                 tmdb_id = show.get("tmdb_id")
                 valid_seasons = []
+                deleted_links_count = 0
 
                 for season in show.get("seasons", []):
                     valid_episodes = []
@@ -134,28 +136,25 @@ async def cleanup_broken_links(client: Client, message: Message):
                                     f"{'🧹 Cleaning up database...' if delete_mode else '🔍 Scanning database...'}\n"
                                     f"📊 Checked: `{checked}`\n"
                                     f"❌ Broken: `{len(broken_entries)}`\n"
-                                    f"{'🗑️ Deleted' if delete_mode else '💾 Pending Deletion'}: `{total_deleted}`\n"
+                                    f"🗑️ Deleted: `{total_deleted}`\n"
                                     f"🎬 Movies: `{total_movies}`\n"
                                     f"📺 Shows: `{total_tv}`",
                                     parse_mode=ParseMode.MARKDOWN
                                 )
-                            await asleep(0.1)
+                                await asleep(0.1)
+
+                        if delete_mode:
+                            deleted_links_count += len(episode.get("telegram", [])) - len(valid_telegram)
 
                         if valid_telegram or not delete_mode:
                             episode["telegram"] = valid_telegram
                             valid_episodes.append(episode)
+
                     if valid_episodes:
                         season["episodes"] = valid_episodes
                         valid_seasons.append(season)
 
                 if delete_mode:
-                    deleted_links_count = 0
-                    for season, valid_season in zip(show.get("seasons", []), valid_seasons):
-                        for episode, valid_episode in zip(season.get("episodes", []), valid_season.get("episodes", [])):
-                            t_data = episode.get("telegram", [])
-                            v_data = valid_episode.get("telegram", [])
-                            deleted_links_count += len(t_data) - len(v_data)
-
                     if valid_seasons:
                         await db.dbs[db_key]["tv"].update_one(
                             {"tmdb_id": tmdb_id}, {"$set": {"seasons": valid_seasons}}
@@ -163,7 +162,7 @@ async def cleanup_broken_links(client: Client, message: Message):
                     else:
                         await db.dbs[db_key]["tv"].delete_one({"tmdb_id": tmdb_id})
 
-                    total_deleted += deleted_links_count
+                    total_deleted += deleted_links_count  # ✅ Fixed counter update
 
         # === FINAL SUMMARY ===
         summary_header = "🧹 **Cleanup Completed!**" if delete_mode else "✅ **Scan Completed!**"
@@ -214,4 +213,3 @@ async def cleanup_broken_links(client: Client, message: Message):
     except Exception as e:
         LOGGER.error(f"Error in cleanup: {e}")
         await message.reply_text(f"❌ Error: {e}")
-            
