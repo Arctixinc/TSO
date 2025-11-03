@@ -153,12 +153,13 @@ async def restart_notification():
 commands = [
     BotCommand("start", "🚀 Start the bot"),
     BotCommand("set", "🎬 Manually add IMDb metadata"),
+    BotCommand("scan", "🔍 Scan Telegram channels for videos"),
+    BotCommand("cleanup", "🧹 Scan database for broken links"),
     BotCommand("log", "📄 Send the log file"),
     BotCommand("restart", "♻️ Restart the bot"),
     BotCommand("eval", "🧠 Execute Python code safely"),
     BotCommand("shell", "💻 Run shell commands on the server"),
 ]
-
 
 
 async def setup_bot_commands(bot: Client):
