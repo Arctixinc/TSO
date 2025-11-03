@@ -12,35 +12,33 @@ from Backend import db
 @Client.on_message(filters.command('cleanup') & filters.private & CustomFilters.owner, group=10)
 async def cleanup_broken_links(client: Client, message: Message):
     """
-    Scans database for broken Telegram video links and optionally deletes them.
+    Scans or cleans up database entries with broken Telegram links.
     Usage:
-        /cleanup          → only scans & reports
-        /cleanup delete   → scans & deletes broken entries
+        /cleanup          → scan & report
+        /cleanup delete   → scan, delete broken links & send log
     """
     try:
         args = message.text.split()
         delete_mode = len(args) > 1 and args[1].lower() == "delete"
 
+        # Initial message
+        mode_text = "🧹 Cleanup Mode (deleting broken entries...)" if delete_mode else "🔍 Scan Mode (report only)"
         status_msg = await message.reply_text(
-            f"{'🧹 Cleaning up' if delete_mode else '🔍 Starting cleanup scan...'}\n"
-            "📊 Checking all database entries for broken links...\n"
-            "⏳ This may take a while...",
+            f"{mode_text}\n\n📊 Checking all database entries...\n⏳ This may take a while...",
             parse_mode=ParseMode.MARKDOWN
         )
 
         broken_entries = []
-        checked = 0
-        total_movies = 0
-        total_tv = 0
-        total_deleted = 0
+        checked = total_deleted = total_movies = total_tv = 0
 
         from Backend.helper.encrypt import decode_string
-
         total_storage_dbs = len(db.dbs) - 1
+
+        # === MAIN LOOP ===
         for db_index in range(1, total_storage_dbs + 1):
             db_key = f"storage_{db_index}"
 
-            # === MOVIES ===
+            # MOVIES
             LOGGER.info(f"Checking movies in {db_key}...")
             movies = await db.dbs[db_key]["movie"].find({}).to_list(None)
             total_movies += len(movies)
@@ -71,21 +69,20 @@ async def cleanup_broken_links(client: Client, message: Message):
                             "db_index": db_index,
                             "error": str(e),
                         })
-                        LOGGER.warning(f"Broken Movie: {movie.get('title')} - {quality.get('quality')} ({e})")
 
-                    if checked % 10 == 0:
+                    if checked % 15 == 0:  # update status less frequently
                         await status_msg.edit_text(
-                            f"🔍 Scanning...\n"
-                            f"📊 Checked: {checked}\n"
-                            f"❌ Broken: {len(broken_entries)}\n"
-                            f"🗑️ Deleted: {total_deleted}\n"
-                            f"🎬 Movies: {total_movies}\n"
-                            f"📺 Shows: {total_tv}",
+                            f"{'🧹 Deleting broken links...' if delete_mode else '🔍 Scanning for broken links...'}\n"
+                            f"📊 Checked: `{checked}`\n"
+                            f"❌ Broken: `{len(broken_entries)}`\n"
+                            f"{'🗑️ Deleted' if delete_mode else '💾 Pending Deletion'}: `{total_deleted}`\n"
+                            f"🎬 Movies: `{total_movies}`\n"
+                            f"📺 Shows: `{total_tv}`",
                             parse_mode=ParseMode.MARKDOWN
                         )
                     await asleep(0.1)
 
-                # Delete or update
+                # Handle deletion/update
                 if delete_mode and len(valid_telegram) != len(telegram_data):
                     if valid_telegram:
                         await db.dbs[db_key]["movie"].update_one(
@@ -95,7 +92,7 @@ async def cleanup_broken_links(client: Client, message: Message):
                         await db.dbs[db_key]["movie"].delete_one({"tmdb_id": tmdb_id})
                     total_deleted += 1
 
-            # === TV SHOWS ===
+            # TV SHOWS
             LOGGER.info(f"Checking TV shows in {db_key}...")
             shows = await db.dbs[db_key]["tv"].find({}).to_list(None)
             total_tv += len(shows)
@@ -131,18 +128,15 @@ async def cleanup_broken_links(client: Client, message: Message):
                                     "db_index": db_index,
                                     "error": str(e),
                                 })
-                                LOGGER.warning(
-                                    f"Broken TV: {show.get('title')} S{season.get('season_number')}E{episode.get('episode_number')} ({e})"
-                                )
 
-                            if checked % 10 == 0:
+                            if checked % 15 == 0:
                                 await status_msg.edit_text(
-                                    f"🔍 Scanning...\n"
-                                    f"📊 Checked: {checked}\n"
-                                    f"❌ Broken: {len(broken_entries)}\n"
-                                    f"🗑️ Deleted: {total_deleted}\n"
-                                    f"🎬 Movies: {total_movies}\n"
-                                    f"📺 Shows: {total_tv}",
+                                    f"{'🧹 Cleaning up database...' if delete_mode else '🔍 Scanning database...'}\n"
+                                    f"📊 Checked: `{checked}`\n"
+                                    f"❌ Broken: `{len(broken_entries)}`\n"
+                                    f"{'🗑️ Deleted' if delete_mode else '💾 Pending Deletion'}: `{total_deleted}`\n"
+                                    f"🎬 Movies: `{total_movies}`\n"
+                                    f"📺 Shows: `{total_tv}`",
                                     parse_mode=ParseMode.MARKDOWN
                                 )
                             await asleep(0.1)
@@ -163,58 +157,52 @@ async def cleanup_broken_links(client: Client, message: Message):
                         await db.dbs[db_key]["tv"].delete_one({"tmdb_id": tmdb_id})
                     total_deleted += 1
 
-        # === Final Report ===
+        # === FINAL SUMMARY ===
+        summary_header = "🧹 **Cleanup Completed!**" if delete_mode else "✅ **Scan Completed!**"
         summary = (
-            f"{'🧹 Cleanup Complete!' if delete_mode else '✅ Scan Complete!'}\n\n"
-            f"📊 Total Checked: {checked}\n"
-            f"❌ Broken Links: {len(broken_entries)}\n"
-            f"🗑️ Deleted Entries: {total_deleted}\n"
-            f"🎬 Movies: {total_movies}\n"
-            f"📺 TV Shows: {total_tv}\n\n"
+            f"{summary_header}\n\n"
+            f"📊 Total Checked: `{checked}`\n"
+            f"❌ Broken Links: `{len(broken_entries)}`\n"
+            f"🗑️ {'Deleted' if delete_mode else 'Would Delete'} Entries: `{total_deleted}`\n"
+            f"🎬 Movies: `{total_movies}`\n"
+            f"📺 TV Shows: `{total_tv}`\n\n"
         )
 
         if broken_entries:
-            summary += "**First 10 broken entries:**\n"
+            summary += "**Top 10 Broken Entries:**\n"
             for i, entry in enumerate(broken_entries[:10]):
                 if entry["type"] == "movie":
-                    summary += f"{i+1}. 🎬 {entry['title']} ({entry.get('quality', 'N/A')})\n"
+                    summary += f"{i+1}. 🎬 {entry['title']} ({entry.get('quality','N/A')})\n"
                 else:
-                    summary += f"{i+1}. 📺 {entry['title']} S{entry.get('season')}E{entry.get('episode')} ({entry.get('quality', 'N/A')})\n"
+                    summary += f"{i+1}. 📺 {entry['title']} S{entry.get('season')}E{entry.get('episode')} ({entry.get('quality','N/A')})\n"
             if len(broken_entries) > 10:
-                summary += f"\n...and {len(broken_entries) - 10} more\n"
+                summary += f"\n...and `{len(broken_entries) - 10}` more.\n"
 
         await status_msg.edit_text(summary, parse_mode=ParseMode.MARKDOWN)
 
-        # === Create and Send Log File ===
+        # === LOG FILE ===
         if broken_entries:
             log_buffer = io.StringIO()
-            log_buffer.write("BROKEN LINKS CLEANUP REPORT\n")
+            log_buffer.write(f"{'CLEANUP' if delete_mode else 'SCAN'} REPORT\n")
             log_buffer.write("=" * 60 + "\n\n")
             for i, entry in enumerate(broken_entries, start=1):
-                if entry["type"] == "movie":
-                    log_buffer.write(
-                        f"{i}. [MOVIE] {entry['title']} | {entry.get('quality')} | DB: {entry['db_index']} | Error: {entry.get('error', '-')}\n"
-                    )
-                else:
-                    log_buffer.write(
-                        f"{i}. [TV] {entry['title']} S{entry.get('season')}E{entry.get('episode')} | {entry.get('quality')} | DB: {entry['db_index']} | Error: {entry.get('error', '-')}\n"
-                    )
-            log_buffer.write("\n=== SUMMARY ===\n")
-            log_buffer.write(f"Total Checked: {checked}\n")
-            log_buffer.write(f"Broken Links: {len(broken_entries)}\n")
-            log_buffer.write(f"Deleted Entries: {total_deleted}\n")
-            log_buffer.write(f"Movies Checked: {total_movies}\n")
-            log_buffer.write(f"TV Shows Checked: {total_tv}\n")
-
+                log_buffer.write(
+                    f"{i}. [{'MOVIE' if entry['type']=='movie' else 'TV'}] "
+                    f"{entry['title']} | {entry.get('quality','N/A')} | "
+                    f"DB: {entry['db_index']} | Error: {entry.get('error','-')}\n"
+                )
+            log_buffer.write("\n--- SUMMARY ---\n")
+            log_buffer.write(f"Checked: {checked}\nBroken: {len(broken_entries)}\nDeleted: {total_deleted}\n")
             log_buffer.seek(0)
+
             await client.send_document(
                 chat_id=message.chat.id,
                 document=io.BytesIO(log_buffer.getvalue().encode()),
-                file_name="cleanup_report.txt",
-                caption="🧾 Cleanup Report Log",
+                file_name=f"{'cleanup' if delete_mode else 'scan'}_report.txt",
+                caption=f"🧾 {'Cleanup' if delete_mode else 'Scan'} Report Log",
             )
             log_buffer.close()
 
     except Exception as e:
-        LOGGER.error(f"Error in cleanup command: {e}")
+        LOGGER.error(f"Error in cleanup: {e}")
         await message.reply_text(f"❌ Error: {e}")
