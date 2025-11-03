@@ -70,7 +70,7 @@ async def cleanup_broken_links(client: Client, message: Message):
                             "error": str(e),
                         })
 
-                    if checked % 15 == 0:  # update status less frequently
+                    if checked % 15 == 0:
                         await status_msg.edit_text(
                             f"{'🧹 Deleting broken links...' if delete_mode else '🔍 Scanning for broken links...'}\n"
                             f"📊 Checked: `{checked}`\n"
@@ -90,7 +90,7 @@ async def cleanup_broken_links(client: Client, message: Message):
                         )
                     else:
                         await db.dbs[db_key]["movie"].delete_one({"tmdb_id": tmdb_id})
-                    total_deleted += 1
+                    total_deleted += len(telegram_data) - len(valid_telegram)
 
             # TV SHOWS
             LOGGER.info(f"Checking TV shows in {db_key}...")
@@ -149,13 +149,21 @@ async def cleanup_broken_links(client: Client, message: Message):
                         valid_seasons.append(season)
 
                 if delete_mode:
+                    deleted_links_count = 0
+                    for season, valid_season in zip(show.get("seasons", []), valid_seasons):
+                        for episode, valid_episode in zip(season.get("episodes", []), valid_season.get("episodes", [])):
+                            t_data = episode.get("telegram", [])
+                            v_data = valid_episode.get("telegram", [])
+                            deleted_links_count += len(t_data) - len(v_data)
+
                     if valid_seasons:
                         await db.dbs[db_key]["tv"].update_one(
                             {"tmdb_id": tmdb_id}, {"$set": {"seasons": valid_seasons}}
                         )
                     else:
                         await db.dbs[db_key]["tv"].delete_one({"tmdb_id": tmdb_id})
-                    total_deleted += 1
+
+                    total_deleted += deleted_links_count
 
         # === FINAL SUMMARY ===
         summary_header = "🧹 **Cleanup Completed!**" if delete_mode else "✅ **Scan Completed!**"
@@ -206,3 +214,4 @@ async def cleanup_broken_links(client: Client, message: Message):
     except Exception as e:
         LOGGER.error(f"Error in cleanup: {e}")
         await message.reply_text(f"❌ Error: {e}")
+            
