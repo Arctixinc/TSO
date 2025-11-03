@@ -853,7 +853,30 @@ class Database:
         result = await self.dbs[db_key]["tv"].replace_one({"tmdb_id": tmdb_id}, tv)
         return result.modified_count > 0
 
+    async def get_media(self, channel: int, msg_id: int) -> Optional[dict]:
+        """Check if a message already exists in the DB (movie or tv)."""
+        total_storage_dbs = len(self.dbs) - 1
+        encoded_str = await encode_string({"chat_id": channel, "msg_id": msg_id})
 
+        for db_index in range(1, total_storage_dbs + 1):
+            db_key = f"storage_{db_index}"
+
+            movie = await self.dbs[db_key]["movie"].find_one(
+                {"telegram.id": encoded_str},
+                {"_id": 1, "tmdb_id": 1, "title": 1, "media_type": 1, "telegram": 1}
+            )
+            if movie:
+                return convert_objectid_to_str(movie)
+
+            tv = await self.dbs[db_key]["tv"].find_one(
+                {"seasons.episodes.telegram.id": encoded_str},
+                {"_id": 1, "tmdb_id": 1, "title": 1, "media_type": 1, "seasons.episodes.telegram": 1}
+            )
+            if tv:
+                return convert_objectid_to_str(tv)
+
+        return None
+                    
     # Get per-DB statistics (movies, tv shows, used size, etc.)
     async def get_database_stats(self):
         stats = []
