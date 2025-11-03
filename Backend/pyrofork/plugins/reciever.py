@@ -40,6 +40,12 @@ async def file_receive_handler(client: Client, message: Message):
                 msg_id = message.id
                 size = get_readable_file_size(file.file_size)
                 channel = str(message.chat.id).replace("-100", "")
+                
+                # ✅ Check if this media already exists in DB before processing
+                existing = await db.get_media(channel=int(channel), msg_id=msg_id)
+                if existing:
+                    LOGGER.info(f"Skipping edit — already processed: {title} ({msg_id})")
+                    return
 
                 metadata_info = await metadata(clean_filename(title), int(channel), msg_id)
                 if metadata_info is None:
@@ -71,4 +77,5 @@ async def file_receive_handler(client: Client, message: Message):
             )
     else:
         await message.reply_text("> Channel is not in AUTH_CHANNEL")
+        
         
