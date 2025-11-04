@@ -189,7 +189,7 @@ class Database:
     ) -> Optional[ObjectId]:
     
         combined_note = metadata_info.get("combined_note") 
-        LOGGER.debug(f"\n🧩 [DEBUG] Metadata Info for {name}:\n{metadata_info}\n")
+        LOGGER.info(f"\n🧩 [DEBUG] Metadata Info for {name}:\n{metadata_info}\n")
         if metadata_info['media_type'] == "movie":
             media = MovieSchema(
                 tmdb_id=metadata_info['tmdb_id'],
