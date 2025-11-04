@@ -112,8 +112,9 @@ async def metadata(filename: str, channel: int, msg_id: int) -> dict | None:
         return None
 
     if season and not episode:
-        LOGGER.warning(f"Missing episode in {filename}: {parsed}")
-        return None
+        combined_note = combined_note or "Full Season"
+        episode = 1
+        LOGGER.info(f"📦 Season-only file assumed as full season: {title} S{season} ({combined_note})")
 
     if not title:
         LOGGER.info(f"No title parsed from: {filename} (parsed={parsed})")
