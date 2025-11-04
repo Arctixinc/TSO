@@ -80,7 +80,7 @@ async def metadata(filename: str, channel: int, msg_id: int) -> dict | None:
 
     # --- 🔍 Detect combined episode ranges (E01–09, EP10–18, etc.) ---
     combined_note = None
-    range_match = re.search(r"[E\s]*0*(\d{1,2})\s*[-–]\s*0*(\d{1,2})", filename, re.IGNORECASE)
+    range_match = re.search(r"r"(?:E|EP)[\s_]*0*(\d{1,5})\s*(?:[-–~to]+)\s*0*(\d{1,5})", filename, re.IGNORECASE)
     if range_match:
         start_ep, end_ep = map(int, range_match.groups())
         combined_note = f"Episodes {start_ep}-{end_ep}"
