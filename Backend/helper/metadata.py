@@ -92,7 +92,8 @@ async def metadata(filename: str, channel: int, msg_id: int) -> dict | None:
         LOGGER.info(f"📦 Range Detected: {title} S{season or 'X'}E{start_ep}-{end_ep}")
 
     # --- 🎞 Handle full-season combined files (e.g. “S03 COMBINED”) ---
-    if not episode and "COMBINED" in filename.upper():
+    # if not episode and "COMBINED" in filename.upper():
+    if not episode and any(word in filename.upper() for word in ["COMBINED", "COMPLETE", "FULL SEASON"]):
         if not season:
             s_match = re.search(r"S(\d{1,2})", filename, re.IGNORECASE)
             if s_match:
