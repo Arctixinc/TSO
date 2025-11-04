@@ -180,15 +180,15 @@ class Database:
         LOGGER.info(f"Switched to storage_{self.current_db_index}")
         return await func(*args)
 
+
     # -------------------------------
     # Multi Database Method for insert/update/delete/list
     # -------------------------------
+
     async def insert_media(
         self, metadata_info: dict,
         channel: int, msg_id: int, size: str, name: str
     ) -> Optional[ObjectId]:
-    
-        combined_note = metadata_info.get("combined_note") 
         LOGGER.info(f"\n🧩 [DEBUG] Metadata Info for {name}:\n{metadata_info}\n")
         if metadata_info['media_type'] == "movie":
             media = MovieSchema(
@@ -209,12 +209,10 @@ class Database:
                     id=metadata_info['encoded_string'],
                     name=name,
                     size=size
-                )],
-                combined_note=combined_note or None
+                )]
             )
-            return await self.update_movie(media)    
-            
-        elif metadata_info['media_type'] == "tv":
+            return await self.update_movie(media)
+        else:
             tv_show = TVShowSchema(
                 tmdb_id=metadata_info['tmdb_id'],
                 imdb_id=metadata_info['imdb_id'],
@@ -228,22 +226,22 @@ class Database:
                 backdrop=metadata_info['backdrop'],
                 logo=metadata_info['logo'],
                 media_type=metadata_info['media_type'],
-                season=metadata_info['season'],
-                episode=metadata_info['episode'],
-                telegram=[QualityDetail(
-                    quality=metadata_info['quality'],
-                    id=metadata_info['encoded_string'],
-                    name=name,
-                    size=size
-                )],
-                combined_note=combined_note or None  # ✅ safe default
+                seasons=[Season(
+                    season_number=metadata_info['season_number'],
+                    episodes=[Episode(
+                        episode_number=metadata_info['episode_number'],
+                        title=metadata_info['episode_title'],
+                        episode_backdrop=metadata_info['episode_backdrop'],
+                        telegram=[QualityDetail(
+                            quality=metadata_info['quality'],
+                            id=metadata_info['encoded_string'],
+                            name=name,
+                            size=size
+                        )]
+                    )]
+                )]
             )
             return await self.update_tv_show(tv_show)
-    
-        else:
-            LOGGER.warning(f"❌ Unknown media type for: {metadata_info}")
-            return None
-            
 
     
     async def update_movie(self, movie_data: MovieSchema) -> Optional[ObjectId]:
