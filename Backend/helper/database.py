@@ -184,63 +184,73 @@ class Database:
     # -------------------------------
     # Multi Database Method for insert/update/delete/list
     # -------------------------------
-
     async def insert_media(
         self, metadata_info: dict,
         channel: int, msg_id: int, size: str, name: str
     ) -> Optional[ObjectId]:
+    
+        combined_note = metadata_info.get("combined_note") 
         
         if metadata_info['media_type'] == "movie":
-            media = MovieSchema(
-                tmdb_id=metadata_info['tmdb_id'],
-                imdb_id=metadata_info['imdb_id'],
-                db_index=self.current_db_index,
-                title=metadata_info['title'],
-                genres=metadata_info['genres'],
-                description=metadata_info['description'],
-                rating=metadata_info['rate'],
-                release_year=metadata_info['year'],
-                poster=metadata_info['poster'],
-                backdrop=metadata_info['backdrop'],
-                logo=metadata_info['logo'],
-                media_type=metadata_info['media_type'],
-                telegram=[QualityDetail(
-                    quality=metadata_info['quality'],
-                    id=metadata_info['encoded_string'],
-                    name=name,
-                    size=size
-                )]
-            )
+            media = {
+                "tmdb_id": metadata_info["tmdb_id"],
+                "imdb_id": metadata_info["imdb_id"],
+                "db_index": self.current_db_index,
+                "title": metadata_info["title"],
+                "genres": metadata_info["genres"],
+                "description": metadata_info["description"],
+                "rating": metadata_info["rate"],
+                "release_year": metadata_info["year"],
+                "poster": metadata_info["poster"],
+                "backdrop": metadata_info["backdrop"],
+                "logo": metadata_info["logo"],
+                "media_type": metadata_info["media_type"],
+                "telegram": [{
+                    "quality": metadata_info["quality"],
+                    "id": metadata_info["encoded_string"],
+                    "name": name,
+                    "size": size
+                }]
+            }
+    
+            if combined_note:
+                media["combined_note"] = combined_note
+    
             return await self.update_movie(media)
+    
         else:
-            tv_show = TVShowSchema(
-                tmdb_id=metadata_info['tmdb_id'],
-                imdb_id=metadata_info['imdb_id'],
-                db_index=self.current_db_index,
-                title=metadata_info['title'],
-                genres=metadata_info['genres'],
-                description=metadata_info['description'],
-                rating=metadata_info['rate'],
-                release_year=metadata_info['year'],
-                poster=metadata_info['poster'],
-                backdrop=metadata_info['backdrop'],
-                logo=metadata_info['logo'],
-                media_type=metadata_info['media_type'],
-                seasons=[Season(
-                    season_number=metadata_info['season_number'],
-                    episodes=[Episode(
-                        episode_number=metadata_info['episode_number'],
-                        title=metadata_info['episode_title'],
-                        episode_backdrop=metadata_info['episode_backdrop'],
-                        telegram=[QualityDetail(
-                            quality=metadata_info['quality'],
-                            id=metadata_info['encoded_string'],
-                            name=name,
-                            size=size
-                        )]
-                    )]
-                )]
-            )
+            tv_show = {
+                "tmdb_id": metadata_info["tmdb_id"],
+                "imdb_id": metadata_info["imdb_id"],
+                "db_index": self.current_db_index,
+                "title": metadata_info["title"],
+                "genres": metadata_info["genres"],
+                "description": metadata_info["description"],
+                "rating": metadata_info["rate"],
+                "release_year": metadata_info["year"],
+                "poster": metadata_info["poster"],
+                "backdrop": metadata_info["backdrop"],
+                "logo": metadata_info["logo"],
+                "media_type": metadata_info["media_type"],
+                "seasons": [{
+                    "season_number": metadata_info["season_number"],
+                    "episodes": [{
+                        "episode_number": metadata_info["episode_number"],
+                        "title": metadata_info["episode_title"],
+                        "episode_backdrop": metadata_info["episode_backdrop"],
+                        "telegram": [{
+                            "quality": metadata_info["quality"],
+                            "id": metadata_info["encoded_string"],
+                            "name": name,
+                            "size": size
+                        }]
+                    }]
+                }]
+            }
+    
+            if combined_note:
+                tv_show["combined_note"] = combined_note
+    
             return await self.update_tv_show(tv_show)
 
     
