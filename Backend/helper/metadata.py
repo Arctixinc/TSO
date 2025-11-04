@@ -1,6 +1,7 @@
 import asyncio
 import traceback
 import PTN
+import re
 from re import compile, IGNORECASE
 from Backend.helper.imdb import get_detail, get_season, search_title
 from Backend.helper.pyro import extract_tmdb_id
