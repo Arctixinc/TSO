@@ -52,6 +52,11 @@ async def file_receive_handler(client: Client, message: Message):
                     LOGGER.warning(f"Metadata failed for file: {title} (ID: {msg_id})")
                     return
 
+                # ✅ If combined — just log info, not skip
+                if metadata_info.get("combined_note"):
+                    LOGGER.info(f"Detected combined file: {title} ({metadata_info['combined_note']})")
+
+
                 title = remove_urls(title)
                 if not title.endswith(('.mkv', '.mp4')):
                     title += '.mkv'
