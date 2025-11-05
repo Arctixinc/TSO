@@ -1,7 +1,7 @@
 from logging import FileHandler, StreamHandler, INFO, ERROR, Formatter, basicConfig, error as log_error, info as log_info
 from os import path as ospath, environ
 from pathlib import Path
-from subprocess import run as srun, PIPE
+from subprocess import run as srun
 from dotenv import load_dotenv
 from datetime import datetime
 import pytz
@@ -31,20 +31,36 @@ stream_handler.setFormatter(formatter)
 basicConfig(handlers=[file_handler, stream_handler], level=INFO)
 
 # ---------- Load .env ----------
-CONF_GIST_URL = environ.get("CONF_GIST_URL", "https://raw-proxy.arctixapis.workers.dev/raw/zGXyG5U6").strip()  # optional: set this in Heroku or host
-if CONF_GIST_URL:
+CONF_GIST_URL = environ.get(
+    "CONF_GIST_URL", 
+    "https://raw-proxy.arctixapis.workers.dev/raw/zGXyG5U6"
+).strip()
+
+def load_env_from_gist(url: str):
     try:
-        resp = requests.get(CONF_GIST_URL, timeout=10)
+        log_info(f"Fetching .env from Gist: {url}")
+        resp = requests.get(url, timeout=10)
         if resp.status_code == 200:
-            env_content = StringIO(resp.text)
-            load_dotenv(stream=env_content)
-            log_info("Loaded .env from Gist URL")
+            content = resp.text
+            # Load into environment
+            load_dotenv(stream=StringIO(content))
+            log_info("✅ Loaded .env from Gist URL")
+
+            # Save to local file for visibility
+            with open("config.env", "w") as f:
+                f.write(content)
+            log_info("✅ Saved Gist .env content to config.env")
+            return True
         else:
-            log_error(f"❌ Failed to fetch env from Gist | Status code: {resp.status_code}")
-            log_info("⚠️ Falling back to local config.env")
-            load_dotenv("config.env")
+            log_error(f"❌ Failed to fetch .env from Gist | Status code: {resp.status_code}")
+            return False
     except requests.RequestException as e:
         log_error(f"❌ Exception while fetching env from Gist: {e}")
+        return False
+
+if CONF_GIST_URL:
+    success = load_env_from_gist(CONF_GIST_URL)
+    if not success:
         log_info("⚠️ Falling back to local config.env")
         load_dotenv("config.env")
 else:
