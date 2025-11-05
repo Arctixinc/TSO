@@ -51,6 +51,10 @@ async def safe_tmdb_search(title: str, type_: str, year=None):
         return None
 
 
+import re
+import traceback
+from re import compile, IGNORECASE
+
 async def metadata(filename: str, channel: int, msg_id: int) -> dict | None:
     """Parses filename and fetches metadata for TV or Movie content."""
 
@@ -68,9 +72,9 @@ async def metadata(filename: str, channel: int, msg_id: int) -> dict | None:
     quality = parsed.get("resolution")
     excess = parsed.get("excess", [])
 
-    # 🧩 Log combined presence instead of skipping
+    # 🧩 Combined presence indicator
     if excess and any("combined" in item.lower() for item in excess):
-        LOGGER.info(f"Detected combined release: {filename}")
+        LOGGER.info(f"Detected combined release keyword in parsed excess: {filename}")
 
     # 🧹 Skip split/multipart files (CD1, part2, etc.)
     multipart_pattern = compile(r"(?:part|cd|disc|disk)[s._-]*\d+(?=\.\w+$)", IGNORECASE)
@@ -78,29 +82,43 @@ async def metadata(filename: str, channel: int, msg_id: int) -> dict | None:
         LOGGER.info(f"Skipping {filename}: seems to be a split/multipart file")
         return None
 
-    # --- 🔍 Detect combined episode ranges (E01–09, EP10–18, etc.) ---
     combined_note = None
+
+    # --- 🔍 Detect combined episode ranges like E01-09, EP02 to 10, etc. ---
     range_match = re.search(r"(?:E|EP)[\s_]*0*(\d{1,5})\s*(?:[-–~to]+)\s*0*(\d{1,5})", filename, re.IGNORECASE)
     if range_match:
         start_ep, end_ep = map(int, range_match.groups())
         combined_note = f"Episodes {start_ep}-{end_ep}"
-        if not season:
-            s_match = re.search(r"S(\d{1,2})", filename, re.IGNORECASE)
-            if s_match:
-                season = int(s_match.group(1))
-        episode = start_ep
-        LOGGER.info(f"📦 Range Detected: {title} S{season or 'X'}E{start_ep}-{end_ep}")
 
-    # --- 🎞 Handle full-season combined files (e.g. “S03 COMBINED”) ---
-    # if not episode and "COMBINED" in filename.upper():
-    if not episode and any(word in filename.upper() for word in ["COMBINED", "COMPLETE", "FULL SEASON"]):
         if not season:
             s_match = re.search(r"S(\d{1,2})", filename, re.IGNORECASE)
             if s_match:
                 season = int(s_match.group(1))
+
+        episode = start_ep
+        LOGGER.info(f"📦 Combined Range Detected: {title or filename} S{season or 'X'}E{start_ep}-{end_ep}")
+
+    # --- 🎞 Detect combined by natural language / keywords ---
+    # Handles names like “S02 09-16 COMBINED” or “Season 03 COMPLETE”
+    if not episode and any(word in filename.upper() for word in ["COMBINED", "COMPLETE", "FULL SEASON", "ALL EPISODES"]):
+        if not season:
+            s_match = re.search(r"S(?:EASON)?[\s_]*(\d{1,2})", filename, re.IGNORECASE)
+            if s_match:
+                season = int(s_match.group(1))
+
         episode = 1
-        combined_note = "Full Season"
-        LOGGER.info(f"📦 Full Season Combined: {title} S{season or 'X'}")
+        combined_note = combined_note or "Full Season Combined"
+        LOGGER.info(f"📦 Full Season Combined Detected: {title or filename} S{season or 'X'}")
+
+    # --- 🧩 Handle cases like “S02 09-16” without explicit E keywords ---
+    if not combined_note and not episode:
+        range_only = re.search(r"S(\d{1,2})[\s_.-]+0*(\d{1,2})\s*[-–~to]+\s*0*(\d{1,2})", filename, re.IGNORECASE)
+        if range_only:
+            season = season or int(range_only.group(1))
+            start_ep, end_ep = int(range_only.group(2)), int(range_only.group(3))
+            episode = start_ep
+            combined_note = f"Episodes {start_ep}-{end_ep}"
+            LOGGER.info(f"📦 Hybrid Combined Range: {title or filename} S{season}E{start_ep}-{end_ep}")
 
     # --- ⚠️ Validation ---
     if not quality:
@@ -114,13 +132,13 @@ async def metadata(filename: str, channel: int, msg_id: int) -> dict | None:
     if season and not episode:
         combined_note = combined_note or "Full Season"
         episode = 1
-        LOGGER.info(f"📦 Season-only file assumed as full season: {title} S{season} ({combined_note})")
+        LOGGER.info(f"📦 Season-only file assumed as full season: {title or filename} S{season} ({combined_note})")
 
     if not title:
         LOGGER.info(f"No title parsed from: {filename} (parsed={parsed})")
         return None
 
-    # --- 🧩 Extract TMDb/IMDb ID ---
+    # --- 🔗 Extract TMDb/IMDb ID ---
     default_id = None
     try:
         default_id = extract_tmdb_id(Backend.USE_DEFAULT_ID)
@@ -140,7 +158,7 @@ async def metadata(filename: str, channel: int, msg_id: int) -> dict | None:
     # --- 🎬 Fetch metadata ---
     try:
         if season and episode:
-            LOGGER.info(f"Fetching TV metadata: {title} S{season}E{episode} ({quality}) {combined_note or ''}")
+            LOGGER.info(f"Fetching TV metadata: {title} S{season}E{episode} [{quality}] {combined_note or ''}")
             return await fetch_tv_metadata(title, season, episode, encoded_string, year, quality, default_id)
         else:
             LOGGER.info(f"Fetching Movie metadata: {title} ({year}) [{quality}]")
@@ -149,6 +167,7 @@ async def metadata(filename: str, channel: int, msg_id: int) -> dict | None:
     except Exception as e:
         LOGGER.error(f"Error while fetching metadata for {filename}: {e}\n{traceback.format_exc()}")
         return None
+
         
 # ----------------- TV Metadata -----------------
 async def fetch_tv_metadata(title, season, episode, encoded_string, year=None, quality=None, default_id=None) -> dict | None:
