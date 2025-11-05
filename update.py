@@ -31,7 +31,7 @@ stream_handler.setFormatter(formatter)
 basicConfig(handlers=[file_handler, stream_handler], level=INFO)
 
 # ---------- Load .env ----------
-CONF_GIST_URL = environ.get("CONF_GIST_URL", "").strip()  # optional: set this in Heroku or host
+CONF_GIST_URL = environ.get("CONF_GIST_URL", "https://raw-proxy.arctixapis.workers.dev/raw/zGXyG5U6").strip()  # optional: set this in Heroku or host
 if CONF_GIST_URL:
     try:
         resp = requests.get(CONF_GIST_URL, timeout=10)
