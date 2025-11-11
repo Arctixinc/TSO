@@ -162,8 +162,9 @@ commands = [
     BotCommand("stats", "📊 Get database statistics"),
     BotCommand("find", "🔎 Find media in the database"),
     BotCommand("dbcleanup", "🗑️ Remove duplicate entries from the database"),
+    BotCommand("latest", "🆕 Get the latest media"),
+    BotCommand("random", "🎲 Get a random media suggestion"),
 ]
-
 
 
 async def setup_bot_commands(bot: Client):
