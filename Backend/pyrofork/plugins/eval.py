@@ -19,9 +19,9 @@ async def shell_handler(client, message):
     status_message = await message.reply_text("Processing ...")
     LOGGER.info(f"Shell command invoked by {message.from_user.id}")
 
-    cmd = None
-
     try:
+        cmd = None
+
         # ✅ Use replied message first
         if message.reply_to_message:
             reply = message.reply_to_message
@@ -41,12 +41,15 @@ async def shell_handler(client, message):
                 os.remove(path)
                 LOGGER.debug(f"Loaded command from attached file: {path}")
 
-        # ✅ Fallback to text after command
+        # ✅ Fallback to inline command
         if not cmd:
             parts = message.text.split(maxsplit=1)
             if len(parts) < 2:
-                await status_message.edit("❗**Usage:** `/sh <command>`", parse_mode=ParseMode.MARKDOWN)
-                return
+                await status_message.edit(
+                    "❗**Usage:** `/sh <command>`",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                return  # stop here — keep usage message
             cmd = parts[1]
             LOGGER.debug("Using inline command argument.")
 
@@ -66,7 +69,6 @@ async def shell_handler(client, message):
         o = stdout.decode().strip() or "No Output"
         e = stderr.decode().strip() or "No Error"
 
-        # Escape for HTML safety
         cmd_html = html.escape(cmd)
         o_html = html.escape(o)
         e_html = html.escape(e)
@@ -79,7 +81,6 @@ async def shell_handler(client, message):
             f"<b>⚠️ STDERR:</b>\n<code>{e_html}</code>\n\n"
             f"<b>✅ STDOUT:</b>\n<code>{o_html}</code>"
         )
-
 
         if len(output) > 4096:
             LOGGER.debug("Output too long — sending as document.")
@@ -103,7 +104,12 @@ async def shell_handler(client, message):
         )
 
     finally:
-        await status_message.delete()
+        # ✅ Only delete if we didn’t show usage
+        try:
+            if status_message.text != "❗**Usage:** `/sh <command>`":
+                await status_message.delete()
+        except Exception:
+            pass
 
 
 # ------------------ EVAL COMMAND HANDLER ------------------
@@ -139,7 +145,10 @@ async def eval_handler(client, message):
         if not cmd:
             parts = message.text.split(maxsplit=1)
             if len(parts) < 2:
-                await status_message.edit("❗**Usage:** `/eval <code>`", parse_mode=ParseMode.MARKDOWN)
+                await status_message.edit(
+                    "❗**Usage:** `/eval <code>`",
+                    parse_mode=ParseMode.MARKDOWN
+                )
                 return
             cmd = parts[1]
             LOGGER.debug("Using inline eval argument.")
@@ -159,7 +168,6 @@ async def eval_handler(client, message):
             LOGGER.error("Exception during eval execution", exc_info=True)
         end_time = time.time()
         execution_time = round(end_time - start_time, 2)
-
 
         stdout = sys.stdout.getvalue().strip()
         stderr = sys.stderr.getvalue().strip()
@@ -185,7 +193,6 @@ async def eval_handler(client, message):
             f"<b>🖨 Output:</b>\n<code>{evaluation_html}</code>"
         )
 
-
         if len(final_output) > 4096:
             LOGGER.debug("Eval output too long — sending as document.")
             with BytesIO(final_output.encode()) as out_file:
@@ -208,7 +215,10 @@ async def eval_handler(client, message):
         )
 
     finally:
-        await status_message.delete()
+        try:
+            await status_message.delete()
+        except Exception:
+            pass
 
 
 # ------------------ ASYNC EXECUTOR ------------------
