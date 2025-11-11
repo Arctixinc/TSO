@@ -1,164 +1,155 @@
-from fastapi import Request, Query, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from Backend.fastapi.security.credentials import require_auth
 from Backend import db
+from pydantic import BaseModel, Field
+from typing import List, Optional
 
-# --- API Routes for Media Management ---
+class TelegramItem(BaseModel):
+    quality: str
+    id: str
+    name: str
+    size: str
 
-async def list_media_api(
-    media_type: str = Query("movie", regex="^(movie|tv)$"),
+class MovieUpdate(BaseModel):
+    title: str
+    release_year: int
+    rating: float
+    telegram: List[TelegramItem]
+
+class EpisodeUpdate(BaseModel):
+    episode_number: int
+    title: str
+    episode_backdrop: Optional[str] = None
+    telegram: List[TelegramItem]
+
+class SeasonUpdate(BaseModel):
+    season_number: int
+    episodes: List[EpisodeUpdate]
+
+class TVShowUpdate(BaseModel):
+    title: str
+    release_year: int
+    rating: float
+    seasons: List[SeasonUpdate]
+
+router = APIRouter()
+
+@router.get("/media/list")
+async def list_media(
+    media_type: str = Query("movie", enum=["movie", "tv"]),
     page: int = Query(1, ge=1),
     page_size: int = Query(24, ge=1, le=100),
-    search: str = Query("", max_length=100)
+    search: str = Query("", alias="search"),
+    _: bool = Depends(require_auth)
 ):
     try:
-        if search:
-            result = await db.search_documents(search, page, page_size)
-            filtered_results = [item for item in result['results'] if item.get('media_type') == media_type]
-            total_filtered = len(filtered_results)
-            start_index = (page - 1) * page_size
-            end_index = start_index + page_size
-            paged_results = filtered_results[start_index:end_index]
-            
-            return {
-                "total_count": total_filtered,
-                "current_page": page,
-                "total_pages": (total_filtered + page_size - 1) // page_size,
-                "movies" if media_type == "movie" else "tv_shows": paged_results
-            }
-        else:
-            if media_type == "movie":
-                return await db.sort_movies([], page, page_size)
-            else:
-                return await db.sort_tv_shows([], page, page_size)
+        media_items, total_items = await db.get_media_with_pagination(
+            media_type=media_type,
+            page=page,
+            page_size=page_size,
+            search_query=search
+        )
+
+        total_pages = (total_items + page_size - 1) // page_size
+
+        return {
+            f"{media_type}s": media_items,
+            "total_count": total_items,
+            "total_pages": total_pages,
+            "current_page": page,
+            "databases_checked": [db.current_db_index]
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-async def delete_media_api(
+@router.delete("/media/delete")
+async def delete_media(
     tmdb_id: int,
     db_index: int,
-    media_type: str = Query(regex="^(movie|tv)$")
+    media_type: str,
+    _: bool = Depends(require_auth)
 ):
     try:
-        media_type_formatted = "Movie" if media_type == "movie" else "Series"
-        result = await db.delete_document(media_type_formatted, tmdb_id, db_index)
-        if result:
-            return {"message": "Media deleted successfully"}
+        success = await db.delete_document(media_type, tmdb_id, db_index)
+        if success:
+            return {"status": "success", "message": f"{media_type.title()} deleted successfully."}
         else:
-            raise HTTPException(status_code=404, detail="Media not found")
+            raise HTTPException(status_code=404, detail=f"{media_type.title()} not found.")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-async def update_media_api(
-    request: Request,
-    tmdb_id: int,
-    db_index: int,
-    media_type: str = Query(regex="^(movie|tv)$")
-):
+@router.put("/media/update")
+async def update_media_api(request: Request, tmdb_id: int, db_index: int, media_type: str, _: bool = Depends(require_auth)):
     try:
-        update_data = await request.json()
-        if 'rating' in update_data and update_data['rating']:
-            try:
-                update_data['rating'] = float(update_data['rating'])
-            except (ValueError, TypeError):
-                update_data['rating'] = 0.0
-        
-        if 'release_year' in update_data and update_data['release_year']:
-            try:
-                update_data['release_year'] = int(update_data['release_year'])
-            except (ValueError, TypeError):
-                pass
-        if 'genres' in update_data:
-            if isinstance(update_data['genres'], str):
-                update_data['genres'] = [g.strip() for g in update_data['genres'].split(',') if g.strip()]
-            elif not isinstance(update_data['genres'], list):
-                update_data['genres'] = []
-        
-        if 'languages' in update_data:
-            if isinstance(update_data['languages'], str):
-                update_data['languages'] = [l.strip() for l in update_data['languages'].split(',') if l.strip()]
-            elif not isinstance(update_data['languages'], list):
-                update_data['languages'] = []
+        data = await request.json()
         if media_type == "movie":
-            if 'runtime' in update_data and update_data['runtime']:
-                try:
-                    update_data['runtime'] = int(update_data['runtime'])
-                except (ValueError, TypeError):
-                    pass
-        elif media_type == "tv":
-            if 'total_seasons' in update_data and update_data['total_seasons']:
-                try:
-                    update_data['total_seasons'] = int(update_data['total_seasons'])
-                except (ValueError, TypeError):
-                    pass
+            update_data = MovieUpdate(**data)
+        else:
+            update_data = TVShowUpdate(**data)
             
-            if 'total_episodes' in update_data and update_data['total_episodes']:
-                try:
-                    update_data['total_episodes'] = int(update_data['total_episodes'])
-                except (ValueError, TypeError):
-                    pass
-        update_data = {k: v for k, v in update_data.items() if v != ""}
-        result = await db.update_document(media_type, tmdb_id, db_index, update_data)
-        if result:
-            return {"message": "Media updated successfully"}
+        success = await db.update_document(media_type, tmdb_id, db_index, update_data.dict())
+        if success:
+            return {"status": "success", "message": "Media updated successfully."}
         else:
-            raise HTTPException(status_code=404, detail="Media not found or no changes made")
-            
+            raise HTTPException(status_code=404, detail="Media not found.")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-async def get_media_details_api(
-    tmdb_id: int,
-    db_index: int,
-    media_type: str = Query(regex="^(movie|tv)$")
-):
+@router.delete("/media/delete-quality")
+async def delete_movie_quality_api(tmdb_id: int, db_index: int, quality: str, _: bool = Depends(require_auth)):
     try:
-        result = await db.get_document(media_type, tmdb_id, db_index)
-        if result:
-            return result
+        success = await db.delete_movie_quality(tmdb_id, db_index, quality)
+        if success:
+            return {"status": "success", "message": "Quality deleted successfully."}
         else:
-            raise HTTPException(status_code=404, detail="Media not found")
+            raise HTTPException(status_code=404, detail="Quality not found.")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-async def delete_movie_quality_api(tmdb_id: int, db_index: int, quality: str):
+@router.delete("/media/delete-tv-quality")
+async def delete_tv_quality_api(tmdb_id: int, db_index: int, season: int, episode: int, quality: str, _: bool = Depends(require_auth)):
     try:
-        result = await db.delete_movie_quality(tmdb_id, db_index, quality)
-        if result:
-            return {"message": "Quality deleted successfully"}
+        success = await db.delete_tv_quality(tmdb_id, db_index, season, episode, quality)
+        if success:
+            return {"status": "success", "message": "Quality deleted successfully."}
         else:
-            raise HTTPException(status_code=404, detail="Quality not found")
+            raise HTTPException(status_code=404, detail="Quality not found.")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-async def delete_tv_quality_api(
-    tmdb_id: int, db_index: int, season: int, episode: int, quality: str
-):
+@router.delete("/media/delete-tv-episode")
+async def delete_tv_episode_api(tmdb_id: int, db_index: int, season: int, episode: int, _: bool = Depends(require_auth)):
     try:
-        result = await db.delete_tv_quality(tmdb_id, db_index, season, episode, quality)
-        if result:
-            return {"message": "Quality deleted successfully"}
+        success = await db.delete_tv_episode(tmdb_id, db_index, season, episode)
+        if success:
+            return {"status": "success", "message": "Episode deleted successfully."}
         else:
-            raise HTTPException(status_code=404, detail="Quality not found")
+            raise HTTPException(status_code=404, detail="Episode not found.")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-async def delete_tv_episode_api(
-    tmdb_id: int, db_index: int, season: int, episode: int
-):
+@router.delete("/media/delete-tv-season")
+async def delete_tv_season_api(tmdb_id: int, db_index: int, season: int, _: bool = Depends(require_auth)):
     try:
-        result = await db.delete_tv_episode(tmdb_id, db_index, season, episode)
-        if result:
-            return {"message": "Episode deleted successfully"}
+        success = await db.delete_tv_season(tmdb_id, db_index, season)
+        if success:
+            return {"status": "success", "message": "Season deleted successfully."}
         else:
-            raise HTTPException(status_code=404, detail="Episode not found")
+            raise HTTPException(status_code=404, detail="Season not found.")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-async def delete_tv_season_api(tmdb_id: int, db_index: int, season: int):
+@router.get("/system/workloads")
+async def get_workloads(_: bool = Depends(require_auth)):
     try:
-        result = await db.delete_tv_season(tmdb_id, db_index, season)
-        if result:
-            return {"message": "Season deleted successfully"}
-        else:
-            raise HTTPException(status_code=404, detail="Season not found")
+        from Backend.pyrofork.bot import work_loads
+        return {
+            "loads": {
+                f"bot{c + 1}": l
+                for c, (_, l) in enumerate(
+                    sorted(work_loads.items(), key=lambda x: x[1], reverse=True)
+                )
+            } if work_loads else {}
+        }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"loads": {}}

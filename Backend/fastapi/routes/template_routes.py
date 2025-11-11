@@ -106,18 +106,38 @@ async def dashboard_page(request: Request, _: bool = Depends(require_auth)):
     })
     
 
-async def media_management_page(request: Request, media_type: str = "movie", _: bool = Depends(require_auth)):
+async def media_management_page(request: Request, media_type: str = "movie", page: int = 1, _: bool = Depends(require_auth)):
     theme_name = request.session.get("theme", "purple_gradient")
     theme = get_theme(theme_name)
     current_user = get_current_user(request)
     
+    search_query = request.query_params.get("search", "")
+
+    items_per_page = 15
+
+    try:
+        media_items, total_items = await db.get_media_with_pagination(
+            media_type=media_type,
+            page=page,
+            page_size=items_per_page,
+            search_query=search_query
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    total_pages = (total_items + items_per_page - 1) // items_per_page
+
     return templates.TemplateResponse("media_management.html", {
         "request": request,
         "theme": theme,
         "themes": get_all_themes(),
         "current_theme": theme_name,
         "current_user": current_user,
-        "media_type": media_type
+        "media_type": media_type,
+        "media_items": media_items,
+        "total_pages": total_pages,
+        "current_page": page,
+        "search_query": search_query
     })
 
 async def edit_media_page(request: Request, tmdb_id: int, db_index: int, media_type: str, _: bool = Depends(require_auth)):

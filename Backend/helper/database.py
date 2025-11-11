@@ -894,3 +894,44 @@ class Database:
                     "dataSize": db_stats.get("dataSize", 0)
                 })
         return stats
+
+    async def get_media_with_pagination(
+        self,
+        media_type: str,
+        page: int,
+        page_size: int,
+        search_query: str = ""
+    ) -> Tuple[List[Dict[str, Any]], int]:
+
+        collection_name = "movie" if media_type == "movie" else "tv"
+
+        filter_dict = {}
+        if search_query:
+            filter_dict["title"] = {"$regex": search_query, "$options": "i"}
+
+        sort_dict = {"title": 1}
+
+        total_count = 0
+        total_storage_dbs = len(self.dbs) - 1
+        for db_index in range(1, total_storage_dbs + 1):
+            db_key = f"storage_{db_index}"
+            collection = self.dbs[db_key][collection_name]
+            total_count += await collection.count_documents(filter_dict)
+
+        skip = (page - 1) * page_size
+
+        pipeline = [
+            {"$match": filter_dict},
+            {"$sort": sort_dict},
+            {"$skip": skip},
+            {"$limit": page_size}
+        ]
+
+        results = []
+        for db_index in range(1, total_storage_dbs + 1):
+            db_key = f"storage_{db_index}"
+            collection = self.dbs[db_key][collection_name]
+            async for doc in collection.aggregate(pipeline):
+                results.append(convert_objectid_to_str(doc))
+
+        return results, total_count

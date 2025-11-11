@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, Form, Depends, Query
+from fastapi import FastAPI, Request, Form, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -12,11 +12,7 @@ from Backend.fastapi.routes.template_routes import (
     login_page, login_post, logout, set_theme, dashboard_page,
     media_management_page, edit_media_page, public_status_page, stremio_guide_page
 )
-from Backend.fastapi.routes.api_routes import (
-    list_media_api, delete_media_api, update_media_api,
-    delete_movie_quality_api, delete_tv_quality_api,
-    delete_tv_episode_api, delete_tv_season_api
-)
+from Backend.fastapi.routes.api_routes import router as api_router
 
 app = FastAPI(
     title="Telegram Stremio Media Server",
@@ -42,6 +38,8 @@ except Exception:
 # --- Include existing API routers ---
 app.include_router(stream_router)
 app.include_router(stremio_router)
+app.include_router(api_router, prefix="/api", tags=["api"])
+
 
 # --- Public Routes (No Authentication Required) ---
 @app.get("/login", response_class=HTMLResponse)
@@ -74,63 +72,12 @@ async def root(request: Request, _: bool = Depends(require_auth)):
     return await dashboard_page(request, _)
 
 @app.get("/media/manage", response_class=HTMLResponse)
-async def media_management(request: Request, media_type: str = "movie", _: bool = Depends(require_auth)):
-    return await media_management_page(request, media_type, _)
+async def media_management(request: Request, media_type: str = "movie", page: int = 1, _: bool = Depends(require_auth)):
+    return await media_management_page(request, media_type, page, _)
 
 @app.get("/media/edit", response_class=HTMLResponse)
 async def edit_media(request: Request, tmdb_id: int, db_index: int, media_type: str, _: bool = Depends(require_auth)):
     return await edit_media_page(request, tmdb_id, db_index, media_type, _)
-
-@app.get("/api/media/list")
-async def list_media(
-    media_type: str = Query("movie", regex="^(movie|tv)$"), 
-    page: int = Query(1, ge=1), 
-    page_size: int = Query(24, ge=1, le=100), 
-    search: str = Query("", max_length=100),
-    _: bool = Depends(require_auth)
-):
-    return await list_media_api(media_type, page, page_size, search)
-
-@app.delete("/api/media/delete")
-async def delete_media(tmdb_id: int, db_index: int, media_type: str, _: bool = Depends(require_auth)):
-    return await delete_media_api(tmdb_id, db_index, media_type)
-
-@app.put("/api/media/update")
-async def update_media(request: Request, tmdb_id: int, db_index: int, media_type: str, _: bool = Depends(require_auth)):
-    return await update_media_api(request, tmdb_id, db_index, media_type)
-
-@app.delete("/api/media/delete-quality")
-async def delete_movie_quality(tmdb_id: int, db_index: int, quality: str, _: bool = Depends(require_auth)):
-    return await delete_movie_quality_api(tmdb_id, db_index, quality)
-
-@app.delete("/api/media/delete-tv-quality")
-async def delete_tv_quality(tmdb_id: int, db_index: int, season: int, episode: int, quality: str, _: bool = Depends(require_auth)):
-    return await delete_tv_quality_api(tmdb_id, db_index, season, episode, quality)
-
-@app.delete("/api/media/delete-tv-episode")
-async def delete_tv_episode(tmdb_id: int, db_index: int, season: int, episode: int, _: bool = Depends(require_auth)):
-    return await delete_tv_episode_api(tmdb_id, db_index, season, episode)
-
-@app.delete("/api/media/delete-tv-season")
-async def delete_tv_season(tmdb_id: int, db_index: int, season: int, _: bool = Depends(require_auth)):
-    return await delete_tv_season_api(tmdb_id, db_index, season)
-
-
-@app.get("/api/system/workloads")
-async def get_workloads(_: bool = Depends(require_auth)):
-    try:
-        from Backend.pyrofork.bot import work_loads
-        return {
-            "loads": {
-                f"bot{c + 1}": l
-                for c, (_, l) in enumerate(
-                    sorted(work_loads.items(), key=lambda x: x[1], reverse=True)
-                )
-            } if work_loads else {}
-        }
-    except Exception as e:
-        return {"loads": {}}
-
 
 @app.exception_handler(401)
 async def auth_exception_handler(request: Request, exc):
