@@ -151,19 +151,21 @@ async def restart_notification():
 
 # Bot commands
 commands = [
-    BotCommand("start", "🚀 Start the bot"),
-    BotCommand("set", "🎬 Manually add IMDb metadata"),
-    BotCommand("scan", "🔍 Scan Telegram channels for videos"),
-    BotCommand("cleanup", "🧹 Scan database for broken links"),
-    BotCommand("log", "📄 Send the log file"),
-    BotCommand("restart", "♻️ Restart the bot"),
-    BotCommand("eval", "🧠 Execute Python code safely"),
-    BotCommand("shell", "💻 Run shell commands on the server"),
-    BotCommand("stats", "📊 Get database statistics"),
-    BotCommand("find", "🔎 Find media in the database"),
-    BotCommand("dbcleanup", "🗑️ Remove duplicate entries from the database"),
-    BotCommand("latest", "🆕 Get the latest media"),
-    BotCommand("random", "🎲 Get a random media suggestion"),
+    BotCommand("start",      "🚀 Start the bot"),
+    BotCommand("health",     "❤️ Check bot health"),
+    BotCommand("set",        "🎬 Add IMDb metadata"),
+    BotCommand("log",        "📄 Get log file"),
+    BotCommand("info",       "ℹ️ Get media info"),
+    BotCommand("find",       "🔎 Search media in database"),
+    BotCommand("latest",     "🆕 Show latest media"),
+    BotCommand("random",     "🎲 Get random media"),
+    BotCommand("scan",       "🔍 Scan channels for videos"),
+    BotCommand("stats",      "📊 View database stats"),
+    BotCommand("cleanup",    "🧹 Remove broken links"),
+    BotCommand("dbcleanup",  "🗑️ Delete duplicate entries"),
+    BotCommand("eval",       "🧠 Run Python code"),
+    BotCommand("shell",      "💻 Run shell commands"),
+    BotCommand("restart",    "♻️ Restart the bot"),
 ]
 
 
