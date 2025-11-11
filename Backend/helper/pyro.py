@@ -166,6 +166,9 @@ commands = [
     BotCommand("random", "🎲 Get a random media suggestion"),
     BotCommand("info", "ℹ️ Get media information"),
     BotCommand("health", "❤️ Check bot health"),
+    BotCommand("genres", "🎭 List all genres"),
+    BotCommand("exportdb", "📤 Export database to CSV"),
+    BotCommand("broadcast", "📢 Broadcast a message"),
 ]
 
 
