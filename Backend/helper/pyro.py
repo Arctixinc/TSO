@@ -159,7 +159,11 @@ commands = [
     BotCommand("restart", "♻️ Restart the bot"),
     BotCommand("eval", "🧠 Execute Python code safely"),
     BotCommand("shell", "💻 Run shell commands on the server"),
+    BotCommand("stats", "📊 Get database statistics"),
+    BotCommand("find", "🔎 Find media in the database"),
+    BotCommand("dbcleanup", "🗑️ Remove duplicate entries from the database"),
 ]
+
 
 
 async def setup_bot_commands(bot: Client):
