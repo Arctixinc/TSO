@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 load_dotenv(path.join(path.dirname(path.dirname(__file__)), "config.env"))
 
 class Telegram:
+    """A class to store the configuration variables."""
     API_ID = int(getenv("API_ID", "0"))
     API_HASH = getenv("API_HASH", "")
     BOT_TOKEN = getenv("BOT_TOKEN", "")

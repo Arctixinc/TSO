@@ -5,7 +5,17 @@ from datetime import datetime
 IST = pytz.timezone("Asia/Kolkata")
 
 class ISTFormatter(Formatter):
+    """A custom formatter to use the IST timezone."""
     def formatTime(self, record, datefmt=None):
+        """Formats the time to IST.
+
+        Args:
+            record: The log record.
+            datefmt (str, optional): The date format. Defaults to None.
+
+        Returns:
+            The formatted time.
+        """
         dt = datetime.fromtimestamp(record.created, IST)
         return dt.strftime(datefmt or "%d-%b-%y %I:%M:%S %p")
 

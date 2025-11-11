@@ -38,9 +38,23 @@ def parse_range_header(range_header: str, file_size: int) -> Tuple[int, int]:
 @router.get("/dl/{id}/{name}")
 @router.head("/dl/{id}/{name}")
 async def stream_handler(request: Request, id: str, name: str):
-    """
-    Handles GET and HEAD requests for streaming Telegram files.
-    HEAD requests return headers only.
+    """Handles GET and HEAD requests for streaming Telegram files.
+
+    This function decodes the provided ID to get the message and chat ID,
+    fetches the message from Telegram, and then calls the media_streamer
+    to handle the actual streaming. HEAD requests return headers only.
+
+    Args:
+        request (Request): The incoming request object.
+        id (str): The encoded string containing the message and chat ID.
+        name (str): The name of the file being requested.
+
+    Raises:
+        HTTPException: If the ID is invalid, the message cannot be fetched,
+                       or no downloadable media is found.
+
+    Returns:
+        StreamingResponse: A streaming response for the requested file.
     """
     decoded_data = await decode_string(id)
     if not decoded_data.get("msg_id"):
@@ -75,9 +89,27 @@ async def media_streamer(
     message_id: int,
     secure_hash: str,
 ) -> StreamingResponse:
-    """
-    Streams a Telegram file with Range header support.
-    Returns only headers for HEAD requests.
+    """Streams a Telegram file with Range header support.
+
+    This function handles the streaming of a file from Telegram, supporting
+    HTTP Range requests to allow for seeking and partial content delivery.
+    It selects the least loaded Telegram client, retrieves file metadata,
+    and constructs a streaming response with appropriate headers. For HEAD
+    requests, it returns only the headers.
+
+    Args:
+        request (Request): The incoming request object.
+        chat_id (int): The ID of the chat where the file is located.
+        message_id (int): The ID of the message containing the file.
+        secure_hash (str): A secure hash to verify the file's uniqueness.
+
+    Raises:
+        HTTPException: If the file properties cannot be fetched.
+        InvalidHash: If the provided secure hash does not match the file's hash.
+
+    Returns:
+        StreamingResponse: A streaming response for the requested file,
+                           or a regular Response with headers for HEAD requests.
     """
     range_header = request.headers.get("Range", "")
 

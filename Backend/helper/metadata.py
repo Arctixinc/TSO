@@ -17,9 +17,26 @@ tmdb = aioTMDb(key=Telegram.TMDB_API, language="en-US", region="US")
 
 # ----------------- Helpers -----------------
 def format_tmdb_image(path: str, size="w500") -> str:
+    """Formats a TMDb image path into a full URL.
+
+    Args:
+        path (str): The path to the image.
+        size (str, optional): The size of the image. Defaults to "w500".
+
+    Returns:
+        str: The full URL of the image.
+    """
     return f"https://image.tmdb.org/t/p/{size}{path}"
 
 def format_imdb_images(imdb_id: str) -> dict:
+    """Formats IMDb image URLs.
+
+    Args:
+        imdb_id (str): The IMDb ID of the media.
+
+    Returns:
+        dict: A dictionary of image URLs.
+    """
     return {
         "poster": f"https://images.metahub.space/poster/small/{imdb_id}/img",
         "backdrop": f"https://images.metahub.space/background/medium/{imdb_id}/img",
@@ -27,7 +44,15 @@ def format_imdb_images(imdb_id: str) -> dict:
     }
 
 async def safe_imdb_search(title: str, type_: str) -> str | None:
-    """Safely search IMDb title and return its ID."""
+    """Safely searches for a title on IMDb and returns its ID.
+
+    Args:
+        title (str): The title to search for.
+        type_ (str): The type of media.
+
+    Returns:
+        str | None: The IMDb ID of the title, or None if not found.
+    """
     try:
         result = await search_title(query=title, type=type_)
         return result["id"] if result else None
@@ -36,7 +61,16 @@ async def safe_imdb_search(title: str, type_: str) -> str | None:
         return None
 
 async def safe_tmdb_search(title: str, type_: str, year=None):
-    """Safely search TMDb title."""
+    """Safely searches for a title on TMDb.
+
+    Args:
+        title (str): The title to search for.
+        type_ (str): The type of media.
+        year (int, optional): The year of the media. Defaults to None.
+
+    Returns:
+        The search result, or None if not found.
+    """
     try:
         if type_ == "movie":
             if year:
@@ -56,7 +90,16 @@ import traceback
 from re import compile, IGNORECASE
 
 async def metadata(filename: str, channel: int, msg_id: int) -> dict | None:
-    """Parses filename and fetches metadata for TV or Movie content."""
+    """Parses a filename and fetches metadata for TV or movie content.
+
+    Args:
+        filename (str): The filename to parse.
+        channel (int): The Telegram channel ID.
+        msg_id (int): The Telegram message ID.
+
+    Returns:
+        dict | None: A dictionary containing the metadata, or None on failure.
+    """
 
     try:
         parsed = PTN.parse(filename)
@@ -171,6 +214,20 @@ async def metadata(filename: str, channel: int, msg_id: int) -> dict | None:
         
 # ----------------- TV Metadata -----------------
 async def fetch_tv_metadata(title, season, episode, encoded_string, year=None, quality=None, default_id=None) -> dict | None:
+    """Fetches metadata for a TV show.
+
+    Args:
+        title (str): The title of the TV show.
+        season (int): The season number.
+        episode (int): The episode number.
+        encoded_string (str): The encoded string for the Telegram message.
+        year (int, optional): The year of the TV show. Defaults to None.
+        quality (str, optional): The quality of the video. Defaults to None.
+        default_id (str, optional): The default IMDb ID to use. Defaults to None.
+
+    Returns:
+        dict | None: A dictionary containing the metadata, or None on failure.
+    """
     imdb_id = default_id if default_id and default_id.startswith("tt") else await safe_imdb_search(title, "tvSeries")
     tv_details, ep_details, use_tmdb = None, None, False
     
@@ -258,6 +315,18 @@ async def fetch_tv_metadata(title, season, episode, encoded_string, year=None, q
 
 # ----------------- Movie Metadata -----------------
 async def fetch_movie_metadata(title, encoded_string, year=None, quality=None, default_id=None) -> dict | None:
+    """Fetches metadata for a movie.
+
+    Args:
+        title (str): The title of the movie.
+        encoded_string (str): The encoded string for the Telegram message.
+        year (int, optional): The year of the movie. Defaults to None.
+        quality (str, optional): The quality of the video. Defaults to None.
+        default_id (str, optional): The default IMDb ID to use. Defaults to None.
+
+    Returns:
+        dict | None: A dictionary containing the metadata, or None on failure.
+    """
     imdb_id = default_id if default_id and default_id.startswith("tt") else await safe_imdb_search(f"{title} {year}" if year else title, "movie")
     movie_details, use_tmdb = None, False
     

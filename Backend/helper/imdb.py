@@ -5,6 +5,14 @@ from typing import Optional, Dict, Any
 BASE_URL = "https://v3-cinemeta.strem.io"
 
 def extract_first_year(year_string) -> int:
+    """Extracts the first year from a string.
+
+    Args:
+        year_string: The string to extract the year from.
+
+    Returns:
+        The extracted year, or 0 if no year is found.
+    """
     if not year_string:
         return 0
     year_str = str(year_string)
@@ -15,6 +23,15 @@ def extract_first_year(year_string) -> int:
 
 
 async def search_title(query: str, type: str) -> Optional[Dict[str, Any]]:
+    """Searches for a title on Cinemeta.
+
+    Args:
+        query (str): The search query.
+        type (str): The type of media to search for.
+
+    Returns:
+        Optional[Dict[str, Any]]: The search result, or None if not found.
+    """
     async with httpx.AsyncClient() as client:
         cinemeta_type = "series" if type == "tvSeries" else type  
         url = f"{BASE_URL}/catalog/{cinemeta_type}/imdb/search={query}.json"
@@ -39,6 +56,14 @@ async def search_title(query: str, type: str) -> Optional[Dict[str, Any]]:
             return None
 
 async def get_detail(imdb_id: str) -> Optional[Dict[str, Any]]:
+    """Gets the details of a media item from Cinemeta.
+
+    Args:
+        imdb_id (str): The IMDb ID of the media item.
+
+    Returns:
+        Optional[Dict[str, Any]]: The details of the media item, or None if not found.
+    """
     async with httpx.AsyncClient() as client:
         for media_type in ['movie', 'series']:
             try:
@@ -80,6 +105,16 @@ async def get_detail(imdb_id: str) -> Optional[Dict[str, Any]]:
         return None
 
 async def get_season(imdb_id: str, season_id: int, episode_id: int) -> Optional[Dict[str, Any]]:
+    """Gets the details of a specific episode of a TV show from Cinemeta.
+
+    Args:
+        imdb_id (str): The IMDb ID of the TV show.
+        season_id (int): The season number.
+        episode_id (int): The episode number.
+
+    Returns:
+        Optional[Dict[str, Any]]: The details of the episode, or None if not found.
+    """
     async with httpx.AsyncClient() as client:
         try:
             url = f"{BASE_URL}/meta/series/{imdb_id}.json"

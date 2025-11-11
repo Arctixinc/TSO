@@ -51,6 +51,24 @@
 - [🏅 Contributor](#-contributor)
 
 
+# 📖 Project Structure
+
+```
+.
+├── Backend/
+│   ├── fastapi/
+│   │   ├── routes/
+│   │   ├── security/
+│   │   └── templates/
+│   ├── helper/
+│   ├── pyrofork/
+│   └── ...
+├── Dockerfile
+├── docker-compose.yaml
+├── requirements.txt
+└── README.md
+```
+
 # 🚀 Introduction
 
 This project is a **next-generation Telegram Stremio Media Server** that allows you to **stream your Telegram files directly through Stremio**, without any third-party dependencies or file expiration issues. It’s designed for **speed, scalability, and reliability**, making it ideal for both personal and community-based media hosting.
@@ -532,6 +550,20 @@ If you want to use **only** your **Telegram Stremio Media Server addon** for met
     ```
   - Refresh the page (**F5**). You will now be able to **remove Cinemeta** from your addons list.
 
+
+## 🤝 Contributing
+
+Contributions are welcome! If you'd like to contribute to this project, please follow these steps:
+
+1.  Fork the repository.
+2.  Create a new branch (`git checkout -b feature/your-feature-name`).
+3.  Make your changes and commit them (`git commit -m 'Add some feature'`).
+4.  Push to the branch (`git push origin feature/your-feature-name`).
+5.  Open a pull request.
+
+## 📄 License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
 ## 🏅 **Contributor**
 

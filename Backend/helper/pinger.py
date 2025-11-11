@@ -5,6 +5,7 @@ from Backend.config import Telegram
 from Backend.logger import LOGGER
 
 async def ping():
+    """Periodically pings the manifest URL to keep the server alive."""
 
     sleep_time = 1200
     manifest_url = f"{Telegram.BASE_URL}/stremio/manifest.json"

@@ -8,8 +8,14 @@ from Backend.pyrofork.bot import multi_clients, work_loads, StreamBot
 from os import environ
 
 class TokenParser:
+    """A class for parsing tokens from the environment."""
     @staticmethod
     def parse_from_env():
+        """Parses multi-tokens from the environment variables.
+
+        Returns:
+            A dictionary of tokens.
+        """
         tokens = {
             c + 1: t
             for c, (_, t) in enumerate(
@@ -22,6 +28,15 @@ class TokenParser:
         return tokens
 
 async def start_client(client_id: int, token: str) -> Optional[Tuple[int, Client]]:
+    """Starts a Pyrogram client.
+
+    Args:
+        client_id (int): The ID of the client.
+        token (str): The bot token.
+
+    Returns:
+        Optional[Tuple[int, Client]]: A tuple containing the client ID and the client object, or None on failure.
+    """
     try:
         LOGGER.info(f"[Client {client_id}] Starting initialization...")
         c_name =str(client_id)
@@ -50,6 +65,7 @@ async def start_client(client_id: int, token: str) -> Optional[Tuple[int, Client
         return None
 
 async def initialize_clients():
+    """Initializes all the clients."""
     multi_clients[0], work_loads[0] = StreamBot, 0
     all_tokens = TokenParser.parse_from_env()
     

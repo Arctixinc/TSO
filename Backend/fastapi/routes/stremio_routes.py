@@ -22,6 +22,14 @@ GENRES = [
 
 # --- Helper Functions ---
 def convert_to_stremio_meta(item: dict) -> dict:
+    """Converts a media item from the database to the Stremio meta format.
+
+    Args:
+        item (dict): The media item from the database.
+
+    Returns:
+        dict: The media item in Stremio meta format.
+    """
     media_type = "series" if item.get("media_type") == "tv" else "movie"
     stremio_id = f"{item.get('tmdb_id')}-{item.get('db_index')}"
     
@@ -41,6 +49,11 @@ def convert_to_stremio_meta(item: dict) -> dict:
 # --- Stremio Endpoints ---
 @router.get("/manifest.json")
 async def get_manifest():
+    """Provides the Stremio addon manifest.
+
+    Returns:
+        dict: The addon manifest.
+    """
     return {
         "id": "telegram.media",
         "version": ADDON_VERSION,
@@ -121,6 +134,22 @@ async def get_manifest():
 @router.get("/catalog/{media_type}/{id}/{extra:path}.json")
 @router.get("/catalog/{media_type}/{id}.json")
 async def get_catalog(media_type: str, id: str, extra: Optional[str] = None):
+    """Provides the catalog of media for Stremio.
+
+    This function handles requests for the media catalog, supporting
+    different media types, sorting, filtering by genre, and searching.
+
+    Args:
+        media_type (str): The type of media to list. Can be "movie" or "series".
+        id (str): The ID of the catalog to retrieve.
+        extra (Optional[str], optional): Additional parameters for filtering and pagination. Defaults to None.
+
+    Raises:
+        HTTPException: If the media type is invalid.
+
+    Returns:
+        dict: A dictionary containing the list of media in Stremio meta format.
+    """
     if media_type not in ["movie", "series"]:
         raise HTTPException(status_code=404, detail="Invalid catalog type")
     
@@ -173,6 +202,18 @@ async def get_catalog(media_type: str, id: str, extra: Optional[str] = None):
 
 @router.get("/meta/{media_type}/{id}.json")
 async def get_meta(media_type: str, id: str):
+    """Provides metadata for a specific media item.
+
+    Args:
+        media_type (str): The type of media. Can be "movie" or "series".
+        id (str): The Stremio ID of the media item.
+
+    Raises:
+        HTTPException: If the Stremio ID is in an invalid format.
+
+    Returns:
+        dict: A dictionary containing the metadata of the media item.
+    """
     try:
         tmdb_id_str, db_index_str = id.split("-")
         tmdb_id, db_index = int(tmdb_id_str), int(db_index_str)
@@ -220,6 +261,18 @@ async def get_meta(media_type: str, id: str):
 
 @router.get("/stream/{media_type}/{id}.json")
 async def get_streams(media_type: str, id: str):
+    """Provides the streaming links for a specific media item.
+
+    Args:
+        media_type (str): The type of media. Can be "movie" or "series".
+        id (str): The Stremio ID of the media item.
+
+    Raises:
+        HTTPException: If the Stremio ID is in an invalid format.
+
+    Returns:
+        dict: A dictionary containing the list of available streams.
+    """
     try:
         parts = id.split(":")
         base_id = parts[0]

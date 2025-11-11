@@ -14,10 +14,31 @@ from pyrogram import enums
 
 
 def is_media(message):
+    """Checks if a message contains any media.
+
+    Args:
+        message: The message to check.
+
+    Returns:
+        The media object if found, otherwise None.
+    """
     return next((getattr(message, attr) for attr in ["document", "photo", "video", "audio", "voice", "video_note", "sticker", "animation"] if getattr(message, attr)), None)
 
 
 async def get_file_ids(client: Client, chat_id: int, message_id: int) -> Optional[FileId]:
+    """Gets the file ID of a message.
+
+    Args:
+        client (Client): The Pyrogram client.
+        chat_id (int): The chat ID of the message.
+        message_id (int): The message ID.
+
+    Raises:
+        FIleNotFound: If the message is not found or does not contain any media.
+
+    Returns:
+        Optional[FileId]: The file ID of the message, or None on failure.
+    """
     try:
         message = await client.get_messages(chat_id, message_id)
         if message.empty:
@@ -42,6 +63,14 @@ async def get_file_ids(client: Client, chat_id: int, message_id: int) -> Optiona
 
 
 def get_readable_file_size(size_in_bytes):
+    """Gets a readable file size.
+
+    Args:
+        size_in_bytes: The size in bytes.
+
+    Returns:
+        A string representing the readable file size.
+    """
     size_in_bytes = int(size_in_bytes) if str(size_in_bytes).isdigit() else 0
     if not size_in_bytes:
         return '0B'
@@ -55,6 +84,14 @@ def get_readable_file_size(size_in_bytes):
 
 
 def clean_filename(filename):
+    """Cleans a filename by removing unnecessary information.
+
+    Args:
+        filename (str): The filename to clean.
+
+    Returns:
+        str: The cleaned filename.
+    """
     if not filename:
         return "unknown_file"
     
@@ -72,6 +109,14 @@ def clean_filename(filename):
 
 
 def get_readable_time(seconds: int) -> str:
+    """Gets a readable time format from seconds.
+
+    Args:
+        seconds (int): The number of seconds.
+
+    Returns:
+        str: A string representing the readable time.
+    """
     count = 0
     readable_time = ""
     time_list = []
@@ -103,6 +148,14 @@ def get_readable_time(seconds: int) -> str:
 
 
 def extract_tmdb_id(url):
+    """Extracts the TMDb ID from a URL.
+
+    Args:
+        url (str): The URL to extract the ID from.
+
+    Returns:
+        str: The extracted TMDb ID, or None if not found.
+    """
     # Match IMDb URLs
     imdb_match = re.search(r'/title/(tt\d+)', url)
     if imdb_match:
@@ -112,6 +165,14 @@ def extract_tmdb_id(url):
 
 
 def remove_urls(text):
+    """Removes URLs from a string.
+
+    Args:
+        text (str): The string to remove URLs from.
+
+    Returns:
+        str: The string without URLs.
+    """
     if not text:
         return ""
     
@@ -124,6 +185,7 @@ def remove_urls(text):
 
 
 async def restart_notification():
+    """Sends a notification when the bot restarts."""
     chat_id, msg_id = 0, 0
     try:
         if await aiopath.exists(".restartmsg"):
@@ -163,6 +225,11 @@ commands = [
 
 
 async def setup_bot_commands(bot: Client):
+    """Sets up the bot commands.
+
+    Args:
+        bot (Client): The Pyrogram client.
+    """
     try:
         current_commands = await bot.get_bot_commands()
         if current_commands:

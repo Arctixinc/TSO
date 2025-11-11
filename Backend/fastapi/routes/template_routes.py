@@ -13,6 +13,16 @@ from time import time
 templates = Jinja2Templates(directory="Backend/fastapi/templates")
 
 async def login_page(request: Request):
+    """Renders the login page.
+
+    If the user is already authenticated, it redirects to the dashboard.
+
+    Args:
+        request (Request): The incoming request object.
+
+    Returns:
+        TemplateResponse: The rendered login page.
+    """
     if is_authenticated(request):
         return RedirectResponse(url="/", status_code=302)
     
@@ -27,6 +37,19 @@ async def login_page(request: Request):
     })
 
 async def login_post(request: Request, username: str = Form(...), password: str = Form(...)):
+    """Handles the login form submission.
+
+    Verifies the user's credentials and creates a session if they are valid.
+
+    Args:
+        request (Request): The incoming request object.
+        username (str): The username from the form.
+        password (str): The password from the form.
+
+    Returns:
+        RedirectResponse: A redirect to the dashboard on successful login.
+        TemplateResponse: The login page with an error message on failure.
+    """
     if verify_credentials(username, password):
         request.session["authenticated"] = True
         request.session["username"] = username
@@ -43,15 +66,44 @@ async def login_post(request: Request, username: str = Form(...), password: str 
         })
 
 async def logout(request: Request):
+    """Logs the user out by clearing the session.
+
+    Args:
+        request (Request): The incoming request object.
+
+    Returns:
+        RedirectResponse: A redirect to the login page.
+    """
     request.session.clear()
     return RedirectResponse(url="/login", status_code=302)
 
 async def set_theme(request: Request, theme: str = Form(...)):
+    """Sets the theme for the user's session.
+
+    Args:
+        request (Request): The incoming request object.
+        theme (str): The name of the theme to set.
+
+    Returns:
+        RedirectResponse: A redirect to the previous page.
+    """
     if theme in get_all_themes():
         request.session["theme"] = theme
     return RedirectResponse(url=request.headers.get("referer", "/"), status_code=302)
 
 async def dashboard_page(request: Request, _: bool = Depends(require_auth)):
+    """Renders the admin dashboard page.
+
+    This page displays system statistics, including server status, uptime,
+    connected bots, and database information.
+
+    Args:
+        request (Request): The incoming request object.
+        _ (bool): A dependency to ensure the user is authenticated.
+
+    Returns:
+        TemplateResponse: The rendered dashboard page.
+    """
     theme_name = request.session.get("theme", "purple_gradient")
     theme = get_theme(theme_name)
     current_user = get_current_user(request)
@@ -107,6 +159,18 @@ async def dashboard_page(request: Request, _: bool = Depends(require_auth)):
     
 
 async def media_management_page(request: Request, media_type: str = "movie", _: bool = Depends(require_auth)):
+    """Renders the media management page.
+
+    This page allows administrators to view and manage the media in the database.
+
+    Args:
+        request (Request): The incoming request object.
+        media_type (str, optional): The type of media to display. Defaults to "movie".
+        _ (bool): A dependency to ensure the user is authenticated.
+
+    Returns:
+        TemplateResponse: The rendered media management page.
+    """
     theme_name = request.session.get("theme", "purple_gradient")
     theme = get_theme(theme_name)
     current_user = get_current_user(request)
@@ -121,6 +185,21 @@ async def media_management_page(request: Request, media_type: str = "movie", _: 
     })
 
 async def edit_media_page(request: Request, tmdb_id: int, db_index: int, media_type: str, _: bool = Depends(require_auth)):
+    """Renders the page for editing a media item.
+
+    Args:
+        request (Request): The incoming request object.
+        tmdb_id (int): The TMDB ID of the media to edit.
+        db_index (int): The database index of the media.
+        media_type (str): The type of media to edit.
+        _ (bool): A dependency to ensure the user is authenticated.
+
+    Raises:
+        HTTPException: If the media is not found or an error occurs.
+
+    Returns:
+        TemplateResponse: The rendered media edit page.
+    """
     theme_name = request.session.get("theme", "purple_gradient")
     theme = get_theme(theme_name)
     current_user = get_current_user(request)
@@ -145,6 +224,17 @@ async def edit_media_page(request: Request, tmdb_id: int, db_index: int, media_t
     })
 
 async def public_status_page(request: Request):
+    """Renders the public status page.
+
+    This page displays public statistics about the service, such as the
+    total number of content and the online status of the databases.
+
+    Args:
+        request (Request): The incoming request object.
+
+    Returns:
+        TemplateResponse: The rendered public status page.
+    """
     theme_name = request.session.get("theme", "purple_gradient")
     theme = get_theme(theme_name)
     
@@ -177,6 +267,14 @@ async def public_status_page(request: Request):
     })
 
 async def stremio_guide_page(request: Request):
+    """Renders the Stremio guide page.
+
+    Args:
+        request (Request): The incoming request object.
+
+    Returns:
+        TemplateResponse: The rendered Stremio guide page.
+    """
     theme_name = request.session.get("theme", "purple_gradient")
     theme = get_theme(theme_name)
     

@@ -9,6 +9,20 @@ async def list_media_api(
     page_size: int = Query(24, ge=1, le=100),
     search: str = Query("", max_length=100)
 ):
+    """Lists media from the database with pagination and search functionality.
+
+    Args:
+        media_type (str, optional): The type of media to list. Can be "movie" or "tv". Defaults to "movie".
+        page (int, optional): The page number to retrieve. Defaults to 1.
+        page_size (int, optional): The number of items per page. Defaults to 24.
+        search (str, optional): A search query to filter the results. Defaults to "".
+
+    Raises:
+        HTTPException: If an error occurs while fetching the media.
+
+    Returns:
+        dict: A dictionary containing the list of media and pagination details.
+    """
     try:
         if search:
             result = await db.search_documents(search, page, page_size)
@@ -37,6 +51,33 @@ async def delete_media_api(
     db_index: int,
     media_type: str = Query(regex="^(movie|tv)$")
 ):
+    """Retrieves the details of a media item from the database.
+
+    Args:
+        tmdb_id (int): The TMDB ID of the media.
+        db_index (int): The database index of the media.
+        media_type (str): The type of media. Can be "movie" or "tv".
+
+    Raises:
+        HTTPException: If the media is not found or an error occurs.
+
+    Returns:
+        dict: The details of the media item.
+    """
+    """Updates a media item in the database.
+
+    Args:
+        request (Request): The request object containing the update data.
+        tmdb_id (int): The TMDB ID of the media to update.
+        db_index (int): The database index of the media.
+        media_type (str): The type of media to update. Can be "movie" or "tv".
+
+    Raises:
+        HTTPException: If the media is not found or an error occurs.
+
+    Returns:
+        dict: A message confirming the update.
+    """
     try:
         media_type_formatted = "Movie" if media_type == "movie" else "Series"
         result = await db.delete_document(media_type_formatted, tmdb_id, db_index)
@@ -110,6 +151,19 @@ async def get_media_details_api(
     db_index: int,
     media_type: str = Query(regex="^(movie|tv)$")
 ):
+    """Retrieves the details of a media item from the database.
+
+    Args:
+        tmdb_id (int): The TMDB ID of the media.
+        db_index (int): The database index of the media.
+        media_type (str): The type of media. Can be "movie" or "tv".
+
+    Raises:
+        HTTPException: If the media is not found or an error occurs.
+
+    Returns:
+        dict: The details of the media item.
+    """
     try:
         result = await db.get_document(media_type, tmdb_id, db_index)
         if result:
@@ -120,6 +174,19 @@ async def get_media_details_api(
         raise HTTPException(status_code=500, detail=str(e))
 
 async def delete_movie_quality_api(tmdb_id: int, db_index: int, quality: str):
+    """Deletes a specific quality of a movie from the database.
+
+    Args:
+        tmdb_id (int): The TMDB ID of the movie.
+        db_index (int): The database index of the movie.
+        quality (str): The quality to delete.
+
+    Raises:
+        HTTPException: If the quality is not found or an error occurs.
+
+    Returns:
+        dict: A message confirming the deletion.
+    """
     try:
         result = await db.delete_movie_quality(tmdb_id, db_index, quality)
         if result:
@@ -132,6 +199,21 @@ async def delete_movie_quality_api(tmdb_id: int, db_index: int, quality: str):
 async def delete_tv_quality_api(
     tmdb_id: int, db_index: int, season: int, episode: int, quality: str
 ):
+    """Deletes a specific quality of a TV show episode from the database.
+
+    Args:
+        tmdb_id (int): The TMDB ID of the TV show.
+        db_index (int): The database index of the TV show.
+        season (int): The season number of the episode.
+        episode (int): The episode number.
+        quality (str): The quality to delete.
+
+    Raises:
+        HTTPException: If the quality is not found or an error occurs.
+
+    Returns:
+        dict: A message confirming the deletion.
+    """
     try:
         result = await db.delete_tv_quality(tmdb_id, db_index, season, episode, quality)
         if result:
@@ -144,6 +226,20 @@ async def delete_tv_quality_api(
 async def delete_tv_episode_api(
     tmdb_id: int, db_index: int, season: int, episode: int
 ):
+    """De-letes a specific episode of a TV show from the database.
+
+    Args:
+        tmdb_id (int): The TMDB ID of the TV show.
+        db_index (int): The database index of the TV show.
+        season (int): The season number of the episode.
+        episode (int): The episode number to delete.
+
+    Raises:
+        HTTPException: If the episode is not found or an error occurs.
+
+    Returns:
+        dict: A message confirming the deletion.
+    """
     try:
         result = await db.delete_tv_episode(tmdb_id, db_index, season, episode)
         if result:
@@ -154,6 +250,19 @@ async def delete_tv_episode_api(
         raise HTTPException(status_code=500, detail=str(e))
 
 async def delete_tv_season_api(tmdb_id: int, db_index: int, season: int):
+    """Deletes a specific season of a TV show from the database.
+
+    Args:
+        tmdb_id (int): The TMDB ID of the TV show.
+        db_index (int): The database index of the TV show.
+        season (int): The season number to delete.
+
+    Raises:
+        HTTPException: If the season is not found or an error occurs.
+
+    Returns:
+        dict: A message confirming the deletion.
+    """
     try:
         result = await db.delete_tv_season(tmdb_id, db_index, season)
         if result:

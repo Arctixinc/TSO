@@ -4,6 +4,13 @@ from Backend.logger import LOGGER
 from Backend.pyrofork.bot import Helper
 
 async def edit_message(chat_id: int, msg_id: int, new_caption: str):
+    """Edits the caption of a message.
+
+    Args:
+        chat_id (int): The chat ID of the message.
+        msg_id (int): The message ID.
+        new_caption (str): The new caption.
+    """
     try:
         await Helper.edit_message_caption(
             chat_id=chat_id,
@@ -18,6 +25,12 @@ async def edit_message(chat_id: int, msg_id: int, new_caption: str):
         LOGGER.error(f"Error while editing message {msg_id} in {chat_id}: {e}")
 
 async def delete_message(chat_id: int, msg_id: int):
+    """Deletes a message.
+
+    Args:
+        chat_id (int): The chat ID of the message.
+        msg_id (int): The message ID.
+    """
     try:
         await Helper.delete_messages(
             chat_id=chat_id,

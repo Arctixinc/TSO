@@ -15,6 +15,14 @@ from Backend.helper.task_manager import delete_message
 
 
 def convert_objectid_to_str(document: Dict[str, Any]) -> Dict[str, Any]:
+    """Recursively converts ObjectId objects to strings in a dictionary.
+
+    Args:
+        document (Dict[str, Any]): The dictionary to convert.
+
+    Returns:
+        Dict[str, Any]: The converted dictionary.
+    """
     for key, value in document.items():
         if isinstance(value, ObjectId):
             document[key] = str(value)
@@ -26,7 +34,16 @@ def convert_objectid_to_str(document: Dict[str, Any]) -> Dict[str, Any]:
 
 
 class Database:
+    """A class for interacting with the MongoDB database."""
     def __init__(self, db_name: str = "dbFyvio"):
+        """Initializes the Database class.
+
+        Args:
+            db_name (str, optional): The name of the database. Defaults to "dbFyvio".
+
+        Raises:
+            ValueError: If less than 2 database URIs are provided.
+        """
         self.db_uris = Telegram.DATABASE
         self.db_name = db_name
 
@@ -39,6 +56,7 @@ class Database:
         self.current_db_index = 1
 
     async def connect(self):
+        """Connects to the databases."""
         try:
             for index, uri in enumerate(self.db_uris):
                 client = motor.motor_asyncio.AsyncIOMotorClient(uri)
@@ -65,11 +83,13 @@ class Database:
             LOGGER.error(f"Database connection error: {e}")
 
     async def disconnect(self):
+        """Disconnects from the databases."""
         for client in self.clients.values():
             client.close()
         LOGGER.info("All database connections closed.")
 
     async def update_current_db_index(self):
+        """Updates the current database index in the tracking database."""
         await self.dbs["tracking"]["state"].update_one(
             {"_id": "db_index"},
             {"$set": {"current_index": self.current_db_index}},
@@ -81,7 +101,14 @@ class Database:
     # 🔹 Helper: Sort telegram qualities numerically
     # =====================================================
     def sort_telegram_list(self, telegram_list: list) -> list:
-        """Sort the telegram list by numeric quality value (highest → lowest)."""
+        """Sorts the telegram list by numeric quality value (highest to lowest).
+
+        Args:
+            telegram_list (list): The list of telegram qualities to sort.
+
+        Returns:
+            list: The sorted list.
+        """
         try:
             return sorted(
                 telegram_list,
@@ -95,6 +122,14 @@ class Database:
     # Helper Methods for Repeated Logic
     # -------------------------------
     def _get_sort_dict(self, sort_params: List[Tuple[str, str]]) -> Dict[str, int]:
+        """Gets the sort dictionary for a given set of sort parameters.
+
+        Args:
+            sort_params (List[Tuple[str, str]]): The sort parameters.
+
+        Returns:
+            Dict[str, int]: The sort dictionary.
+        """
         if sort_params:
             sort_field, sort_direction = sort_params[0]
             return {sort_field: DESCENDING if sort_direction.lower() == "desc" else ASCENDING}
@@ -108,6 +143,18 @@ class Database:
         page_size: int,
         filter_dict: Optional[dict] = None
     ):
+        """Paginates a collection and returns the results.
+
+        Args:
+            collection_name (str): The name of the collection to paginate.
+            sort_dict (Dict[str, int]): The sort dictionary.
+            page (int): The page number to retrieve.
+            page_size (int): The number of items per page.
+            filter_dict (Optional[dict], optional): A filter to apply to the query. Defaults to None.
+
+        Returns:
+            Tuple[List[dict], List[int], int]: A tuple containing the results, the databases checked, and the total count.
+        """
         filter_dict = filter_dict or {}
         skip = (page - 1) * page_size
         results = []
@@ -158,6 +205,16 @@ class Database:
     async def _move_document(
         self, collection_name: str, document: dict, old_db_index: int
     ) -> bool:
+        """Moves a document from one database to another.
+
+        Args:
+            collection_name (str): The name of the collection.
+            document (dict): The document to move.
+            old_db_index (int): The index of the old database.
+
+        Returns:
+            bool: True if the document was moved successfully, False otherwise.
+        """
         current_db_key = f"storage_{self.current_db_index}"
         old_db_key = f"storage_{old_db_index}"
         document["db_index"] = self.current_db_index
@@ -171,6 +228,16 @@ class Database:
             return False
 
     async def _handle_storage_error(self, func, *args, total_storage_dbs: int) -> Optional[Any]:
+        """Handles storage errors by switching to the next available database.
+
+        Args:
+            func: The function that caused the error.
+            *args: The arguments to the function.
+            total_storage_dbs (int): The total number of storage databases.
+
+        Returns:
+            Optional[Any]: The result of the function call on the new database, or None if all databases are full.
+        """
         next_db_index = (self.current_db_index % total_storage_dbs) + 1
         if next_db_index == 1:
             LOGGER.warning("⚠️ All storage databases are full! Add more.")
@@ -189,6 +256,21 @@ class Database:
         self, metadata_info: dict,
         channel: int, msg_id: int, size: str, name: str
     ) -> Optional[ObjectId]:
+        """Inserts or updates a media item in the database.
+
+        This method determines whether the media is a movie or a TV show and
+        calls the appropriate update method.
+
+        Args:
+            metadata_info (dict): A dictionary containing the media's metadata.
+            channel (int): The Telegram channel ID.
+            msg_id (int): The Telegram message ID.
+            size (str): The size of the media file.
+            name (str): The name of the media file.
+
+        Returns:
+            Optional[ObjectId]: The ObjectId of the inserted or updated media item, or None on failure.
+        """
         LOGGER.info(f"\n🧩 [DEBUG] Metadata Info for {name}:\n{metadata_info}\n")
         if metadata_info['media_type'] == "movie":
             media = MovieSchema(
@@ -245,6 +327,16 @@ class Database:
 
     
     async def update_movie(self, movie_data: MovieSchema) -> Optional[ObjectId]:
+        """Updates a movie in the database.
+
+        If the movie already exists, it updates the existing entry. Otherwise, it inserts a new one.
+
+        Args:
+            movie_data (MovieSchema): The movie data to update.
+
+        Returns:
+            Optional[ObjectId]: The ObjectId of the updated movie, or None on failure.
+        """
         try:
             movie_dict = movie_data.dict()
         except ValidationError as e:
@@ -329,6 +421,16 @@ class Database:
                 return await self._handle_storage_error(self.update_movie, movie_data, total_storage_dbs=total_storage_dbs)
             
     async def update_tv_show(self, tv_show_data: TVShowSchema) -> Optional[ObjectId]:
+        """Updates a TV show in the database.
+
+        If the TV show already exists, it updates the existing entry. Otherwise, it inserts a new one.
+
+        Args:
+            tv_show_data (TVShowSchema): The TV show data to update.
+
+        Returns:
+            Optional[ObjectId]: The ObjectId of the updated TV show, or None on failure.
+        """
         try:
             tv_show_dict = tv_show_data.dict()
         except ValidationError as e:
@@ -431,6 +533,17 @@ class Database:
                 return await self._handle_storage_error(self.update_tv_show, tv_show_data, total_storage_dbs=total_storage_dbs)
             
     async def sort_movies(self, sort_params, page, page_size, genre_filter=None):
+        """Sorts and paginates the movies in the database.
+
+        Args:
+            sort_params: The parameters to sort by.
+            page (int): The page number to retrieve.
+            page_size (int): The number of items per page.
+            genre_filter (str, optional): A genre to filter by. Defaults to None.
+
+        Returns:
+            dict: A dictionary containing the sorted and paginated movies.
+        """
         sort_dict = self._get_sort_dict(sort_params)
         filter_dict = {"genres": {"$in": [genre_filter]}} if genre_filter else {}
         results, dbs_checked, total_count = await self._paginate_collection(
@@ -446,6 +559,17 @@ class Database:
         }
 
     async def sort_tv_shows(self, sort_params, page, page_size, genre_filter=None):
+        """Sorts and paginates the TV shows in the database.
+
+        Args:
+            sort_params: The parameters to sort by.
+            page (int): The page number to retrieve.
+            page_size (int): The number of items per page.
+            genre_filter (str, optional): A genre to filter by. Defaults to None.
+
+        Returns:
+            dict: A dictionary containing the sorted and paginated TV shows.
+        """
         sort_dict = self._get_sort_dict(sort_params)
         filter_dict = {"genres": {"$in": [genre_filter]}} if genre_filter else {}
         results, dbs_checked, total_count = await self._paginate_collection(
@@ -468,6 +592,16 @@ class Database:
             page: int, 
             page_size: int
         ) -> dict:
+        """Searches for documents in the database.
+
+        Args:
+            query (str): The search query.
+            page (int): The page number to retrieve.
+            page_size (int): The number of items per page.
+
+        Returns:
+            dict: A dictionary containing the search results.
+        """
 
             skip = (page - 1) * page_size
             
@@ -555,6 +689,17 @@ class Database:
         self, tmdb_id: int, db_index: int,
         season_number: Optional[int] = None, episode_number: Optional[int] = None
     ) -> Optional[dict]:
+        """Gets the details of a media item.
+
+        Args:
+            tmdb_id (int): The TMDB ID of the media.
+            db_index (int): The database index of the media.
+            season_number (Optional[int], optional): The season number (for TV shows). Defaults to None.
+            episode_number (Optional[int], optional): The episode number (for TV shows). Defaults to None.
+
+        Returns:
+            Optional[dict]: The details of the media item, or None if not found.
+        """
         db_key = f"storage_{db_index}"
         if episode_number is not None and season_number is not None:
             tv_show = await self.dbs[db_key]["tv"].find_one({"tmdb_id": tmdb_id})
@@ -610,6 +755,16 @@ class Database:
 
 
     async def get_document(self, media_type: str, tmdb_id: int, db_index: int) -> Optional[Dict[str, Any]]:
+        """Gets a document from the database.
+
+        Args:
+            media_type (str): The type of media.
+            tmdb_id (int): The TMDB ID of the media.
+            db_index (int): The database index of the media.
+
+        Returns:
+            Optional[Dict[str, Any]]: The document, or None if not found.
+        """
         db_key = f"storage_{db_index}"
         if media_type.lower() in ["tv", "series"]:
             collection_name = "tv"
@@ -621,6 +776,17 @@ class Database:
     async def update_document(
         self, media_type: str, tmdb_id: int, db_index: int, update_data: Dict[str, Any]
     ):
+        """Updates a document in the database.
+
+        Args:
+            media_type (str): The type of media.
+            tmdb_id (int): The TMDB ID of the media.
+            db_index (int): The database index of the media.
+            update_data (Dict[str, Any]): The data to update.
+
+        Returns:
+            bool: True if the document was updated successfully, False otherwise.
+        """
         update_data.pop('_id', None)
         db_key = f"storage_{db_index}"
         if media_type.lower() in ["tv", "series"]:
@@ -673,6 +839,16 @@ class Database:
 
     # Delete a Movie or Tvshow completely
     async def delete_document(self, media_type: str, tmdb_id: int, db_index: int) -> bool:
+        """Deletes a document from the database.
+
+        Args:
+            media_type (str): The type of media.
+            tmdb_id (int): The TMDB ID of the media.
+            db_index (int): The database index of the media.
+
+        Returns:
+            bool: True if the document was deleted successfully, False otherwise.
+        """
         db_key = f"storage_{db_index}"
 
         if media_type == "Movie":
@@ -717,6 +893,16 @@ class Database:
 
     # Delete a specific quality from movie
     async def delete_movie_quality(self, tmdb_id: int, db_index: int, quality: str) -> bool:
+        """Deletes a specific quality from a movie.
+
+        Args:
+            tmdb_id (int): The TMDB ID of the movie.
+            db_index (int): The database index of the movie.
+            quality (str): The quality to delete.
+
+        Returns:
+            bool: True if the quality was deleted successfully, False otherwise.
+        """
         db_key = f"storage_{db_index}"
         movie = await self.dbs[db_key]["movie"].find_one({"tmdb_id": tmdb_id})
         
@@ -748,6 +934,17 @@ class Database:
 
     # Delete a specific episode from a TV show
     async def delete_tv_episode(self, tmdb_id: int, db_index: int, season_number: int, episode_number: int) -> bool:
+        """Deletes a specific episode from a TV show.
+
+        Args:
+            tmdb_id (int): The TMDB ID of the TV show.
+            db_index (int): The database index of the TV show.
+            season_number (int): The season number of the episode.
+            episode_number (int): The episode number to delete.
+
+        Returns:
+            bool: True if the episode was deleted successfully, False otherwise.
+        """
         db_key = f"storage_{db_index}"
         tv = await self.dbs[db_key]["tv"].find_one({"tmdb_id": tmdb_id})
         
@@ -785,6 +982,16 @@ class Database:
 
     # Delete a whole season from a TV show
     async def delete_tv_season(self, tmdb_id: int, db_index: int, season_number: int) -> bool:
+        """Deletes a whole season from a TV show.
+
+        Args:
+            tmdb_id (int): The TMDB ID of the TV show.
+            db_index (int): The database index of the TV show.
+            season_number (int): The season number to delete.
+
+        Returns:
+            bool: True if the season was deleted successfully, False otherwise.
+        """
         db_key = f"storage_{db_index}"
         tv = await self.dbs[db_key]["tv"].find_one({"tmdb_id": tmdb_id})
         
@@ -818,6 +1025,18 @@ class Database:
 
     # Delete a specific quality from a given TV episode
     async def delete_tv_quality(self, tmdb_id: int, db_index: int, season_number: int, episode_number: int, quality: str) -> bool:
+        """Deletes a specific quality from a given TV episode.
+
+        Args:
+            tmdb_id (int): The TMDB ID of the TV show.
+            db_index (int): The database index of the TV show.
+            season_number (int): The season number of the episode.
+            episode_number (int): The episode number.
+            quality (str): The quality to delete.
+
+        Returns:
+            bool: True if the quality was deleted successfully, False otherwise.
+        """
         db_key = f"storage_{db_index}"
         tv = await self.dbs[db_key]["tv"].find_one({"tmdb_id": tmdb_id})
         
@@ -854,7 +1073,15 @@ class Database:
         return result.modified_count > 0
 
     async def get_media(self, channel: int, msg_id: int) -> Optional[dict]:
-        """Check if a message already exists in the DB (movie or tv)."""
+        """Checks if a message already exists in the database.
+
+        Args:
+            channel (int): The Telegram channel ID.
+            msg_id (int): The Telegram message ID.
+
+        Returns:
+            Optional[dict]: The media item if it exists, otherwise None.
+        """
         total_storage_dbs = len(self.dbs) - 1
         encoded_str = await encode_string({"chat_id": channel, "msg_id": msg_id})
 
@@ -879,6 +1106,11 @@ class Database:
                     
     # Get per-DB statistics (movies, tv shows, used size, etc.)
     async def get_database_stats(self):
+        """Gets statistics for each database.
+
+        Returns:
+            list: A list of dictionaries, where each dictionary contains statistics for a database.
+        """
         stats = []
         for key in self.dbs.keys():
             if key.startswith("storage_"):
