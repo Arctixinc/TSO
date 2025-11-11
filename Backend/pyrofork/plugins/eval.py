@@ -2,6 +2,7 @@ import asyncio
 import io
 import os
 import sys
+import time
 import traceback
 import html
 from io import BytesIO
@@ -44,7 +45,7 @@ async def shell_handler(client, message):
         if not cmd:
             parts = message.text.split(maxsplit=1)
             if len(parts) < 2:
-                await status_message.edit("❗Usage: `/sh <command>`", parse_mode=None)
+                await status_message.edit("❗**Usage:** `/sh <command>`", parse_mode=ParseMode.MARKDOWN)
                 return
             cmd = parts[1]
             LOGGER.debug("Using inline command argument.")
@@ -52,12 +53,15 @@ async def shell_handler(client, message):
         LOGGER.info(f"Executing shell command: {cmd}")
 
         # ✅ Execute command
+        start_time = time.time()
         process = await asyncio.create_subprocess_shell(
             cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
         stdout, stderr = await process.communicate()
+        end_time = time.time()
+        execution_time = round(end_time - start_time, 2)
 
         o = stdout.decode().strip() or "No Output"
         e = stderr.decode().strip() or "No Error"
@@ -70,10 +74,12 @@ async def shell_handler(client, message):
         output = (
             f"<b>💻 Shell Executed</b>\n\n"
             f"<b>🧾 Command:</b> <code>{cmd_html}</code>\n"
-            f"<b>📌 PID:</b> <code>{process.pid}</code>\n\n"
+            f"<b>📌 PID:</b> <code>{process.pid}</code>\n"
+            f"<b>⏱️ Time:</b> <code>{execution_time}s</code>\n\n"
             f"<b>⚠️ STDERR:</b>\n<code>{e_html}</code>\n\n"
             f"<b>✅ STDOUT:</b>\n<code>{o_html}</code>"
         )
+
 
         if len(output) > 4096:
             LOGGER.debug("Output too long — sending as document.")
@@ -133,7 +139,7 @@ async def eval_handler(client, message):
         if not cmd:
             parts = message.text.split(maxsplit=1)
             if len(parts) < 2:
-                await status_message.edit("❗Usage: `/eval <code>`", parse_mode=None)
+                await status_message.edit("❗**Usage:** `/eval <code>`", parse_mode=ParseMode.MARKDOWN)
                 return
             cmd = parts[1]
             LOGGER.debug("Using inline eval argument.")
@@ -145,11 +151,15 @@ async def eval_handler(client, message):
         sys.stdout, sys.stderr = io.StringIO(), io.StringIO()
         exc = None
 
+        start_time = time.time()
         try:
             await aexec(cmd, client, message)
         except Exception:
             exc = traceback.format_exc()
             LOGGER.error("Exception during eval execution", exc_info=True)
+        end_time = time.time()
+        execution_time = round(end_time - start_time, 2)
+
 
         stdout = sys.stdout.getvalue().strip()
         stderr = sys.stderr.getvalue().strip()
@@ -170,9 +180,11 @@ async def eval_handler(client, message):
 
         final_output = (
             f"<b>🧠 EVAL</b>\n\n"
-            f"<b>📜 Code:</b>\n<code>{cmd_html}</code>\n\n"
+            f"<b>📜 Code:</b>\n<code>{cmd_html}</code>\n"
+            f"<b>⏱️ Time:</b> <code>{execution_time}s</code>\n\n"
             f"<b>🖨 Output:</b>\n<code>{evaluation_html}</code>"
         )
+
 
         if len(final_output) > 4096:
             LOGGER.debug("Eval output too long — sending as document.")
