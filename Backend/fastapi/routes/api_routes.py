@@ -4,7 +4,7 @@ from Backend import db
 # --- API Routes for Media Management ---
 
 async def list_media_api(
-    media_type: str = Query("movie", regex="^(movie|tv)$"),
+    media_type: str = Query("movie", pattern="^(movie|tv)$"),
     page: int = Query(1, ge=1),
     page_size: int = Query(24, ge=1, le=100),
     search: str = Query("", max_length=100)
@@ -35,7 +35,7 @@ async def list_media_api(
 async def delete_media_api(
     tmdb_id: int,
     db_index: int,
-    media_type: str = Query(regex="^(movie|tv)$")
+    media_type: str = Query(pattern="^(movie|tv)$")
 ):
     try:
         media_type_formatted = "Movie" if media_type == "movie" else "Series"
@@ -51,7 +51,7 @@ async def update_media_api(
     request: Request,
     tmdb_id: int,
     db_index: int,
-    media_type: str = Query(regex="^(movie|tv)$")
+    media_type: str = Query(pattern="^(movie|tv)$")
 ):
     try:
         update_data = await request.json()
@@ -108,7 +108,7 @@ async def update_media_api(
 async def get_media_details_api(
     tmdb_id: int,
     db_index: int,
-    media_type: str = Query(regex="^(movie|tv)$")
+    media_type: str = Query(pattern="^(movie|tv)$")
 ):
     try:
         result = await db.get_document(media_type, tmdb_id, db_index)

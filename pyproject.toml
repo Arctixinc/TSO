@@ -22,6 +22,18 @@ dependencies = [
     "uvicorn>=0.34.2",
 ]
 
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["Backend*"]
+exclude = ["sessions*"]
+
+[tool.pytest.ini_options]
+env = [
+    "DATABASE=mongodb://test:test@localhost:27017/test_tracking,mongodb://test:test@localhost:27017/test_storage",
+    "ADMIN_USERNAME=admin",
+    "ADMIN_PASSWORD=admin_password"
+]
+
 [dependency-groups]
 dev = [
     "deptry>=0.23.1",

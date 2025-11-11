@@ -19,7 +19,7 @@ async def login_page(request: Request):
     theme_name = request.session.get("theme", "purple_gradient")
     theme = get_theme(theme_name)
     
-    return templates.TemplateResponse("login.html", {
+    return templates.TemplateResponse(request, "login.html", {
         "request": request,
         "theme": theme,
         "themes": get_all_themes(),
@@ -34,7 +34,7 @@ async def login_post(request: Request, username: str = Form(...), password: str 
     else:
         theme_name = request.session.get("theme", "purple_gradient")
         theme = get_theme(theme_name)
-        return templates.TemplateResponse("login.html", {
+        return templates.TemplateResponse(request, "login.html", {
             "request": request,
             "theme": theme,
             "themes": get_all_themes(),
@@ -96,7 +96,7 @@ async def dashboard_page(request: Request, _: bool = Depends(require_auth)):
             "current_db_index": 1
         }
     
-    return templates.TemplateResponse("dashboard.html", {
+    return templates.TemplateResponse(request, "dashboard.html", {
         "request": request,
         "theme": theme,
         "themes": get_all_themes(),
@@ -111,7 +111,7 @@ async def media_management_page(request: Request, media_type: str = "movie", _: 
     theme = get_theme(theme_name)
     current_user = get_current_user(request)
     
-    return templates.TemplateResponse("media_management.html", {
+    return templates.TemplateResponse(request, "media_management.html", {
         "request": request,
         "theme": theme,
         "themes": get_all_themes(),
@@ -132,7 +132,7 @@ async def edit_media_page(request: Request, tmdb_id: int, db_index: int, media_t
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
-    return templates.TemplateResponse("media_edit.html", {
+    return templates.TemplateResponse(request, "media_edit.html", {
         "request": request,
         "theme": theme,
         "themes": get_all_themes(),
@@ -167,7 +167,7 @@ async def public_status_page(request: Request):
             "databases_online": 0
         }
     
-    return templates.TemplateResponse("public_status.html", {
+    return templates.TemplateResponse(request, "public_status.html", {
         "request": request,
         "theme": theme,
         "themes": get_all_themes(),
@@ -180,7 +180,7 @@ async def stremio_guide_page(request: Request):
     theme_name = request.session.get("theme", "purple_gradient")
     theme = get_theme(theme_name)
     
-    return templates.TemplateResponse("stremio_guide.html", {
+    return templates.TemplateResponse(request, "stremio_guide.html", {
         "request": request,
         "theme": theme,
         "themes": get_all_themes(),
