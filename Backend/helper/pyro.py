@@ -164,6 +164,8 @@ commands = [
     BotCommand("dbcleanup", "🗑️ Remove duplicate entries from the database"),
     BotCommand("latest", "🆕 Get the latest media"),
     BotCommand("random", "🎲 Get a random media suggestion"),
+    BotCommand("info", "ℹ️ Get media information"),
+    BotCommand("health", "❤️ Check bot health"),
 ]
 
 
