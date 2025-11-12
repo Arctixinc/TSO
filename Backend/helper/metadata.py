@@ -1,8 +1,10 @@
-import asyncio
+from asyncio import sleep
 import traceback
 import PTN
 import re
 from re import compile, IGNORECASE
+from functools import wraps
+from async_lru import alru_cache
 from Backend.helper.imdb import get_detail, get_season, search_title
 from Backend.helper.pyro import extract_tmdb_id
 from themoviedb import aioTMDb
@@ -11,9 +13,32 @@ import Backend
 from Backend.logger import LOGGER
 from Backend.helper.encrypt import encode_string
 
+
 # ----------------- Configuration -----------------
-DELAY = 2
 tmdb = aioTMDb(key=Telegram.TMDB_API, language="en-US", region="US")
+
+def retry(retries=3, delay=2, backoff=2):
+    """
+    A decorator for retrying a function with exponential backoff.
+    """
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            _retries, _delay = retries, delay
+            while _retries > 0:
+                try:
+                    return await func(*args, **kwargs)
+                except Exception as e:
+                    _retries -= 1
+                    if _retries == 0:
+                        LOGGER.error(f"Function {func.__name__} failed after {retries} retries: {e}")
+                        raise
+
+                    LOGGER.warning(f"Function {func.__name__} failed. Retrying in {_delay} seconds...")
+                    await sleep(_delay)
+                    _delay *= backoff
+        return wrapper
+    return decorator
 
 # ----------------- Helpers -----------------
 def format_tmdb_image(path: str, size="w500") -> str:
@@ -170,6 +195,8 @@ async def metadata(filename: str, channel: int, msg_id: int) -> dict | None:
 
         
 # ----------------- TV Metadata -----------------
+@alru_cache(maxsize=128)
+@retry()
 async def fetch_tv_metadata(title, season, episode, encoded_string, year=None, quality=None, default_id=None) -> dict | None:
     imdb_id = default_id if default_id and default_id.startswith("tt") else await safe_imdb_search(title, "tvSeries")
     tv_details, ep_details, use_tmdb = None, None, False
@@ -177,9 +204,7 @@ async def fetch_tv_metadata(title, season, episode, encoded_string, year=None, q
     # Try IMDb first
     if imdb_id:
         try:
-            await asyncio.sleep(DELAY)
             tv_details = await get_detail(imdb_id=imdb_id)
-            await asyncio.sleep(DELAY)
             ep_details = await get_season(imdb_id=imdb_id, season_id=season, episode_id=episode)
         except Exception as e:
             LOGGER.warning(f"IMDb TV fetch failed [{imdb_id}]: {e}")
@@ -257,6 +282,8 @@ async def fetch_tv_metadata(title, season, episode, encoded_string, year=None, q
     }
 
 # ----------------- Movie Metadata -----------------
+@alru_cache(maxsize=128)
+@retry()
 async def fetch_movie_metadata(title, encoded_string, year=None, quality=None, default_id=None) -> dict | None:
     imdb_id = default_id if default_id and default_id.startswith("tt") else await safe_imdb_search(f"{title} {year}" if year else title, "movie")
     movie_details, use_tmdb = None, False

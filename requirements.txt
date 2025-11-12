@@ -1,4 +1,5 @@
 aiofiles
+async-lru
 fastapi
 httpx
 motor

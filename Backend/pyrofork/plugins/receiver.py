@@ -15,19 +15,31 @@ from pyrogram.enums.parse_mode import ParseMode
 file_queue = Queue()
 db_lock = Lock()
 
-async def process_file():
+async def worker(worker_id):
+    LOGGER.info(f"Worker {worker_id} started")
     while True:
-        metadata_info, channel, msg_id, size, title = await file_queue.get()
-        async with db_lock:
-            updated_id = await db.insert_media(metadata_info, channel=channel, msg_id=msg_id, size=size, name=title)
-            if updated_id:
-                LOGGER.info(f"{metadata_info['media_type']} updated with ID: {updated_id}")
-            else:
-                LOGGER.info("Update failed due to validation errors.")
-        file_queue.task_done()
+        try:
+            metadata_info, channel, msg_id, size, title = await file_queue.get()
 
-for _ in range(1):
-    create_task(process_file())
+            async with db_lock:
+                updated_id = await db.insert_media(metadata_info, channel=channel, msg_id=msg_id, size=size, name=title)
+
+            if updated_id:
+                LOGGER.info(f"Worker {worker_id}: {metadata_info['media_type']} updated with ID: {updated_id}")
+            else:
+                LOGGER.info(f"Worker {worker_id}: Update failed for {title} due to validation errors.")
+
+            file_queue.task_done()
+        except Exception as e:
+            LOGGER.error(f"Worker {worker_id}: An error occurred: {e}", exc_info=True)
+            # Optional: Add a small delay before continuing to prevent rapid-fire errors
+            await asleep(1)
+
+def start_workers():
+    for i in range(Telegram.MAX_WORKERS):
+        create_task(worker(i + 1))
+
+start_workers()
 
 @Client.on_edited_message(filters.channel & (filters.document | filters.video))
 @Client.on_message(filters.channel & (filters.document | filters.video))
