@@ -169,6 +169,9 @@ commands = [
     BotCommand("genres", "🎭 List all genres"),
     BotCommand("exportdb", "📤 Export database to CSV"),
     BotCommand("broadcast", "📢 Broadcast a message"),
+    BotCommand("sysinfo", "🖥️ Get system information"),
+    BotCommand("maintenance", "🛠️ Toggle maintenance mode"),
+    BotCommand("top", "🏆 Get top-rated media"),
 ]
 
 
