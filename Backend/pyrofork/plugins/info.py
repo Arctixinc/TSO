@@ -5,7 +5,6 @@ from Backend.helper.custom_filter import CustomFilters
 from Backend.logger import LOGGER
 from Backend import db
 import re
-import html
 
 @Client.on_message(filters.command('info') & filters.private & CustomFilters.owner)
 async def info_command(client: Client, message: Message):
@@ -28,7 +27,7 @@ async def info_command(client: Client, message: Message):
             parse_mode=ParseMode.MARKDOWN
         )
 
-        # Prepare query filter
+        # Build MongoDB filter
         if query.isdigit():
             filter_dict = {"tmdb_id": int(query)}
         else:
@@ -40,30 +39,38 @@ async def info_command(client: Client, message: Message):
         for db_index in range(1, total_storage_dbs + 1):
             db_key = f"storage_{db_index}"
 
-            # Search Movies
+            # 🎬 Movies
             movies = await db.dbs[db_key]["movie"].find(filter_dict).to_list(None)
             for movie in movies:
                 qualities = ", ".join(q.get('quality', 'N/A') for q in movie.get('telegram', [])) or "N/A"
                 results.append(
                     f"🎬 **Movie:** {movie.get('title', 'Unknown')} ({movie.get('release_year', 'N/A')})\n"
-                    f"🆔 TMDb ID: `{movie.get('tmdb_id', 'N/A')}`\n"
-                    f"💾 Qualities: {qualities}"
+                    f"🆔 **TMDb ID:** `{movie.get('tmdb_id', 'N/A')}`\n"
+                    f"💾 **Qualities:** {qualities}"
                 )
 
-            # Search TV Shows
+            # 📺 TV Shows
             tv_shows = await db.dbs[db_key]["tv"].find(filter_dict).to_list(None)
             for tv_show in tv_shows:
-                seasons_info = []
-                for season in tv_show.get('seasons', []):
-                    episodes_count = len(season.get('episodes', []))
-                    seasons_info.append(f"S{season.get('season_number', '?')} ({episodes_count} eps)")
+                seasons = tv_show.get('seasons', [])
+                if seasons:
+                    # Sort by season number
+                    seasons = sorted(seasons, key=lambda s: s.get('season_number', 0))
+                    # Format each season
+                    seasons_text = "\n".join([
+                        f"• **Season {s.get('season_number', '?')}** — {len(s.get('episodes', []))} episodes"
+                        for s in seasons
+                    ])
+                else:
+                    seasons_text = "No seasons found."
+
                 results.append(
                     f"📺 **TV Show:** {tv_show.get('title', 'Unknown')} ({tv_show.get('release_year', 'N/A')})\n"
-                    f"🆔 TMDb ID: `{tv_show.get('tmdb_id', 'N/A')}`\n"
-                    f"📚 Seasons: {', '.join(seasons_info) if seasons_info else 'N/A'}"
+                    f"🆔 **TMDb ID:** `{tv_show.get('tmdb_id', 'N/A')}`\n"
+                    f"📚 **Seasons:**\n{seasons_text}"
                 )
 
-        # Handle no results
+        # 🧾 No results found
         if not results:
             await status_msg.edit_text(
                 f"🤷 No media found for query: `{query}`",
@@ -71,10 +78,10 @@ async def info_command(client: Client, message: Message):
             )
             return
 
-        # Prepare response
+        # 📝 Prepare final message
         response_text = f"**🔍 Search Results for:** `{query}`\n\n" + "\n\n".join(results)
 
-        # Send output
+        # ✂️ Handle long outputs
         if len(response_text) > 4096:
             await status_msg.edit_text("📝 Output too long — sending as file.")
             with open("info_results.txt", "w", encoding="utf-8") as f:
