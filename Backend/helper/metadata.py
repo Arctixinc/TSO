@@ -124,10 +124,20 @@ async def metadata(filename: str, channel: int, msg_id: int) -> dict | None:
     if not quality:
         LOGGER.warning(f"Skipping {filename}: No resolution (parsed={parsed})")
         return None
+        
+    # 🧩 Accept PTN multi-episode lists and treat as single episode
+    if isinstance(episode, list):
+        if episode:
+            episode = episode[0]  # take first episode only
+            combined_note = combined_note or f"Combined ({parsed['episode'][0]}-{parsed['episode'][-1]})"
+            LOGGER.info(f"📦 Combined Episode Range Detected — assuming single episode: S{season}E{episode}")
+        else:
+            LOGGER.warning(f"Empty episode list for {filename}: {parsed}")
+            return None
 
-    if isinstance(season, list) or isinstance(episode, list):
-        LOGGER.warning(f"Invalid season/episode format for {filename}: {parsed}")
-        return None
+    if isinstance(season, list):
+        season = season[0] if season else None
+    
 
     if season and not episode:
         combined_note = combined_note or "Full Season"
