@@ -181,151 +181,122 @@ async def metadata(filename: str, channel: int, msg_id: int) -> dict | None:
         
 # ----------------- TV Metadata -----------------
 async def fetch_tv_metadata(title, season, episode, encoded_string, year=None, quality=None, default_id=None) -> dict | None:
-    imdb_id = default_id if default_id and default_id.startswith("tt") else await safe_imdb_search(title, "tvSeries")
-    tv_details, ep_details, use_tmdb = None, None, False
+    tmdb_result = await safe_tmdb_search(title, "tv")
     
-    # Try IMDb first
-    if imdb_id:
-        try:
-            await asyncio.sleep(DELAY)
-            tv_details = await get_detail(imdb_id=imdb_id)
-            await asyncio.sleep(DELAY)
-            ep_details = await get_season(imdb_id=imdb_id, season_id=season, episode_id=episode)
-        except Exception as e:
-            LOGGER.warning(f"IMDb TV fetch failed [{imdb_id}]: {e}")
-    
-    # IMDb failed → fallback to TMDb
-    if not tv_details and not ep_details:
-        use_tmdb = True
-        tmdb_result = await safe_tmdb_search(title, "tv")
-        if not tmdb_result:
-            LOGGER.warning(f"No TMDb result for '{title}'")
-            return None
-        
+    if tmdb_result:
         tv_id = tmdb_result.id
         try:
             tv_details = await tmdb.tv(tv_id).details(append_to_response="external_ids")
+            ep_details = None
+            try:
+                ep_details = await tmdb.episode(tv_id, season, episode).details()
+            except Exception as e:
+                LOGGER.warning(f"TMDb episode not found for {title} S{season}E{episode}: {e}")
+
+            return {
+                "tmdb_id": tv_details.id,
+                "imdb_id": tv_details.external_ids.imdb_id,
+                "title": tv_details.name,
+                "year": getattr(tv_details.first_air_date, "year", 0),
+                "rate": getattr(tv_details, "vote_average", 0) or 0,
+                "description": tv_details.overview or "",
+                "poster": format_tmdb_image(tv_details.poster_path),
+                "backdrop": format_tmdb_image(tv_details.backdrop_path, "original"),
+                "logo": "",
+                "genres": [g.name for g in (tv_details.genres or [])],
+                "media_type": "tv",
+                "season_number": season,
+                "episode_number": episode,
+                "episode_title": getattr(ep_details, "name", f"S{season}E{episode}") if ep_details else f"{tv_details.name} S{season}E{episode}",
+                "episode_backdrop": format_tmdb_image(getattr(ep_details, "still_path", None), "original") if ep_details else "",
+                "quality": quality,
+                "encoded_string": encoded_string,
+            }
         except Exception as e:
             LOGGER.warning(f"TMDb TV details failed for {title}: {e}")
-            return None
-        
-        # Fetch episode safely
+
+    # Fallback to IMDb
+    imdb_id = default_id if default_id and default_id.startswith("tt") else await safe_imdb_search(title, "tvSeries")
+    if imdb_id:
         try:
-            ep_details = await tmdb.episode(tv_id, season, episode).details()
+            tv_details = await get_detail(imdb_id=imdb_id)
+            ep_details = await get_season(imdb_id=imdb_id, season_id=season, episode_id=episode)
+            if tv_details:
+                images = format_imdb_images(imdb_id)
+                return {
+                    "tmdb_id": imdb_id.replace("tt", ""),
+                    "imdb_id": imdb_id,
+                    "title": tv_details.get("title", title),
+                    "year": tv_details.get("releaseDetailed", {}).get("year", 0),
+                    "rate": tv_details.get("rating", {}).get("star", 0),
+                    "description": tv_details.get("plot", ""),
+                    "poster": images["poster"],
+                    "backdrop": images["backdrop"],
+                    "logo": images["logo"],
+                    "genres": tv_details.get("genre", []),
+                    "media_type": "tv",
+                    "season_number": season,
+                    "episode_number": episode,
+                    "episode_title": ep_details.get("title", f"S{season}E{episode}") if ep_details else f"{tv_details.get('title', title)} S{season}E{episode}",
+                    "episode_backdrop": ep_details.get("image", "") if ep_details else "",
+                    "quality": quality,
+                    "encoded_string": encoded_string,
+                }
         except Exception as e:
-            LOGGER.warning(f"TMDb episode not found for {title} S{season}E{episode}: {e}")
-            ep_details = None
+            LOGGER.warning(f"IMDb TV fetch failed [{imdb_id}]: {e}")
     
-    # Return TMDb-based data
-    if use_tmdb and tv_details:
-        return {
-            "tmdb_id": tv_details.id,
-            "imdb_id": tv_details.external_ids.imdb_id,
-            "title": tv_details.name,
-            "year": getattr(tv_details.first_air_date, "year", 0),
-            "rate": getattr(tv_details, "vote_average", 0) or 0,
-            "description": tv_details.overview or "",
-            "poster": format_tmdb_image(tv_details.poster_path),
-            "backdrop": format_tmdb_image(tv_details.backdrop_path, "original"),
-            "logo": "",
-            "genres": [g.name for g in (tv_details.genres or [])],
-            "media_type": "tv",
-            "season_number": season,
-            "episode_number": episode,
-            "episode_title": getattr(ep_details, "name", f"S{season}E{episode}") if ep_details else f"{tv_details.name} S{season}E{episode}",
-            "episode_backdrop": format_tmdb_image(getattr(ep_details, "still_path", None), "original") if ep_details else "",
-            "quality": quality,
-            "encoded_string": encoded_string,
-        }
-    
-    # IMDb-based data
-    if not tv_details:
-        LOGGER.warning(f"No valid IMDb data for {title}")
-        return None
-    
-    imdb_id = tv_details.get("id", "")
-    images = format_imdb_images(imdb_id)
-    
-    return {
-        "tmdb_id": imdb_id.replace("tt", ""),
-        "imdb_id": imdb_id,
-        "title": tv_details.get("title", title),
-        "year": tv_details.get("releaseDetailed", {}).get("year", 0),
-        "rate": tv_details.get("rating", {}).get("star", 0),
-        "description": tv_details.get("plot", ""),
-        "poster": images["poster"],
-        "backdrop": images["backdrop"],
-        "logo": images["logo"],
-        "genres": tv_details.get("genre", []),
-        "media_type": "tv",
-        "season_number": season,
-        "episode_number": episode,
-        "episode_title": ep_details.get("title", f"S{season}E{episode}") if ep_details else f"{tv_details.get('title', title)} S{season}E{episode}",
-        "episode_backdrop": ep_details.get("image", "") if ep_details else "",
-        "quality": quality,
-        "encoded_string": encoded_string,
-    }
+    LOGGER.warning(f"No TV show found for '{title}' on TMDb or IMDb")
+    return None
 
 # ----------------- Movie Metadata -----------------
 async def fetch_movie_metadata(title, encoded_string, year=None, quality=None, default_id=None) -> dict | None:
-    imdb_id = default_id if default_id and default_id.startswith("tt") else await safe_imdb_search(f"{title} {year}" if year else title, "movie")
-    movie_details, use_tmdb = None, False
+    tmdb_result = await safe_tmdb_search(title, "movie", year)
     
-    # Try IMDb first
+    if tmdb_result:
+        try:
+            movie_details = await tmdb.movie(tmdb_result.id).details(append_to_response="external_ids")
+            return {
+                "tmdb_id": movie_details.id,
+                "imdb_id": movie_details.external_ids.imdb_id,
+                "title": movie_details.title,
+                "year": getattr(movie_details.release_date, "year", 0),
+                "rate": getattr(movie_details, "vote_average", 0) or 0,
+                "description": movie_details.overview or "",
+                "poster": format_tmdb_image(movie_details.poster_path),
+                "backdrop": format_tmdb_image(movie_details.backdrop_path, "original"),
+                "logo": "",
+                "media_type": "movie",
+                "genres": [g.name for g in (movie_details.genres or [])],
+                "quality": quality,
+                "encoded_string": encoded_string,
+            }
+        except Exception as e:
+            LOGGER.warning(f"TMDb movie details failed for {title}: {e}")
+
+    # Fallback to IMDb
+    imdb_id = default_id if default_id and default_id.startswith("tt") else await safe_imdb_search(f"{title} {year}" if year else title, "movie")
     if imdb_id:
         try:
             movie_details = await get_detail(imdb_id=imdb_id)
+            if movie_details:
+                images = format_imdb_images(imdb_id)
+                return {
+                    "tmdb_id": imdb_id.replace("tt", ""),
+                    "imdb_id": imdb_id,
+                    "title": movie_details.get("title", title),
+                    "year": movie_details.get("releaseDetailed", {}).get("year", 0),
+                    "rate": movie_details.get("rating", {}).get("star", 0),
+                    "description": movie_details.get("plot", ""),
+                    "poster": images["poster"],
+                    "backdrop": images["backdrop"],
+                    "logo": images["logo"],
+                    "media_type": "movie",
+                    "genres": movie_details.get("genre", []),
+                    "quality": quality,
+                    "encoded_string": encoded_string,
+                }
         except Exception as e:
             LOGGER.warning(f"IMDb movie fetch failed [{title}]: {e}")
-    
-    # IMDb failed → fallback to TMDb
-    if not movie_details:
-        use_tmdb = True
-        tmdb_result = await safe_tmdb_search(title, "movie", year)
-        if not tmdb_result:
-            LOGGER.warning(f"No TMDb movie found for '{title}'")
-            return None
-        
-        try:
-            movie_details = await tmdb.movie(tmdb_result.id).details(append_to_response="external_ids")
-        except Exception as e:
-            LOGGER.warning(f"TMDb movie details failed for {title}: {e}")
-            return None
-    
-    # TMDb result
-    if use_tmdb and movie_details:
-        return {
-            "tmdb_id": movie_details.id,
-            "imdb_id": movie_details.external_ids.imdb_id,
-            "title": movie_details.title,
-            "year": getattr(movie_details.release_date, "year", 0),
-            "rate": getattr(movie_details, "vote_average", 0) or 0,
-            "description": movie_details.overview or "",
-            "poster": format_tmdb_image(movie_details.poster_path),
-            "backdrop": format_tmdb_image(movie_details.backdrop_path, "original"),
-            "logo": "",
-            "media_type": "movie",
-            "genres": [g.name for g in (movie_details.genres or [])],
-            "quality": quality,
-            "encoded_string": encoded_string,
-        }
-    
-    # IMDb result
-    imdb_id = movie_details.get("id", "")
-    images = format_imdb_images(imdb_id)
-    
-    return {
-        "tmdb_id": imdb_id.replace("tt", ""),
-        "imdb_id": imdb_id,
-        "title": movie_details.get("title", title),
-        "year": movie_details.get("releaseDetailed", {}).get("year", 0),
-        "rate": movie_details.get("rating", {}).get("star", 0),
-        "description": movie_details.get("plot", ""),
-        "poster": images["poster"],
-        "backdrop": images["backdrop"],
-        "logo": images["logo"],
-        "media_type": "movie",
-        "genres": movie_details.get("genre", []),
-        "quality": quality,
-        "encoded_string": encoded_string,
-    }
+
+    LOGGER.warning(f"No movie found for '{title}' on TMDb or IMDb")
+    return None
