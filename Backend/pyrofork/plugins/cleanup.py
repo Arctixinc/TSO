@@ -1,5 +1,4 @@
 import io
-from time import time
 from asyncio import sleep as asleep
 from pyrogram import filters, Client
 from pyrogram.types import Message
@@ -19,10 +18,8 @@ async def cleanup_broken_links(client: Client, message: Message):
         /cleanup delete   → scan, delete broken links & send log
     """
     try:
-        # ==========================
-        #   START TIME TRACKING
-        # ==========================
-        start_time = time()
+        from time import time
+        overall_start = time()     # ⏳ Start timer
 
         args = message.text.split()
         delete_mode = len(args) > 1 and args[1].lower() == "delete"
@@ -75,18 +72,26 @@ async def cleanup_broken_links(client: Client, message: Message):
                             "error": str(e),
                         })
 
+                    # === LIVE STATUS UPDATE WITH ELAPSED TIME ===
                     if checked % 15 == 0:
+                        elapsed = int(time() - overall_start)
+                        em = elapsed // 60
+                        es = elapsed % 60
+                        elapsed_text = f"{em}m {es}s"
+
                         await status_msg.edit_text(
                             f"{'🧹 Deleting broken links...' if delete_mode else '🔍 Scanning for broken links...'}\n"
                             f"📊 Checked: `{checked}`\n"
                             f"❌ Broken: `{len(broken_entries)}`\n"
                             f"🗑️ Deleted: `{total_deleted}`\n"
                             f"🎬 Movies: `{total_movies}`\n"
-                            f"📺 Shows: `{total_tv}`",
+                            f"📺 Shows: `{total_tv}`\n"
+                            f"⏳ Elapsed: `{elapsed_text}`",
                             parse_mode=ParseMode.MARKDOWN
                         )
                         await asleep(0.1)
 
+                # Handle deletion/update
                 if delete_mode and len(valid_telegram) != len(telegram_data):
                     deleted_count = len(telegram_data) - len(valid_telegram)
                     total_deleted += deleted_count
@@ -136,14 +141,21 @@ async def cleanup_broken_links(client: Client, message: Message):
                                     "error": str(e),
                                 })
 
+                            # === LIVE STATUS UPDATE WITH ELAPSED TIME ===
                             if checked % 15 == 0:
+                                elapsed = int(time() - overall_start)
+                                em = elapsed // 60
+                                es = elapsed % 60
+                                elapsed_text = f"{em}m {es}s"
+
                                 await status_msg.edit_text(
                                     f"{'🧹 Cleaning up database...' if delete_mode else '🔍 Scanning database...'}\n"
                                     f"📊 Checked: `{checked}`\n"
                                     f"❌ Broken: `{len(broken_entries)}`\n"
                                     f"🗑️ Deleted: `{total_deleted}`\n"
                                     f"🎬 Movies: `{total_movies}`\n"
-                                    f"📺 Shows: `{total_tv}`",
+                                    f"📺 Shows: `{total_tv}`\n"
+                                    f"⏳ Elapsed: `{elapsed_text}`",
                                     parse_mode=ParseMode.MARKDOWN
                                 )
                                 await asleep(0.1)
@@ -167,18 +179,14 @@ async def cleanup_broken_links(client: Client, message: Message):
                     else:
                         await db.dbs[db_key]["tv"].delete_one({"tmdb_id": tmdb_id})
 
-                    total_deleted += deleted_links_count
+                    total_deleted += deleted_links_count  # Fixed counter update
 
-        # ==========================
-        #       END TIME
-        # ==========================
-        end_time = time()
-        total_seconds = int(end_time - start_time)
-        minutes = total_seconds // 60
-        seconds = total_seconds % 60
-        time_taken_text = f"{minutes}m {seconds}s"
+        # === FINAL SUMMARY WITH TOTAL TIME ===
+        total_time = int(time() - overall_start)
+        fm = total_time // 60
+        fs = total_time % 60
+        final_time = f"{fm}m {fs}s"
 
-        # === FINAL SUMMARY ===
         summary_header = "🧹 **Cleanup Completed!**" if delete_mode else "✅ **Scan Completed!**"
         summary = (
             f"{summary_header}\n\n"
@@ -187,42 +195,24 @@ async def cleanup_broken_links(client: Client, message: Message):
             f"🗑️ {'Deleted' if delete_mode else 'Would Delete'} Entries: `{total_deleted}`\n"
             f"🎬 Movies: `{total_movies}`\n"
             f"📺 TV Shows: `{total_tv}`\n"
-            f"⏱️ **Time Taken:** `{time_taken_text}`\n\n"
+            f"⏱️ **Time Taken:** `{final_time}`\n\n"
         )
-
-        if broken_entries:
-            summary += "**Top 10 Broken Entries:**\n"
-            for i, entry in enumerate(broken_entries[:10]):
-                if entry["type"] == "movie":
-                    summary += f"{i+1}. 🎬 {entry['title']} ({entry.get('quality','N/A')})\n"
-                else:
-                    summary += (
-                        f"{i+1}. 📺 {entry['title']} "
-                        f"S{entry.get('season')}E{entry.get('episode')} "
-                        f"({entry.get('quality','N/A')})\n"
-                    )
-
-            if len(broken_entries) > 10:
-                summary += f"\n...and `{len(broken_entries) - 10}` more.\n"
 
         await status_msg.edit_text(summary, parse_mode=ParseMode.MARKDOWN)
 
-        # === LOG FILE ===
+        # === LOG FILE !===
         if broken_entries:
             log_buffer = io.StringIO()
             log_buffer.write(f"{'CLEANUP' if delete_mode else 'SCAN'} REPORT\n")
             log_buffer.write("=" * 60 + "\n\n")
-
             for i, entry in enumerate(broken_entries, start=1):
                 log_buffer.write(
                     f"{i}. [{'MOVIE' if entry['type']=='movie' else 'TV'}] "
                     f"{entry['title']} | {entry.get('quality','N/A')} | "
                     f"DB: {entry['db_index']} | Error: {entry.get('error','-')}\n"
                 )
-
             log_buffer.write("\n--- SUMMARY ---\n")
             log_buffer.write(f"Checked: {checked}\nBroken: {len(broken_entries)}\nDeleted: {total_deleted}\n")
-            log_buffer.write(f"Time Taken: {time_taken_text}\n")
             log_buffer.seek(0)
 
             await client.send_document(
