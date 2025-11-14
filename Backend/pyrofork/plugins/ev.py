@@ -27,6 +27,9 @@ async def smartclean(client: Client, message: Message):
     Automatically balances Telegram API calls for maximum speed without hitting FloodWait.
     """
     try:
+        # START TIME TRACKING
+        overall_start = time()
+
         args = message.text.split()
         delete_mode = len(args) > 1 and args[1].lower() == "delete"
         mode_text = "🧹 Cleanup Mode (deleting broken entries...)" if delete_mode else "🔍 Scan Mode (report only)"
@@ -65,7 +68,6 @@ async def smartclean(client: Client, message: Message):
                     start = time()
                     msg = await client.get_messages(chat_id, msg_id)
                     latency = time() - start
-                    # Adjust up slightly if fast
                     if latency < 0.2:
                         await adjust_concurrency(success=True)
                     return msg if msg and (msg.video or msg.document) else None
@@ -215,6 +217,12 @@ async def smartclean(client: Client, message: Message):
             LOGGER.info(f"Processing {db_key} with concurrency={concurrency}")
             await asyncio.gather(process_movies(db_key), process_tv(db_key))
 
+        # === END TIME TRACKING ===
+        total_time = time() - overall_start
+        minutes = int(total_time // 60)
+        seconds = int(total_time % 60)
+        time_taken_text = f"{minutes}m {seconds}s"
+
         # === SUMMARY ===
         summary = (
             f"{'🧹 Cleanup Completed!' if delete_mode else '✅ Scan Completed!'}\n\n"
@@ -223,6 +231,7 @@ async def smartclean(client: Client, message: Message):
             f"🗑️ {'Deleted' if delete_mode else 'Would Delete'}: `{total_deleted}`\n"
             f"🎬 Movies: `{total_movies}` | 📺 TV: `{total_tv}`\n"
             f"⚙️ Final Concurrency: `{concurrency}`\n"
+            f"⏱️ Time Taken: `{time_taken_text}`\n"
         )
 
         await status_msg.edit_text(summary, parse_mode=ParseMode.MARKDOWN)
