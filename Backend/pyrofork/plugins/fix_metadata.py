@@ -65,7 +65,6 @@ async def fix_metadata_handler(_, message):
         total_tv += await db.dbs[key]["tv"].count_documents({})
 
     CURRENT_TOTAL = total_movies + total_tv
-    CURRENT_DONE = 0
     start_time = time.time()
 
     status = await message.reply_text(
@@ -94,52 +93,54 @@ async def fix_metadata_handler(_, message):
                 if CANCEL_REQUESTED:
                     return
 
-                tmdb_id = movie["tmdb_id"]
-                title = movie["title"]
-                year = movie.get("release_year")
-                CURRENT_TASK = f"Movie: {title} ({year})"
-                LOGGER.info(f"Updating movie metadata: {CURRENT_TASK}")
+                try:
+                    tmdb_id = movie["tmdb_id"]
+                    title = movie["title"]
+                    year = movie.get("release_year")
+                    CURRENT_TASK = f"Movie: {title} ({year})"
 
-                meta = await fetch_movie_metadata(
-                    title=title,
-                    encoded_string=None,
-                    year=year,
-                    quality=None,
-                    default_id=None
-                )
-
-                if meta:
-                    await collection.update_one(
-                        {"tmdb_id": tmdb_id},
-                        {"$set": {
-                            "imdb_id": meta.get("imdb_id"),
-                            "cast": meta.get("cast"),
-                            "description": meta.get("description"),
-                            "genres": meta.get("genres"),
-                            "poster": meta.get("poster"),
-                            "backdrop": meta.get("backdrop"),
-                            "logo": meta.get("logo"),
-                            "rating": meta.get("rate"),
-                        }}
+                    meta = await fetch_movie_metadata(
+                        title=title,
+                        encoded_string=None,
+                        year=year,
+                        quality=None,
+                        default_id=None
                     )
-                    LOGGER.info(f"Movie metadata updated: {title}")
 
-                CURRENT_DONE += 1
+                    if meta:
+                        await collection.update_one(
+                            {"tmdb_id": tmdb_id},
+                            {"$set": {
+                                "imdb_id": meta.get("imdb_id"),
+                                "cast": meta.get("cast"),
+                                "description": meta.get("description"),
+                                "genres": meta.get("genres"),
+                                "poster": meta.get("poster"),
+                                "backdrop": meta.get("backdrop"),
+                                "logo": meta.get("logo"),
+                                "rating": meta.get("rate"),
+                            }}
+                        )
 
-                # Update progress every 5 items
-                if CURRENT_DONE % 5 == 0 or CURRENT_DONE == CURRENT_TOTAL:
-                    elapsed = time.time() - start_time
-                    avg_time = elapsed / CURRENT_DONE
-                    eta = avg_time * (CURRENT_TOTAL - CURRENT_DONE)
-                    await status.edit_text(
-                        f"🎬 Updating Movies…\n"
-                        f"{progress_bar(CURRENT_DONE, CURRENT_TOTAL)}\n"
-                        f"⏱ ETA: {format_eta(eta)}",
-                        reply_markup=InlineKeyboardMarkup([
-                            [InlineKeyboardButton("❌ Cancel", callback_data="cancel_fix")]
-                        ])
-                    )
-                    LOGGER.info(f"Progress: {CURRENT_DONE}/{CURRENT_TOTAL}, ETA: {format_eta(eta)}")
+                    CURRENT_DONE += 1
+
+                    # Log progress every 5 items
+                    if CURRENT_DONE % 5 == 0 or CURRENT_DONE == CURRENT_TOTAL:
+                        elapsed = time.time() - start_time
+                        avg_time = elapsed / CURRENT_DONE
+                        eta = avg_time * (CURRENT_TOTAL - CURRENT_DONE)
+                        await status.edit_text(
+                            f"🎬 Updating Movies…\n"
+                            f"{progress_bar(CURRENT_DONE, CURRENT_TOTAL)}\n"
+                            f"⏱ ETA: {format_eta(eta)}",
+                            reply_markup=InlineKeyboardMarkup([
+                                [InlineKeyboardButton("❌ Cancel", callback_data="cancel_fix")]
+                            ])
+                        )
+                        LOGGER.info(f"Progress: {CURRENT_DONE}/{CURRENT_TOTAL}, ETA: {format_eta(eta)}, Last: {CURRENT_TASK}")
+
+                except Exception as e:
+                    LOGGER.error(f"Error updating {CURRENT_TASK}: {e}")
 
     # -------------------------
     # UPDATE TV SHOWS + EPISODES
@@ -158,91 +159,88 @@ async def fix_metadata_handler(_, message):
                 if CANCEL_REQUESTED:
                     return
 
-                tmdb_id = tv["tmdb_id"]
-                title = tv["title"]
-                year = tv.get("release_year")
+                try:
+                    tmdb_id = tv["tmdb_id"]
+                    title = tv["title"]
+                    year = tv.get("release_year")
 
-                # Show-level update
-                CURRENT_TASK = f"TV Show: {title} (Show-level)"
-                LOGGER.info(f"Updating show metadata: {CURRENT_TASK}")
-                meta = await fetch_tv_metadata(
-                    title=title,
-                    season=1,
-                    episode=1,
-                    encoded_string=None,
-                    year=year,
-                    quality=None,
-                    default_id=None
-                )
-
-                if meta:
-                    await collection.update_one(
-                        {"tmdb_id": tmdb_id},
-                        {"$set": {
-                            "imdb_id": meta.get("imdb_id"),
-                            "cast": meta.get("cast"),
-                            "description": meta.get("description"),
-                            "genres": meta.get("genres"),
-                            "poster": meta.get("poster"),
-                            "backdrop": meta.get("backdrop"),
-                            "logo": meta.get("logo"),
-                            "rating": meta.get("rate"),
-                        }}
+                    # Show-level update
+                    CURRENT_TASK = f"TV Show: {title} (Show-level)"
+                    meta = await fetch_tv_metadata(
+                        title=title,
+                        season=1,
+                        episode=1,
+                        encoded_string=None,
+                        year=year,
+                        quality=None,
+                        default_id=None
                     )
-                    LOGGER.info(f"Show metadata updated: {title}")
-
-                # Episode-level update
-                for season in tv.get("seasons", []):
-                    if CANCEL_REQUESTED:
-                        return
-
-                    s = season["season_number"]
-
-                    for ep in season.get("episodes", []):
-                        e = ep["episode_number"]
-                        CURRENT_TASK = f"TV: {title} S{s}E{e}"
-                        LOGGER.info(f"Updating episode metadata: {CURRENT_TASK}")
-
-                        ep_meta = await fetch_tv_metadata(
-                            title=title,
-                            season=s,
-                            episode=e,
-                            encoded_string=None,
-                            year=year,
-                            quality=None,
-                            default_id=None
+                    if meta:
+                        await collection.update_one(
+                            {"tmdb_id": tmdb_id},
+                            {"$set": {
+                                "imdb_id": meta.get("imdb_id"),
+                                "cast": meta.get("cast"),
+                                "description": meta.get("description"),
+                                "genres": meta.get("genres"),
+                                "poster": meta.get("poster"),
+                                "backdrop": meta.get("backdrop"),
+                                "logo": meta.get("logo"),
+                                "rating": meta.get("rate"),
+                            }}
                         )
 
-                        if ep_meta:
-                            await collection.update_one(
-                                {"tmdb_id": tmdb_id},
-                                {"$set": {
-                                    "seasons.$[s].episodes.$[e].overview": ep_meta.get("episode_overview"),
-                                    "seasons.$[s].episodes.$[e].released": ep_meta.get("episode_released"),
-                                    "seasons.$[s].episodes.$[e].episode_backdrop": ep_meta.get("episode_backdrop"),
-                                }},
-                                array_filters=[
-                                    {"s.season_number": s},
-                                    {"e.episode_number": e}
-                                ]
+                    # Episode-level update
+                    for season in tv.get("seasons", []):
+                        if CANCEL_REQUESTED:
+                            return
+                        s = season["season_number"]
+
+                        for ep in season.get("episodes", []):
+                            e = ep["episode_number"]
+                            CURRENT_TASK = f"TV: {title} S{s}E{e}"
+                            ep_meta = await fetch_tv_metadata(
+                                title=title,
+                                season=s,
+                                episode=e,
+                                encoded_string=None,
+                                year=year,
+                                quality=None,
+                                default_id=None
                             )
-                            LOGGER.info(f"Episode metadata updated: {title} S{s}E{e}")
+                            if ep_meta:
+                                await collection.update_one(
+                                    {"tmdb_id": tmdb_id},
+                                    {"$set": {
+                                        "seasons.$[s].episodes.$[e].overview": ep_meta.get("episode_overview"),
+                                        "seasons.$[s].episodes.$[e].released": ep_meta.get("episode_released"),
+                                        "seasons.$[s].episodes.$[e].episode_backdrop": ep_meta.get("episode_backdrop"),
+                                    }},
+                                    array_filters=[
+                                        {"s.season_number": s},
+                                        {"e.episode_number": e}
+                                    ]
+                                )
 
-                CURRENT_DONE += 1
+                    CURRENT_DONE += 1
 
-                if CURRENT_DONE % 5 == 0 or CURRENT_DONE == CURRENT_TOTAL:
-                    elapsed = time.time() - start_time
-                    avg_time = elapsed / CURRENT_DONE
-                    eta = avg_time * (CURRENT_TOTAL - CURRENT_DONE)
-                    await status.edit_text(
-                        f"📺 Updating TV Shows…\n"
-                        f"{progress_bar(CURRENT_DONE, CURRENT_TOTAL)}\n"
-                        f"⏱ ETA: {format_eta(eta)}",
-                        reply_markup=InlineKeyboardMarkup([
-                            [InlineKeyboardButton("❌ Cancel", callback_data="cancel_fix")]
-                        ])
-                    )
-                    LOGGER.info(f"Progress: {CURRENT_DONE}/{CURRENT_TOTAL}, ETA: {format_eta(eta)}")
+                    # Log progress every 5 items
+                    if CURRENT_DONE % 5 == 0 or CURRENT_DONE == CURRENT_TOTAL:
+                        elapsed = time.time() - start_time
+                        avg_time = elapsed / CURRENT_DONE
+                        eta = avg_time * (CURRENT_TOTAL - CURRENT_DONE)
+                        await status.edit_text(
+                            f"📺 Updating TV Shows…\n"
+                            f"{progress_bar(CURRENT_DONE, CURRENT_TOTAL)}\n"
+                            f"⏱ ETA: {format_eta(eta)}",
+                            reply_markup=InlineKeyboardMarkup([
+                                [InlineKeyboardButton("❌ Cancel", callback_data="cancel_fix")]
+                            ])
+                        )
+                        LOGGER.info(f"Progress: {CURRENT_DONE}/{CURRENT_TOTAL}, ETA: {format_eta(eta)}, Last: {CURRENT_TASK}")
+
+                except Exception as e:
+                    LOGGER.error(f"Error updating {CURRENT_TASK}: {e}")
 
     # Run the process
     await update_movies()
