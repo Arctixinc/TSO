@@ -159,6 +159,7 @@ commands = [
     BotCommand("find",       "🔎 Search media in database"),
     BotCommand("latest",     "🆕 Show latest media"),
     BotCommand("random",     "🎲 Get random media"),
+    BotCommand("smartclean", "🧹 Smart scanning ultra speed"),
     BotCommand("scan",       "🔍 Scan channels for videos"),
     BotCommand("stats",      "📊 View database stats"),
     BotCommand("cleanup",    "🧹 Remove broken links"),
