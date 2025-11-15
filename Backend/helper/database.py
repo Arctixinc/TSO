@@ -189,7 +189,7 @@ class Database:
         self, metadata_info: dict,
         channel: int, msg_id: int, size: str, name: str
     ) -> Optional[ObjectId]:
-        LOGGER.info(f"\n🧩 [DEBUG] Metadata Info for {name}:\n{metadata_info}\n")
+        
         if metadata_info['media_type'] == "movie":
             media = MovieSchema(
                 tmdb_id=metadata_info['tmdb_id'],
@@ -203,6 +203,7 @@ class Database:
                 poster=metadata_info['poster'],
                 backdrop=metadata_info['backdrop'],
                 logo=metadata_info['logo'],
+                cast=metadata_info['cast'],
                 media_type=metadata_info['media_type'],
                 telegram=[QualityDetail(
                     quality=metadata_info['quality'],
@@ -225,6 +226,7 @@ class Database:
                 poster=metadata_info['poster'],
                 backdrop=metadata_info['backdrop'],
                 logo=metadata_info['logo'],
+                cast=metadata_info['cast'],
                 media_type=metadata_info['media_type'],
                 seasons=[Season(
                     season_number=metadata_info['season_number'],
@@ -232,6 +234,8 @@ class Database:
                         episode_number=metadata_info['episode_number'],
                         title=metadata_info['episode_title'],
                         episode_backdrop=metadata_info['episode_backdrop'],
+                        overview=metadata_info['episode_overview'],
+                        released=metadata_info['episode_released'],
                         telegram=[QualityDetail(
                             quality=metadata_info['quality'],
                             id=metadata_info['encoded_string'],
@@ -243,27 +247,28 @@ class Database:
             )
             return await self.update_tv_show(tv_show)
 
-    
     async def update_movie(self, movie_data: MovieSchema) -> Optional[ObjectId]:
         try:
             movie_dict = movie_data.dict()
         except ValidationError as e:
             LOGGER.error(f"Validation error: {e}")
             return None
-    
+
         tmdb_id = movie_dict["tmdb_id"]
+        
+
         title = movie_dict["title"]
         release_year = movie_dict["release_year"]
         quality_to_update = movie_dict["telegram"][0]
         target_quality = quality_to_update["quality"]
         current_db_key = f"storage_{self.current_db_index}"
-    
+
         total_storage_dbs = len(self.dbs) - 1  
         existing_db_key = None
         existing_db_index = None
         existing_movie = None
-    
-        # 🔍 Check existing movies across all DBs
+
+        
         for db_index in range(1, total_storage_dbs + 1):
             db_key = f"storage_{db_index}"
             movie = await self.dbs[db_key]["movie"].find_one(
@@ -274,8 +279,7 @@ class Database:
                 existing_db_index = db_index
                 existing_movie = movie
                 break
-    
-        # 🆕 Insert new movie if not found
+
         if not existing_movie:
             try:
                 movie_dict["db_index"] = self.current_db_index
@@ -286,13 +290,12 @@ class Database:
                 if any(keyword in str(e).lower() for keyword in ["storage", "quota"]):
                     return await self._handle_storage_error(self.update_movie, movie_data, total_storage_dbs=total_storage_dbs)
                 return None
-    
+
         movie_id = existing_movie["_id"]
         existing_qualities = existing_movie.get("telegram", [])
         matching_quality = next((q for q in existing_qualities if q["quality"] == target_quality), None)
-    
-        # 🎯 If same quality exists, replace and delete old file
         if matching_quality:
+            
             try:
                 old_id = matching_quality.get("id")
                 if old_id:
@@ -302,15 +305,15 @@ class Database:
                     create_task(delete_message(chat_id, msg_id))
             except Exception as e:
                 LOGGER.error(f"Failed to queue old quality file for deletion: {e}")
+
             matching_quality.update(quality_to_update)
         else:
             existing_qualities.append(quality_to_update)
-    
-        # 🔹 Sort qualities before saving
-        existing_movie["telegram"] = self.sort_telegram_list(existing_qualities)
+
+        # existing_movie["telegram"] = self.sort_telegram_list(existing_qualities)
+        existing_movie["telegram"] = existing_qualities
         existing_movie["updated_on"] = datetime.utcnow()
-    
-        # 🔁 Move movie if DB changed
+
         if existing_db_index != self.current_db_index:
             try:
                 if await self._move_document("movie", existing_movie, existing_db_index):
@@ -319,7 +322,7 @@ class Database:
                 LOGGER.error(f"Error moving movie to {current_db_key}: {e}")
                 if any(keyword in str(e).lower() for keyword in ["storage", "quota"]):
                     return await self._handle_storage_error(self.update_movie, movie_data, total_storage_dbs=total_storage_dbs)
-    
+
         try:
             await self.dbs[existing_db_key]["movie"].replace_one({"_id": movie_id}, existing_movie)
             return movie_id
@@ -327,25 +330,26 @@ class Database:
             LOGGER.error(f"Failed to update movie {tmdb_id} in {existing_db_key}: {e}")
             if any(keyword in str(e).lower() for keyword in ["storage", "quota"]):
                 return await self._handle_storage_error(self.update_movie, movie_data, total_storage_dbs=total_storage_dbs)
-            
+
     async def update_tv_show(self, tv_show_data: TVShowSchema) -> Optional[ObjectId]:
         try:
             tv_show_dict = tv_show_data.dict()
         except ValidationError as e:
             LOGGER.error(f"Validation error: {e}")
             return None
-    
+
         tmdb_id = tv_show_dict["tmdb_id"]
+        
+
         title = tv_show_dict["title"]
         release_year = tv_show_dict["release_year"]
         current_db_key = f"storage_{self.current_db_index}"
         total_storage_dbs = len(self.dbs) - 1
-    
+
         existing_db_key = None
         existing_db_index = None
         existing_tv = None
-    
-        # 🔍 Find existing TV show
+
         for db_index in range(1, total_storage_dbs + 1):
             db_key = f"storage_{db_index}"
             tv = await self.dbs[db_key]["tv"].find_one(
@@ -356,8 +360,7 @@ class Database:
                 existing_db_index = db_index
                 existing_tv = tv
                 break
-    
-        # 🆕 Insert new TV show
+
         if not existing_tv:
             try:
                 tv_show_dict["db_index"] = self.current_db_index
@@ -368,10 +371,8 @@ class Database:
                 if any(keyword in str(e).lower() for keyword in ["storage", "quota"]):
                     return await self._handle_storage_error(self.update_tv_show, tv_show_data, total_storage_dbs=total_storage_dbs)
                 return None
-    
+
         tv_id = existing_tv["_id"]
-    
-        # 🔄 Merge seasons & episodes
         for season in tv_show_dict["seasons"]:
             existing_season = next(
                 (s for s in existing_tv["seasons"] if s["season_number"] == season["season_number"]), None
@@ -386,32 +387,32 @@ class Database:
                         for quality in episode["telegram"]:
                             existing_quality = next(
                                 (q for q in existing_episode["telegram"]
-                                 if q.get("quality") == quality.get("quality")),
+                                if q.get("quality") == quality.get("quality")),
                                 None
                             )
                             if existing_quality:
                                 try:
                                     old_id = existing_quality.get("id")
+
                                     if old_id:
                                         decoded_data = await decode_string(old_id)
+
                                         chat_id = int(f"-100{decoded_data['chat_id']}")
                                         msg_id = int(decoded_data['msg_id'])
                                         create_task(delete_message(chat_id, msg_id))
+                                        
                                 except Exception as e:
                                     LOGGER.error(f"Failed to queue old quality file for deletion: {e}")
                                 existing_quality.update(quality)
                             else:
                                 existing_episode["telegram"].append(quality)
-                        # 🔹 Sort telegram qualities for this episode
-                        existing_episode["telegram"] = self.sort_telegram_list(existing_episode["telegram"])
+                        # existing_episode["telegram"] = self.sort_telegram_list(existing_episode["telegram"])
                     else:
                         existing_season["episodes"].append(episode)
             else:
                 existing_tv["seasons"].append(season)
-    
         existing_tv["updated_on"] = datetime.utcnow()
-    
-        # 🔁 Move if DB index changed
+
         if existing_db_index != self.current_db_index:
             try:
                 if await self._move_document("tv", existing_tv, existing_db_index):
@@ -421,7 +422,7 @@ class Database:
                 if any(keyword in str(e).lower() for keyword in ["storage", "quota"]):
                     return await self._handle_storage_error(self.update_tv_show, tv_show_data, total_storage_dbs=total_storage_dbs)
             return tv_id
-    
+
         try:
             await self.dbs[existing_db_key]["tv"].replace_one({"_id": tv_id}, existing_tv)
             return tv_id
@@ -429,7 +430,7 @@ class Database:
             LOGGER.error(f"Failed to update TV show {tmdb_id} in {existing_db_key}: {e}")
             if any(keyword in str(e).lower() for keyword in ["storage", "quota"]):
                 return await self._handle_storage_error(self.update_tv_show, tv_show_data, total_storage_dbs=total_storage_dbs)
-            
+    
     async def sort_movies(self, sort_params, page, page_size, genre_filter=None):
         sort_dict = self._get_sort_dict(sort_params)
         filter_dict = {"genres": {"$in": [genre_filter]}} if genre_filter else {}
@@ -853,6 +854,7 @@ class Database:
         result = await self.dbs[db_key]["tv"].replace_one({"tmdb_id": tmdb_id}, tv)
         return result.modified_count > 0
 
+
     async def get_media(self, channel: int, msg_id: int) -> Optional[dict]:
         """Check if a message already exists in the DB (movie or tv)."""
         total_storage_dbs = len(self.dbs) - 1
@@ -876,7 +878,6 @@ class Database:
                 return convert_objectid_to_str(tv)
 
         return None
-                    
     # Get per-DB statistics (movies, tv shows, used size, etc.)
     async def get_database_stats(self):
         stats = []
