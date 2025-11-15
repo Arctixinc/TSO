@@ -5,7 +5,7 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from Backend import db
 from Backend.helper.custom_filter import CustomFilters
 from Backend.helper.metadata import fetch_tv_metadata, fetch_movie_metadata
-from Backend.logger import LOGGER  # your logger
+from Backend.logger import LOGGER  # existing logger
 
 # -------------------------------
 # Global state
@@ -81,7 +81,7 @@ async def fix_metadata_handler(_, message):
     # UPDATE MOVIES
     # -------------------------
     async def update_movies():
-        nonlocal CURRENT_DONE
+        global CURRENT_DONE, CURRENT_TASK
         for i in range(1, db.current_db_index + 1):
             if CANCEL_REQUESTED:
                 return
@@ -127,7 +127,7 @@ async def fix_metadata_handler(_, message):
                 CURRENT_DONE += 1
 
                 # Update progress every 5 items
-                if CURRENT_DONE % 5 == 0:
+                if CURRENT_DONE % 5 == 0 or CURRENT_DONE == CURRENT_TOTAL:
                     elapsed = time.time() - start_time
                     avg_time = elapsed / CURRENT_DONE
                     eta = avg_time * (CURRENT_TOTAL - CURRENT_DONE)
@@ -139,12 +139,13 @@ async def fix_metadata_handler(_, message):
                             [InlineKeyboardButton("❌ Cancel", callback_data="cancel_fix")]
                         ])
                     )
+                    LOGGER.info(f"Progress: {CURRENT_DONE}/{CURRENT_TOTAL}, ETA: {format_eta(eta)}")
 
     # -------------------------
     # UPDATE TV SHOWS + EPISODES
     # -------------------------
     async def update_tv():
-        nonlocal CURRENT_DONE
+        global CURRENT_DONE, CURRENT_TASK
         for i in range(1, db.current_db_index + 1):
             if CANCEL_REQUESTED:
                 return
@@ -229,8 +230,7 @@ async def fix_metadata_handler(_, message):
 
                 CURRENT_DONE += 1
 
-                # Update progress every 5 items
-                if CURRENT_DONE % 5 == 0:
+                if CURRENT_DONE % 5 == 0 or CURRENT_DONE == CURRENT_TOTAL:
                     elapsed = time.time() - start_time
                     avg_time = elapsed / CURRENT_DONE
                     eta = avg_time * (CURRENT_TOTAL - CURRENT_DONE)
@@ -242,6 +242,7 @@ async def fix_metadata_handler(_, message):
                             [InlineKeyboardButton("❌ Cancel", callback_data="cancel_fix")]
                         ])
                     )
+                    LOGGER.info(f"Progress: {CURRENT_DONE}/{CURRENT_TOTAL}, ETA: {format_eta(eta)}")
 
     # Run the process
     await update_movies()
