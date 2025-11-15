@@ -223,6 +223,7 @@ commands = [
     BotCommand("health",     "❤️ Check bot health"),
     BotCommand("set",        "🎬 Add IMDb metadata"),
     BotCommand("log",        "📄 Get log file"),
+    BotCommand("fixmetadata", "⚙️ Fix empty fields of Metadata"),
     BotCommand("info",       "ℹ️ Get media info"),
     BotCommand("find",       "🔎 Search media in database"),
     BotCommand("latest",     "🆕 Show latest media"),
