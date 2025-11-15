@@ -8,9 +8,12 @@ from aiofiles import open as aiopen
 from aiofiles.os import path as aiopath, remove as aioremove
 from pyrogram import Client
 from Backend.pyrofork.bot import StreamBot
-import re
+from datetime import datetime
 from pyrogram.types import BotCommand
 from pyrogram import enums
+import subprocess
+import re
+import pytz
 
 
 def is_media(message):
@@ -123,28 +126,93 @@ def remove_urls(text):
 
 
 
+
+
 async def restart_notification():
-    chat_id, msg_id = 0, 0
+    """
+    Sends a styled restart confirmation message including
+    last Git commit details and IST-formatted commit time.
+    """
+
+    chat_id = 0
+    msg_id = 0
+
     try:
         if await aiopath.exists(".restartmsg"):
             async with aiopen(".restartmsg", "r") as f:
                 data = await f.readlines()
                 chat_id, msg_id = map(int, data)
-            
+
+            # ========== GET LATEST GIT COMMIT INFO ==========
             try:
-                repo = Telegram.UPSTREAM_REPO.split('/')
-                UPSTREAM_REPO = f"https://github.com/{repo[-2]}/{repo[-1]}"
+                commit_hash = (
+                    subprocess.check_output(["git", "rev-parse", "--short", "HEAD"])
+                    .decode()
+                    .strip()
+                )
+
+                commit_message = (
+                    subprocess.check_output(
+                        ["git", "log", "-1", "--pretty=%B"]
+                    )
+                    .decode()
+                    .strip()
+                )
+
+                commit_time_raw = (
+                    subprocess.check_output(
+                        ["git", "log", "-1", "--pretty=%ct"]
+                    )
+                    .decode()
+                    .strip()
+                )
+                commit_time_utc = datetime.utcfromtimestamp(int(commit_time_raw))
+
+                # Convert commit time to IST
+                ist_tz = pytz.timezone("Asia/Kolkata")
+                commit_time_ist = commit_time_utc.replace(tzinfo=pytz.utc).astimezone(ist_tz)
+                commit_time_str = commit_time_ist.strftime("%d/%m/%y • %I:%M:%S %p")
+
+            except Exception as e:
+                LOGGER.error(f"Git info error: {e}")
+                commit_hash = "N/A"
+                commit_message = "N/A"
+                commit_time_str = "N/A"
+
+            # Prepare GitHub repo link
+            repo_parts = Telegram.UPSTREAM_REPO.split("/")
+            upstream_repo = f"https://github.com/{repo_parts[-2]}/{repo_parts[-1]}"
+
+            # ========== BUILD STYLED MESSAGE ==========
+            message_text = (
+                "<b>♻️ Restart Successful!</b>\n\n"
+                f"📅 <b>Date:</b> {now.strftime('%d/%m/%y')}\n"
+                f"⏰ <b>Time:</b> {now.strftime('%I:%M:%S %p')}\n"
+                f"🌍 <b>Time Zone:</b> {timezone.zone}\n\n"
+
+                "📌 <b>Last Commit Details</b>\n"
+                f"🔹 <b>Commit ID:</b> <code>{commit_hash}</code>\n"
+                f"🔹 <b>Message:</b> {commit_message}\n"
+                f"🔹 <b>Commit Time (IST):</b> {commit_time_str}\n\n"
+
+                f"📂 <b>Repo:</b> {upstream_repo}\n"
+                f"🌿 <b>Branch:</b> {Telegram.UPSTREAM_BRANCH}\n"
+                f"🧩 <b>Version:</b> {__version__}"
+            )
+
+            # Send the styled message
+            try:
                 await StreamBot.edit_message_text(
                     chat_id=chat_id,
                     message_id=msg_id,
-                    text=f"... ♻️ Restart Successfully...! \n\nDate: {now.strftime('%d/%m/%y')}\nTime: {now.strftime('%I:%M:%S %p')}\nTimeZone: {timezone.zone}\n\nRepo: {UPSTREAM_REPO}\nBranch: {Telegram.UPSTREAM_BRANCH}\nVersion: {__version__}",
+                    text=message_text,
                     parse_mode=enums.ParseMode.HTML
                 )
             except Exception as e:
                 LOGGER.error(f"Failed to edit restart message: {e}")
-            
+
             await aioremove(".restartmsg")
-            
+
     except Exception as e:
         LOGGER.error(f"Error in restart_notification: {e}")
 
