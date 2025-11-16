@@ -13,8 +13,8 @@ from Backend.logger import LOGGER
 # -------------------------------
 CANCEL_REQUESTED = False
 CURRENT_TASK = ""
-SEM = asyncio.Semaphore(5)  # Limit concurrency to avoid rate limits
-SHOW_EPISODE_PROGRESS = False  # Track if we should show episode line
+SHOW_EPISODE_PROGRESS = False
+SEM = asyncio.Semaphore(15)  # concurrency limiter
 
 # -------------------------------
 # Progress & ETA helpers
@@ -78,8 +78,13 @@ async def fix_metadata_handler(_, message):
     current_tv_show_total_episodes = 0
     current_tv_show_episodes_done = 0
 
+    elapsed_movies = 0
+    elapsed_episodes = 0
+    start_movies = None
+    start_episodes = None
+
     # -------------------------------
-    # Initial message (no episode line)
+    # Initial message
     # -------------------------------
     status = await message.reply_text(
         f"⏳ Initializing metadata fixing...\n"
@@ -98,12 +103,15 @@ async def fix_metadata_handler(_, message):
     # Movie processor
     # -------------------------------
     async def process_movie(movie, collection):
-        nonlocal movies_done
+        nonlocal movies_done, elapsed_movies, start_movies
         async with SEM:
             if CANCEL_REQUESTED:
                 return
             global CURRENT_TASK
             try:
+                if start_movies is None:
+                    start_movies = time.time()
+
                 tmdb_id = movie["tmdb_id"]
                 title = movie["title"]
                 year = movie.get("release_year")
@@ -125,6 +133,7 @@ async def fix_metadata_handler(_, message):
                         }}
                     )
                 movies_done += 1
+                elapsed_movies = time.time() - start_movies
             except Exception as e:
                 LOGGER.error(f"Error updating {CURRENT_TASK}: {e}")
 
@@ -132,12 +141,15 @@ async def fix_metadata_handler(_, message):
     # TV episode processor
     # -------------------------------
     async def process_tv_episode(tv, season_num, ep, collection):
-        nonlocal episodes_done, current_tv_show_episodes_done
+        nonlocal episodes_done, current_tv_show_episodes_done, elapsed_episodes, start_episodes
         async with SEM:
             if CANCEL_REQUESTED:
                 return
             global CURRENT_TASK
             try:
+                if start_episodes is None:
+                    start_episodes = time.time()
+
                 tmdb_id = tv["tmdb_id"]
                 title = tv["title"]
                 year = tv.get("release_year")
@@ -165,6 +177,7 @@ async def fix_metadata_handler(_, message):
                     )
                 episodes_done += 1
                 current_tv_show_episodes_done += 1
+                elapsed_episodes = time.time() - start_episodes
             except Exception as e:
                 LOGGER.error(f"Error updating {CURRENT_TASK}: {e}")
 
@@ -186,10 +199,8 @@ async def fix_metadata_handler(_, message):
     # Update TV shows
     # -------------------------------
     async def update_tv():
-        # nonlocal tv_shows_done, current_tv_show_total_episodes, current_tv_show_episodes_done, SHOW_EPISODE_PROGRESS
-        nonlocal tv_shows_done, current_tv_show_total_episodes, current_tv_show_episodes_done
-        global SHOW_EPISODE_PROGRESS
-        SHOW_EPISODE_PROGRESS = True  # Enable episode line
+        nonlocal tv_shows_done, current_tv_show_total_episodes, current_tv_show_episodes_done, SHOW_EPISODE_PROGRESS
+        SHOW_EPISODE_PROGRESS = True
         for i in range(1, db.current_db_index + 1):
             if CANCEL_REQUESTED:
                 break
@@ -209,10 +220,14 @@ async def fix_metadata_handler(_, message):
     # -------------------------------
     async def run_progress():
         while not CANCEL_REQUESTED and (movies_done + episodes_done < total_movies + total_episodes):
-            elapsed = time.time() - start_time
             overall_done = movies_done + episodes_done
             overall_total = total_movies + total_episodes
             bar = progress_bar(overall_done, overall_total)
+
+            # Calculate separate ETAs
+            eta_movies = (elapsed_movies / movies_done * (total_movies - movies_done)) if movies_done else 0
+            eta_episodes = (elapsed_episodes / episodes_done * (total_episodes - episodes_done)) if episodes_done else 0
+            total_eta = eta_movies + eta_episodes
 
             msg = (
                 f"🎬 Movies: {movies_done}/{total_movies}\n"
@@ -222,8 +237,8 @@ async def fix_metadata_handler(_, message):
                 msg += f"→ Episodes: {current_tv_show_episodes_done}/{current_tv_show_total_episodes}\n"
             msg += f"📺 All Episodes: {episodes_done}/{total_episodes}\n\n"
             msg += f"{bar}\n"
-            msg += f"⏱ ETA: {format_eta((elapsed / max(1, overall_done)) * (overall_total - overall_done))}\n"
-            msg += f"⏲ Elapsed: {format_eta(elapsed)}\n"
+            msg += f"⏱ ETA: {format_eta(total_eta)}\n"
+            msg += f"⏲ Elapsed: {format_eta(time.time() - start_time)}\n"
             msg += f"Last: {CURRENT_TASK}"
 
             await status.edit_text(msg, reply_markup=InlineKeyboardMarkup([
