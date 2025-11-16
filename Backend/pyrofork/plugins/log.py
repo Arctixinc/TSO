@@ -80,6 +80,33 @@ async def paste_to_yaso(content: str):
         LOGGER.exception(f"Exception in paste_to_yaso: {e}")
         return f"Error: {e}"
 
+async def paste_to_fragbin(content: str, title: str = "Log"):
+    content = content[-20480:]
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                "https://www.fragbin.com/api/pastes",
+                json={
+                    "title": title,
+                    "content": content,
+                    "language": "text",
+                    "expiresAt": "never",
+                    "isPrivate": False,
+                    "password": None
+                },
+            ) as resp:
+                resp.raise_for_status()
+                result = await resp.json()
+                paste_id = result.get("id")
+                url = f"https://www.fragbin.com/r/{paste_id}"
+                LOGGER.info(f"FragBin paste successful: {url}")
+                return url
+    except Exception as e:
+        LOGGER.exception(f"Exception in paste_to_fragbin: {e}")
+        return f"Error: {e}"
+
+
 def get_total_pages(file_path: str, chunk_size=CHUNK_SIZE) -> int:
     file_size = ospath.getsize(file_path)
     return (file_size + chunk_size - 1) // chunk_size
