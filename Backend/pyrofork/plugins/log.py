@@ -120,49 +120,55 @@ def build_main_markup(index: int, total: int, url: str, view_mode: str):
 
     # Page number and selector
     page_row = [
-        InlineKeyboardButton(f"📄 Page {index + 1}/{total}", callback_data="log_selector"),
+        InlineKeyboardButton(f"📘 Page {index + 1} / {total}", callback_data="log_selector"),
     ]
     buttons.append(page_row)
 
-    # Main navigation
+    # Navigation
     nav_row = []
     if index > 0:
-        nav_row.append(InlineKeyboardButton("⏪", callback_data="log_first"))
-        nav_row.append(InlineKeyboardButton("⬅️", callback_data="log_prev"))
-    if index < total - 1:
-        nav_row.append(InlineKeyboardButton("➡️", callback_data="log_next"))
-        nav_row.append(InlineKeyboardButton("⏩", callback_data="log_last"))
-    buttons.append(nav_row)
+        nav_row.append(InlineKeyboardButton("⏮️ First", callback_data="log_first"))
+        nav_row.append(InlineKeyboardButton("◀️ Prev", callback_data="log_prev"))
 
-    # Dynamic page jump buttons
+    if index < total - 1:
+        nav_row.append(InlineKeyboardButton("Next ▶️", callback_data="log_next"))
+        nav_row.append(InlineKeyboardButton("Last ⏭️", callback_data="log_last"))
+
+    if nav_row:
+        buttons.append(nav_row)
+
+    # Jump buttons
     jump_row = []
     if index > 1:
-        jump_row.append(InlineKeyboardButton("⏮️", callback_data="log_prev2"))
+        jump_row.append(InlineKeyboardButton("⟵ -2", callback_data="log_prev2"))
     if index < total - 2:
-        jump_row.append(InlineKeyboardButton("⏭️", callback_data="log_next2"))
+        jump_row.append(InlineKeyboardButton("+2 ⟶", callback_data="log_next2"))
+
     if jump_row:
         buttons.append(jump_row)
 
-    # Actions row
+    # Actions
     actions_row = [
-        InlineKeyboardButton("🔄", callback_data="log_refresh"),
-        InlineKeyboardButton(f"{'⬇️' if view_mode == 'tail' else '⬆️'}", callback_data="log_toggle_view_mode"),
-        InlineKeyboardButton("📎", callback_data="log_sendfile"),
+        InlineKeyboardButton("🔁 Refresh", callback_data="log_refresh"),
+        InlineKeyboardButton(
+            f"View Mode: {'📥 Tail' if view_mode == 'tail' else '📤 Head'}",
+            callback_data="log_toggle_view_mode"
+        ),
+        InlineKeyboardButton("📤 Export Log", callback_data="log_sendfile"),
     ]
     buttons.append(actions_row)
 
-    # Footer row
+    # Footer
     footer_row = [
-        InlineKeyboardButton("🌐", url=url),
-        InlineKeyboardButton("❌", callback_data="log_close"),
+        InlineKeyboardButton("🌍 URL", url=url),
+        InlineKeyboardButton("🚫 Close", callback_data="log_close"),
     ]
     buttons.append(footer_row)
 
     return InlineKeyboardMarkup(buttons)
 
-# -------------------------------
-# SELECTOR MARKUP
-# -------------------------------
+# Selector UI modernized below
+
 def build_selector_markup(msg_id: int, page_range_start: int = -1):
     data = LOG_CACHE.get(msg_id)
     if not data:
@@ -171,9 +177,7 @@ def build_selector_markup(msg_id: int, page_range_start: int = -1):
     total_pages = data["total_pages"]
     buttons = []
 
-    # -------------------------------
-    # SIMPLE SELECTOR (total ≤ 50)
-    # -------------------------------
+    # Simple selector for <= 50 pages
     if total_pages <= 50:
         window_size = 25
         start = data.get("selector_start", 0)
@@ -181,7 +185,7 @@ def build_selector_markup(msg_id: int, page_range_start: int = -1):
 
         row = []
         for i in range(start, end):
-            row.append(InlineKeyboardButton(str(i + 1), callback_data=f"log_page_{i}"))
+            row.append(InlineKeyboardButton(f"📄 {i + 1}", callback_data=f"log_page_{i}"))
             if len(row) == 5:
                 buttons.append(row)
                 row = []
@@ -190,58 +194,45 @@ def build_selector_markup(msg_id: int, page_range_start: int = -1):
 
         nav_row = []
         if start > 0:
-            nav_row.append(InlineKeyboardButton("⏪", callback_data="selector_prev"))
-        nav_row.append(InlineKeyboardButton("⬅️", callback_data="selector_back"))
+            nav_row.append(InlineKeyboardButton("⬅️ Prev", callback_data="selector_prev"))
+
+        nav_row.append(InlineKeyboardButton("🔙 Back", callback_data="selector_back"))
+
         if end < total_pages:
-            nav_row.append(InlineKeyboardButton("⏩", callback_data="selector_next"))
+            nav_row.append(InlineKeyboardButton("Next ➡️", callback_data="selector_next"))
 
         buttons.append(nav_row)
         return InlineKeyboardMarkup(buttons)
 
-    # -------------------------------
-    # RANGE SELECTOR (NEW SYSTEM)
-    # -------------------------------
-    pages_per_range = 50       # pages per single range-block
+    # Range selector for large logs
+    pages_per_range = 50
 
-    # If a page range has been selected, display the pages within it
     if page_range_start != -1:
         start = page_range_start
         end = min(start + pages_per_range, total_pages)
 
         row = []
         for i in range(start, end):
-            row.append(InlineKeyboardButton(str(i + 1), callback_data=f"log_page_{i}"))
+            row.append(InlineKeyboardButton(f"📄 {i + 1}", callback_data=f"log_page_{i}"))
             if len(row) == 5:
                 buttons.append(row)
                 row = []
         if row:
             buttons.append(row)
 
-        # Navigation to go back to the main range selector
-        nav_row = [InlineKeyboardButton("⏪ Back to Ranges", callback_data="log_selector")]
-        buttons.append(nav_row)
+        buttons.append([InlineKeyboardButton("🔙 Back to Ranges", callback_data="log_selector")])
         return InlineKeyboardMarkup(buttons)
 
-    ranges_per_page = 12       # how many range buttons per screen
+    ranges_per_page = 12
     total_ranges = (total_pages + pages_per_range - 1) // pages_per_range
-
-    # get or default range index
     range_index = data.get("range_index", 0)
 
-    # clamp
-    if range_index < 0:
-        range_index = 0
-    if range_index >= total_ranges:
-        range_index = total_ranges - 1
-
+    range_index = max(0, min(range_index, total_ranges - 1))
     data["range_index"] = range_index
 
     start_range = range_index * ranges_per_page
     end_range = min(start_range + ranges_per_page, total_ranges)
 
-    # --------------------------
-    # BUILD RANGE BUTTONS
-    # --------------------------
     row = []
     for r in range(start_range, end_range):
         start_page = r * pages_per_range + 1
@@ -249,30 +240,24 @@ def build_selector_markup(msg_id: int, page_range_start: int = -1):
 
         row.append(
             InlineKeyboardButton(
-                f"{start_page}-{end_page}",
-                callback_data=f"log_range_{r * pages_per_range}"
+                f"📚 {start_page}-{end_page}", callback_data=f"log_range_{r * pages_per_range}"
             )
         )
 
         if len(row) == 3:
             buttons.append(row)
             row = []
-
     if row:
         buttons.append(row)
 
-    # --------------------------
-    # RANGE NAVIGATION BUTTONS
-    # --------------------------
     nav = []
-
     if range_index > 0:
-        nav.append(InlineKeyboardButton("⬅️", callback_data="range_prev"))
+        nav.append(InlineKeyboardButton("⬅️ Prev", callback_data="range_prev"))
 
-    nav.append(InlineKeyboardButton("⏪", callback_data="selector_back"))
+    nav.append(InlineKeyboardButton("🔙 Back", callback_data="selector_back"))
 
     if end_range < total_ranges:
-        nav.append(InlineKeyboardButton("➡️", callback_data="range_next"))
+        nav.append(InlineKeyboardButton("Next ➡️", callback_data="range_next"))
 
     buttons.append(nav)
 
