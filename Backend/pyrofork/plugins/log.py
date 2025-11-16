@@ -127,34 +127,34 @@ def build_main_markup(index: int, total: int, url: str, view_mode: str):
     # Main navigation
     nav_row = []
     if index > 0:
-        nav_row.append(InlineKeyboardButton("⏪ First", callback_data="log_first"))
-        nav_row.append(InlineKeyboardButton("⬅️ Prev", callback_data="log_prev"))
+        nav_row.append(InlineKeyboardButton("⏪", callback_data="log_first"))
+        nav_row.append(InlineKeyboardButton("⬅️", callback_data="log_prev"))
     if index < total - 1:
-        nav_row.append(InlineKeyboardButton("Next ➡️", callback_data="log_next"))
-        nav_row.append(InlineKeyboardButton("Last ⏩", callback_data="log_last"))
+        nav_row.append(InlineKeyboardButton("➡️", callback_data="log_next"))
+        nav_row.append(InlineKeyboardButton("⏩", callback_data="log_last"))
     buttons.append(nav_row)
 
     # Dynamic page jump buttons
     jump_row = []
     if index > 1:
-        jump_row.append(InlineKeyboardButton("-2", callback_data="log_prev2"))
+        jump_row.append(InlineKeyboardButton("⏮️", callback_data="log_prev2"))
     if index < total - 2:
-        jump_row.append(InlineKeyboardButton("+2", callback_data="log_next2"))
+        jump_row.append(InlineKeyboardButton("⏭️", callback_data="log_next2"))
     if jump_row:
         buttons.append(jump_row)
 
     # Actions row
     actions_row = [
-        InlineKeyboardButton("🔄 Refresh", callback_data="log_refresh"),
-        InlineKeyboardButton(f"View: {'Tail' if view_mode == 'tail' else 'Head'}", callback_data="log_toggle_view_mode"),
-        InlineKeyboardButton("📎 Send File", callback_data="log_sendfile"),
+        InlineKeyboardButton("🔄", callback_data="log_refresh"),
+        InlineKeyboardButton(f"{'⬇️' if view_mode == 'tail' else '⬆️'}", callback_data="log_toggle_view_mode"),
+        InlineKeyboardButton("📎", callback_data="log_sendfile"),
     ]
     buttons.append(actions_row)
 
     # Footer row
     footer_row = [
-        InlineKeyboardButton("🌐 URL", url=url),
-        InlineKeyboardButton("❌ Close", callback_data="log_close"),
+        InlineKeyboardButton("🌐", url=url),
+        InlineKeyboardButton("❌", callback_data="log_close"),
     ]
     buttons.append(footer_row)
 
@@ -191,7 +191,7 @@ def build_selector_markup(msg_id: int, page_range_start: int = -1):
         nav_row = []
         if start > 0:
             nav_row.append(InlineKeyboardButton("⏪", callback_data="selector_prev"))
-        nav_row.append(InlineKeyboardButton("Back", callback_data="selector_back"))
+        nav_row.append(InlineKeyboardButton("⬅️", callback_data="selector_back"))
         if end < total_pages:
             nav_row.append(InlineKeyboardButton("⏩", callback_data="selector_next"))
 
@@ -201,9 +201,28 @@ def build_selector_markup(msg_id: int, page_range_start: int = -1):
     # -------------------------------
     # RANGE SELECTOR (NEW SYSTEM)
     # -------------------------------
-    ranges_per_page = 12       # how many range buttons per screen
     pages_per_range = 50       # pages per single range-block
 
+    # If a page range has been selected, display the pages within it
+    if page_range_start != -1:
+        start = page_range_start
+        end = min(start + pages_per_range, total_pages)
+
+        row = []
+        for i in range(start, end):
+            row.append(InlineKeyboardButton(str(i + 1), callback_data=f"log_page_{i}"))
+            if len(row) == 5:
+                buttons.append(row)
+                row = []
+        if row:
+            buttons.append(row)
+
+        # Navigation to go back to the main range selector
+        nav_row = [InlineKeyboardButton("⏪ Back to Ranges", callback_data="log_selector")]
+        buttons.append(nav_row)
+        return InlineKeyboardMarkup(buttons)
+
+    ranges_per_page = 12       # how many range buttons per screen
     total_ranges = (total_pages + pages_per_range - 1) // pages_per_range
 
     # get or default range index
@@ -248,12 +267,12 @@ def build_selector_markup(msg_id: int, page_range_start: int = -1):
     nav = []
 
     if range_index > 0:
-        nav.append(InlineKeyboardButton("⬅️ Prev Ranges", callback_data="range_prev"))
+        nav.append(InlineKeyboardButton("⬅️", callback_data="range_prev"))
 
-    nav.append(InlineKeyboardButton("Back", callback_data="selector_back"))
+    nav.append(InlineKeyboardButton("⏪", callback_data="selector_back"))
 
     if end_range < total_ranges:
-        nav.append(InlineKeyboardButton("Next Ranges ➡️", callback_data="range_next"))
+        nav.append(InlineKeyboardButton("➡️", callback_data="range_next"))
 
     buttons.append(nav)
 
@@ -332,6 +351,8 @@ async def range_button(client, query: CallbackQuery):
         if markup:
             await query.message.edit_reply_markup(markup)
         await safe_answer(query, f"Showing pages {page_range_start+1}-{page_range_start+50}")
+    except MessageNotModified:
+        await safe_answer(query, "Already viewing this page range.")
     except Exception as e:
         LOGGER.exception(f"Error in range_button: {e}")
 
@@ -490,10 +511,7 @@ async def reload_log_data(data: dict):
 
     data["total_pages"] = total_pages
     data["url"] = paste_url
-    if data["view_mode"] == "tail":
-        data["index"] = total_pages - 1
-    else:
-        data["index"] = min(data["index"], total_pages - 1)
+    data["index"] = min(data["index"], total_pages - 1)
 
     return total_pages
 
