@@ -53,7 +53,11 @@ async def paste_to_spacebin(content: str):
                     LOGGER.info(f"Spacebin paste success: {doc_id}")
                     return f"https://spaceb.in/{doc_id}"
                 else:
-                    error_msg = (await r.json()).get('error', 'Unknown error')
+                    # Keep error handling permissive
+                    try:
+                        error_msg = (await r.json()).get('error', 'Unknown error')
+                    except Exception:
+                        error_msg = f"HTTP {r.status}"
                     LOGGER.warning(f"Spacebin paste failed: {error_msg}")
                     return f"Error: {error_msg}"
     except Exception as e:
@@ -297,18 +301,35 @@ async def log_command(client: Client, message: Message):
             "view_mode": view_mode
         }
 
-        # For small files, just send the content
+        # -----------------------------
+        # PATCH: small-log behavior
+        # If the log fits in a single page (small), do NOT save it to LOG_CACHE.
+        # Instead provide a minimal UI (Refresh + URL). If later the file grows
+        # and the user taps Refresh, the small-refresh handler will promote
+        # the message into full pagination mode and store it in LOG_CACHE.
+        # -----------------------------
         if total_pages == 1:
+            minimal_markup = InlineKeyboardMarkup(
+                [
+                    [InlineKeyboardButton("🔁 Refresh", callback_data="log_refresh_small")],
+                    [InlineKeyboardButton("🌍 URL", url=paste_url)],
+                ]
+            )
+
             sent_msg = await message.reply_text(
                 f"<pre>{await get_page(file_path, 0)}</pre>",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("URL", url=paste_url)]])
+                reply_markup=minimal_markup
             )
-            LOG_CACHE[sent_msg.id] = temp_cache
+
+            # NOTE: intentionally do NOT store in LOG_CACHE here.
             return
 
+        # For multi-page logs continue as before
         initial_page_content = await get_page(file_path, index)
         markup = build_main_markup(index, total_pages, paste_url, view_mode)
         sent_msg = await message.reply_text(f"<pre>{initial_page_content}</pre>", reply_markup=markup, quote=True)
+
+        # Save to cache for later interactions
         LOG_CACHE[sent_msg.id] = temp_cache
 
     except Exception as e:
@@ -589,3 +610,70 @@ async def log_close_handler(client, query: CallbackQuery):
         LOGGER.debug(f"Closed log message_id {msg_id}")
     except Exception as e:
         LOGGER.exception(f"Error in log_close_handler: {e}")
+
+# -------------------------------
+# PATCH: small-refresh handler
+# -------------------------------
+@Client.on_callback_query(filters.regex("^log_refresh_small$"))
+async def log_refresh_small(client, query: CallbackQuery):
+    """
+    This handler services the minimal UI used for small logs that were not cached.
+
+    Behavior:
+    - Recomputes total pages and repastes the recent content.
+    - If the log is still a single page -> update the minimal UI (Refresh + URL).
+    - If the log grew to multiple pages -> promote the message to full pagination mode:
+        * populate LOG_CACHE for this message id
+        * replace the message with full navigation markup and page content
+    """
+    try:
+        file_path = ospath.abspath("log.txt")
+
+        if not ospath.exists(file_path):
+            return await safe_answer(query, "Log file no longer exists.", show_alert=True)
+
+        total_pages = get_total_pages(file_path)
+
+        # Read paste portion (same logic as /log)
+        async with aiofiles.open(file_path, "r") as f:
+            await f.seek(0, 2)
+            size = await f.tell()
+            await f.seek(max(0, size - MAX_PASTE_PAGES * CHUNK_SIZE), 0)
+            paste_content = await f.read()
+
+        yaso_url = await paste_to_yaso(paste_content)
+        paste_url = yaso_url if not yaso_url.startswith("Error") else await paste_to_spacebin(paste_content)
+
+        # If still small, keep the minimal UI
+        if total_pages == 1:
+            minimal_markup = InlineKeyboardMarkup(
+                [
+                    [InlineKeyboardButton("🔁 Refresh", callback_data="log_refresh_small")],
+                    [InlineKeyboardButton("🌍 URL", url=paste_url)],
+                ]
+            )
+
+            content = await get_page(file_path, 0)
+            await query.message.edit_text(f"<pre>{content}</pre>", reply_markup=minimal_markup)
+            return await safe_answer(query, "Refreshed")
+
+        # Promote to full pagination mode
+        index = total_pages - 1
+        LOG_CACHE[query.message.id] = {
+            "file_path": file_path,
+            "total_pages": total_pages,
+            "url": paste_url,
+            "index": index,
+            "selector_start": 0,
+            "view_mode": "tail"
+        }
+
+        page_content = await get_page(file_path, index)
+        markup = build_main_markup(index, total_pages, paste_url, "tail")
+
+        await query.message.edit_text(f"<pre>{page_content}</pre>", reply_markup=markup)
+        await safe_answer(query, "Log expanded — full controls enabled")
+
+    except Exception as e:
+        LOGGER.exception(f"Error in log_refresh_small: {e}")
+        await safe_answer(query, "Refresh failed", show_alert=True)
