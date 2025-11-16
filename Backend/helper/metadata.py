@@ -235,12 +235,11 @@ async def metadata(filename: str, channel: int, msg_id: int) -> dict | None:
             default_id = extract_tmdb_id(filename)
         except Exception:
             pass
-
-    
-     if not title:
-            LOGGER.info(f"No title parsed from: {filename} (parsed={parsed})")
-            return None
-         
+            
+    if not title:
+        LOGGER.info(f"No title parsed from: {filename} (parsed={parsed})")
+        return None
+   
     # --- 🔗 Encode job data ---
     data = {"chat_id": channel, "msg_id": msg_id}
     # encoded_string = await encode_string(data)
