@@ -138,48 +138,98 @@ async def fix_metadata_handler(_, message):
                 LOGGER.error(f"Error updating {CURRENT_TASK}: {e}")
 
     # -------------------------------
-    # TV episode processor
+    # TV show processor
     # -------------------------------
-    async def process_tv_episode(tv, season_num, ep, collection):
-        nonlocal episodes_done, current_tv_show_episodes_done, elapsed_episodes, start_episodes
-        async with SEM:
-            if CANCEL_REQUESTED:
-                return
-            global CURRENT_TASK
-            try:
-                if start_episodes is None:
-                    start_episodes = time.time()
+    async def process_tv_show(tv, collection):
+        nonlocal episodes_done, tv_shows_done, elapsed_episodes, start_episodes
 
-                tmdb_id = tv["tmdb_id"]
-                title = tv["title"]
-                year = tv.get("release_year")
-                CURRENT_TASK = f"TV: {title} S{season_num}E{ep['episode_number']}"
+        if CANCEL_REQUESTED:
+            return
 
-                ep_meta = await fetch_tv_metadata(
-                    title=title,
-                    season=season_num,
-                    episode=ep["episode_number"],
-                    encoded_string=None,
-                    year=year
-                )
-                if ep_meta:
-                    await collection.update_one(
-                        {"tmdb_id": tmdb_id},
-                        {"$set": {
-                            "seasons.$[s].episodes.$[e].overview": ep_meta.get("episode_overview"),
-                            "seasons.$[s].episodes.$[e].released": ep_meta.get("episode_released"),
-                            "seasons.$[s].episodes.$[e].episode_backdrop": ep_meta.get("episode_backdrop"),
-                        }},
-                        array_filters=[
-                            {"s.season_number": season_num},
-                            {"e.episode_number": ep["episode_number"]}
-                        ]
+        global CURRENT_TASK
+        tmdb_id = tv["tmdb_id"]
+        title = tv["title"]
+        year = tv.get("release_year")
+        CURRENT_TASK = f"TV Show: {title} ({year})"
+
+        if start_episodes is None:
+            start_episodes = time.time()
+
+        # Gather all episodes to fetch metadata for
+        episodes_to_fetch = []
+        for season in tv.get("seasons", []):
+            for ep in season.get("episodes", []):
+                episodes_to_fetch.append({
+                    "season_number": season["season_number"],
+                    "episode_number": ep["episode_number"]
+                })
+
+        # Fetch metadata concurrently
+        async def fetch_episode(ep_info):
+            async with SEM:
+                if CANCEL_REQUESTED:
+                    return None, None
+
+                season_num = ep_info["season_number"]
+                ep_num = ep_info["episode_number"]
+
+                try:
+                    meta = await fetch_tv_metadata(
+                        title=title,
+                        season=season_num,
+                        episode=ep_num,
+                        encoded_string=None,
+                        year=year
                     )
-                episodes_done += 1
-                current_tv_show_episodes_done += 1
-                elapsed_episodes = time.time() - start_episodes
+                    return (season_num, ep_num), meta
+                except Exception as e:
+                    LOGGER.error(f"Error fetching metadata for {title} S{season_num}E{ep_num}: {e}")
+                    return (season_num, ep_num), None
+
+        tasks = [fetch_episode(ep) for ep in episodes_to_fetch]
+        results = await asyncio.gather(*tasks)
+
+        # Prepare a single bulk update
+        operations = {}
+        updated_episodes_count = 0
+
+        for (season_num, ep_num), meta in results:
+            if meta:
+                operations[f"seasons.$[s{season_num}].episodes.$[e{ep_num}].overview"] = meta.get("episode_overview")
+                operations[f"seasons.$[s{season_num}].episodes.$[e{ep_num}].released"] = meta.get("episode_released")
+                operations[f"seasons.$[s{season_num}].episodes.$[e{ep_num}].episode_backdrop"] = meta.get("episode_backdrop")
+                updated_episodes_count += 1
+
+        # Execute the update if there are changes
+        if operations:
+            try:
+                array_filters = []
+                # Dynamically create array filters for each season and episode
+                for season_num, ep_num in set((k[0], k[1]) for k in results if k[1]):
+                    array_filters.append({f"s{season_num}.season_number": season_num})
+                    array_filters.append({f"e{ep_num}.episode_number": ep_num})
+
+                # Remove duplicate filters
+                unique_filters = []
+                seen = set()
+                for f in array_filters:
+                    key = tuple(f.items())
+                    if key not in seen:
+                        unique_filters.append(f)
+                        seen.add(key)
+
+                await collection.update_one(
+                    {"tmdb_id": tmdb_id},
+                    {"$set": operations},
+                    array_filters=unique_filters
+                )
             except Exception as e:
-                LOGGER.error(f"Error updating {CURRENT_TASK}: {e}")
+                LOGGER.error(f"Error updating database for {title}: {e}")
+
+        # Update progress counters
+        episodes_done += updated_episodes_count
+        tv_shows_done += 1
+        elapsed_episodes = time.time() - start_episodes
 
     # -------------------------------
     # Update movies
@@ -199,23 +249,16 @@ async def fix_metadata_handler(_, message):
     # Update TV shows
     # -------------------------------
     async def update_tv():
-        # nonlocal tv_shows_done, current_tv_show_total_episodes, current_tv_show_episodes_done, SHOW_EPISODE_PROGRESS
-        nonlocal tv_shows_done, current_tv_show_total_episodes, current_tv_show_episodes_done
-        global SHOW_EPISODE_PROGRESS
-        SHOW_EPISODE_PROGRESS = True
+        tasks = []
         for i in range(1, db.current_db_index + 1):
             if CANCEL_REQUESTED:
                 break
             key = f"storage_{i}"
             collection = db.dbs[key]["tv"]
             async for tv in collection.find({}):
-                tv_shows_done += 1
-                current_tv_show_total_episodes = sum(len(s.get("episodes", [])) for s in tv.get("seasons", []))
-                current_tv_show_episodes_done = 0
+                tasks.append(asyncio.create_task(process_tv_show(tv, collection)))
 
-                for season in tv.get("seasons", []):
-                    for ep in season.get("episodes", []):
-                        await process_tv_episode(tv, season["season_number"], ep, collection)
+        await asyncio.gather(*tasks)
 
     # -------------------------------
     # Progress updater
@@ -226,19 +269,15 @@ async def fix_metadata_handler(_, message):
             overall_total = total_movies + total_episodes
             bar = progress_bar(overall_done, overall_total)
 
-            # Calculate separate ETAs
-            eta_movies = (elapsed_movies / movies_done * (total_movies - movies_done)) if movies_done else 0
-            eta_episodes = (elapsed_episodes / episodes_done * (total_episodes - episodes_done)) if episodes_done else 0
-            total_eta = eta_movies + eta_episodes
+            # Calculate ETA based on overall progress
+            elapsed_time = time.time() - start_time
+            total_eta = (elapsed_time / overall_done * (overall_total - overall_done)) if overall_done else 0
 
             msg = (
                 f"🎬 Movies: {movies_done}/{total_movies}\n"
                 f"🌄 TV Show: {tv_shows_done}/{total_tv_shows}\n"
-            )
-            if SHOW_EPISODE_PROGRESS and current_tv_show_total_episodes > 0:
-                msg += f"→ Episodes: {current_tv_show_episodes_done}/{current_tv_show_total_episodes}\n"
-            msg += f"📺 All Episodes: {episodes_done}/{total_episodes}\n\n"
-            msg += f"{bar}\n"
+                f"📺 All Episodes: {episodes_done}/{total_episodes}\n\n"
+                f"{bar}\n"
             msg += f"⏱ ETA: {format_eta(total_eta)}\n"
             msg += f"⏲ Elapsed: {format_eta(time.time() - start_time)}\n"
             msg += f"Last: {CURRENT_TASK}"
