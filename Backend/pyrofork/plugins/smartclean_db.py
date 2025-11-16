@@ -17,7 +17,7 @@ from Backend.helper.encrypt import decode_string
 # -------------------------------
 CANCEL_REQUESTED = False
 CURRENT_TASK = ""
-# SEM = Semaphore(10)
+SEM = Semaphore(10)  # initial concurrency
 INITIAL_CONCURRENCY = 10
 MAX_CONCURRENCY = 20
 MIN_CONCURRENCY = 2
@@ -56,16 +56,11 @@ async def cancel_smartclean(_, query):
 # -------------------------------
 @Client.on_message(filters.command("smartclean") & filters.private & CustomFilters.owner, group=10)
 async def smartclean(client: Client, message: Message):
-    global CANCEL_REQUESTED, CURRENT_TASK
+    global CANCEL_REQUESTED, CURRENT_TASK, SEM
     CANCEL_REQUESTED = False
     CURRENT_TASK = ""
     start_time = time()
 
-    # -------------------------------
-    # Initial concurrency semaphore
-    # -------------------------------
-    SEM = Semaphore(INITIAL_CONCURRENCY)
-    
     args = message.text.split()
     delete_mode = len(args) > 1 and args[1].lower() == "delete"
     mode_text = "🧹 Cleanup Mode (deleting broken entries...)" if delete_mode else "🔍 Scan Mode (report only)"
@@ -91,8 +86,9 @@ async def smartclean(client: Client, message: Message):
     # Concurrency adjuster
     # -------------------------------
     async def adjust_concurrency(success=True, flood_wait=None):
-        nonlocal concurrency, SEM
+        global SEM
         async with adaptive_lock:
+            nonlocal concurrency
             if flood_wait:
                 concurrency = max(MIN_CONCURRENCY, concurrency // 2)
                 LOGGER.warning(f"⏱️ FloodWait {flood_wait}s → reducing concurrency to {concurrency}")
@@ -124,6 +120,7 @@ async def smartclean(client: Client, message: Message):
     # Validate Telegram links
     # -------------------------------
     async def validate_quality(entry, tmdb_id, db_index, content_type, meta):
+        global CURRENT_TASK
         nonlocal checked
         try:
             decoded = await decode_string(entry["id"])
@@ -158,7 +155,8 @@ async def smartclean(client: Client, message: Message):
     # Process movies
     # -------------------------------
     async def process_movies(db_key):
-        nonlocal total_movies, total_deleted, last_update, CURRENT_TASK
+        global CURRENT_TASK
+        nonlocal total_movies, total_deleted, last_update
         movies = await db.dbs[db_key]["movie"].find({}, {"_id": 0, "tmdb_id": 1, "telegram": 1, "title": 1}).to_list(None)
         total_movies += len(movies)
 
@@ -191,7 +189,8 @@ async def smartclean(client: Client, message: Message):
     # Process TV shows
     # -------------------------------
     async def process_tv(db_key):
-        nonlocal total_tv, total_deleted, last_update, CURRENT_TASK
+        global CURRENT_TASK
+        nonlocal total_tv, total_deleted, last_update
         shows = await db.dbs[db_key]["tv"].find({}, {"_id":0,"tmdb_id":1,"title":1,"seasons":1}).to_list(None)
         total_tv += len(shows)
 
@@ -227,7 +226,8 @@ async def smartclean(client: Client, message: Message):
 
                     # Episode-level tracking
                     episodes_done += 1
-                    await update_status(show_episodes=True, current_episode=episodes_done, total_episodes=total_episodes, last_task=f"TV: {show['title']} S{season.get('season_number')}E{episode.get('episode_number')}")
+                    await update_status(show_episodes=True, current_episode=episodes_done, total_episodes=total_episodes,
+                                        last_task=f"TV: {show['title']} S{season.get('season_number')}E{episode.get('episode_number')}")
 
                 if valid_episodes:
                     season["episodes"] = valid_episodes
@@ -245,7 +245,7 @@ async def smartclean(client: Client, message: Message):
     # -------------------------------
     async def update_status(show_episodes=False, current_episode=0, total_episodes=0, last_task=None):
         overall_done = checked
-        total_items = total_movies + total_tv  # rough estimate
+        total_items = total_movies + total_tv
         bar = progress_bar(overall_done, total_items)
         elapsed = time() - start_time
         eta = (elapsed / overall_done * (total_items - overall_done)) if overall_done else 0
