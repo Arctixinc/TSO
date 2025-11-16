@@ -186,7 +186,9 @@ async def fix_metadata_handler(_, message):
     # Update TV shows
     # -------------------------------
     async def update_tv():
-        nonlocal tv_shows_done, current_tv_show_total_episodes, current_tv_show_episodes_done, SHOW_EPISODE_PROGRESS
+        # nonlocal tv_shows_done, current_tv_show_total_episodes, current_tv_show_episodes_done, SHOW_EPISODE_PROGRESS
+        nonlocal tv_shows_done, current_tv_show_total_episodes, current_tv_show_episodes_done
+        global SHOW_EPISODE_PROGRESS
         SHOW_EPISODE_PROGRESS = True  # Enable episode line
         for i in range(1, db.current_db_index + 1):
             if CANCEL_REQUESTED:
