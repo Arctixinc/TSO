@@ -474,7 +474,8 @@ async def regenerate_expired_log(query: CallbackQuery):
     paste_url = yaso_url if not yaso_url.startswith("Error") else await paste_to_spacebin(paste_content)
 
     total_pages = len(pages)
-    
+    index = total_pages - 1
+
     # --- Single-page minimal UI ---
     if total_pages == 1:
         minimal_markup = InlineKeyboardMarkup(
@@ -483,15 +484,15 @@ async def regenerate_expired_log(query: CallbackQuery):
                 [InlineKeyboardButton("🌍 URL", url=paste_url)]
             ]
         )
-        await query.message.edit_text(f"<pre>{pages[0]}</pre>", reply_markup=minimal_markup)
-        return await safe_answer(query, "Log regenerated successfully")
+        sent_msg = await query.message.reply_text(f"<pre>{pages[0]}</pre>", reply_markup=minimal_markup, quote=True)
 
     # --- Multi-page full UI ---
-    index = total_pages - 1
-    markup = build_main_markup(index, total_pages, paste_url, "tail")
-    sent_msg = await query.message.reply_text("<pre>" + "\n".join(content.strip().splitlines()[-20:]) + "</pre>",
-                                              reply_markup=markup, quote=True)
+    else:
+        markup = build_main_markup(index, total_pages, paste_url, "tail")
+        preview_text = "<pre>" + "\n".join(content.strip().splitlines()[-20:]) + "</pre>"
+        sent_msg = await query.message.reply_text(preview_text, reply_markup=markup, quote=True)
 
+    # --- Add to LOG_CACHE ---
     LOG_CACHE[sent_msg.id] = {
         "file_path": LOG_FILE_PATH,
         "total_pages": total_pages,
@@ -502,7 +503,7 @@ async def regenerate_expired_log(query: CallbackQuery):
     }
 
     try:
-        await query.message.delete()
+        await query.message.delete()  # delete old expired message
     except Exception:
         pass
 
