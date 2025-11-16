@@ -171,13 +171,14 @@ def build_selector_markup(msg_id: int, page_range_start: int = -1):
     total_pages = data["total_pages"]
     buttons = []
 
-    # If total pages are manageable, show the simple selector
+    # -------------------------------
+    # SIMPLE SELECTOR (total ≤ 50)
+    # -------------------------------
     if total_pages <= 50:
         window_size = 25
         start = data.get("selector_start", 0)
         end = min(start + window_size, total_pages)
 
-        # Page buttons
         row = []
         for i in range(start, end):
             row.append(InlineKeyboardButton(str(i + 1), callback_data=f"log_page_{i}"))
@@ -187,47 +188,74 @@ def build_selector_markup(msg_id: int, page_range_start: int = -1):
         if row:
             buttons.append(row)
 
-        # Navigation
         nav_row = []
         if start > 0:
             nav_row.append(InlineKeyboardButton("⏪", callback_data="selector_prev"))
         nav_row.append(InlineKeyboardButton("Back", callback_data="selector_back"))
         if end < total_pages:
             nav_row.append(InlineKeyboardButton("⏩", callback_data="selector_next"))
+
         buttons.append(nav_row)
+        return InlineKeyboardMarkup(buttons)
 
-    # Otherwise, show the ranged selector
-    else:
-        # If a range is selected, show the pages in that range
-        if page_range_start != -1:
-            start = page_range_start
-            end = min(start + 50, total_pages)
+    # -------------------------------
+    # RANGE SELECTOR (NEW SYSTEM)
+    # -------------------------------
+    ranges_per_page = 12       # how many range buttons per screen
+    pages_per_range = 50       # pages per single range-block
 
+    total_ranges = (total_pages + pages_per_range - 1) // pages_per_range
+
+    # get or default range index
+    range_index = data.get("range_index", 0)
+
+    # clamp
+    if range_index < 0:
+        range_index = 0
+    if range_index >= total_ranges:
+        range_index = total_ranges - 1
+
+    data["range_index"] = range_index
+
+    start_range = range_index * ranges_per_page
+    end_range = min(start_range + ranges_per_page, total_ranges)
+
+    # --------------------------
+    # BUILD RANGE BUTTONS
+    # --------------------------
+    row = []
+    for r in range(start_range, end_range):
+        start_page = r * pages_per_range + 1
+        end_page = min((r + 1) * pages_per_range, total_pages)
+
+        row.append(
+            InlineKeyboardButton(
+                f"{start_page}-{end_page}",
+                callback_data=f"log_range_{r * pages_per_range}"
+            )
+        )
+
+        if len(row) == 3:
+            buttons.append(row)
             row = []
-            for i in range(start, end):
-                row.append(InlineKeyboardButton(str(i + 1), callback_data=f"log_page_{i}"))
-                if len(row) == 5:
-                    buttons.append(row)
-                    row = []
-            if row:
-                buttons.append(row)
-            buttons.append([InlineKeyboardButton("Back to Ranges", callback_data="log_selector")])
 
-        # Otherwise, show the ranges
-        else:
-            buttons.append([InlineKeyboardButton("Select Page Range", callback_data="selector_null")])
-            ranges = list(range(0, total_pages, 50))
-            row = []
-            for i in ranges:
-                start_page = i + 1
-                end_page = min(i + 50, total_pages)
-                row.append(InlineKeyboardButton(f"{start_page}-{end_page}", callback_data=f"log_range_{i}"))
-                if len(row) == 3:
-                    buttons.append(row)
-                    row = []
-            if row:
-                buttons.append(row)
-            buttons.append([InlineKeyboardButton("Back", callback_data="selector_back")])
+    if row:
+        buttons.append(row)
+
+    # --------------------------
+    # RANGE NAVIGATION BUTTONS
+    # --------------------------
+    nav = []
+
+    if range_index > 0:
+        nav.append(InlineKeyboardButton("⬅️ Prev Ranges", callback_data="range_prev"))
+
+    nav.append(InlineKeyboardButton("Back", callback_data="selector_back"))
+
+    if end_range < total_ranges:
+        nav.append(InlineKeyboardButton("Next Ranges ➡️", callback_data="range_next"))
+
+    buttons.append(nav)
 
     return InlineKeyboardMarkup(buttons)
 
@@ -515,6 +543,31 @@ async def send_log_file(client, query: CallbackQuery):
         await safe_answer(query, "⚠️ Failed to send log file.", show_alert=True)
         LOGGER.exception(f"Error in send_log_file: {e}")
 
+@Client.on_callback_query(filters.regex("^range_prev$"))
+async def range_prev(client, query):
+    msg_id = query.message.id
+    data = LOG_CACHE.get(msg_id)
+    if not data:
+        return await safe_answer(query, LOG_CONTEXT_LOST_MSG, show_alert=True)
+
+    data["range_index"] = max(0, data.get("range_index", 0) - 1)
+
+    await query.message.edit_reply_markup(build_selector_markup(msg_id))
+    await safe_answer(query)
+
+
+@Client.on_callback_query(filters.regex("^range_next$"))
+async def range_next(client, query):
+    msg_id = query.message.id
+    data = LOG_CACHE.get(msg_id)
+    if not data:
+        return await safe_answer(query, LOG_CONTEXT_LOST_MSG, show_alert=True)
+
+    data["range_index"] = data.get("range_index", 0) + 1
+
+    await query.message.edit_reply_markup(build_selector_markup(msg_id))
+    await safe_answer(query)
+    
 
 # -------------------------------
 # CLOSE HANDLER
