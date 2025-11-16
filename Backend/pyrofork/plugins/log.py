@@ -375,21 +375,13 @@ async def unified_log_refresh_handler(client, query: CallbackQuery):
         return await regenerate_expired_log(query)
 
     try:
-        # Show refreshing state for multi-page logs
-        markup = build_main_markup(data["index"], data["total_pages"], data["url"], data["view_mode"])
-        for row in markup.inline_keyboard:
-            for btn in row:
-                if btn.callback_data and btn.callback_data.startswith("log_refresh"):
-                    btn.text = "Refreshing..."
-        await query.message.edit_reply_markup(markup)
-
         # Reload log file
         file_path = data["file_path"]
         total_pages = get_total_pages(file_path)
         if total_pages == 0:
             await query.message.edit_text("> Log file is empty after refresh.")
             return await safe_answer(query)
-            
+
         async with aiofiles.open(file_path, 'r') as f:
             await f.seek(0, 2)
             size = await f.tell()
@@ -408,15 +400,37 @@ async def unified_log_refresh_handler(client, query: CallbackQuery):
         else:
             data["index"] = min(data["index"], total_pages - 1)
 
-        # Update message
+        # --- Use minimal markup for single-page logs ---
+        if total_pages == 1:
+            minimal_markup = InlineKeyboardMarkup(
+                [
+                    [InlineKeyboardButton("🔁 Refresh", callback_data="log_refresh")],
+                    [InlineKeyboardButton("🌍 URL", url=paste_url)]
+                ]
+            )
+            page_content = await get_page(file_path, 0)
+            await query.message.edit_text(f"<pre>{page_content}</pre>", reply_markup=minimal_markup)
+            return await safe_answer(query, "Log refreshed successfully")
+
+        # --- Full markup for multi-page logs ---
+        # Show refreshing state for multi-page logs
+        markup = build_main_markup(data["index"], data["total_pages"], data["url"], data["view_mode"])
+        for row in markup.inline_keyboard:
+            for btn in row:
+                if btn.callback_data and btn.callback_data.startswith("log_refresh"):
+                    btn.text = "Refreshing..."
+        await query.message.edit_reply_markup(markup)
+
         page_content = await get_page(file_path, data["index"])
         final_markup = build_main_markup(data["index"], data["total_pages"], data["url"], data["view_mode"])
         await query.message.edit_text(f"<pre>{page_content}</pre>", reply_markup=final_markup)
 
         await safe_answer(query, "Log refreshed successfully")
+
     except Exception as e:
         LOGGER.exception(f"Error in unified_log_refresh_handler: {e}")
         await safe_answer(query, "⚠️ Failed to refresh log.", show_alert=True)
+
 
 # Send log file
 @Client.on_callback_query(filters.regex("^log_sendfile$"))
