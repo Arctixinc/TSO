@@ -480,7 +480,7 @@ async def regenerate_expired_log(query: CallbackQuery):
     if total_pages == 1:
         minimal_markup = InlineKeyboardMarkup(
             [
-                [InlineKeyboardButton("🔁 Refresh", callback_data="log_refresh_small")],
+                [InlineKeyboardButton("🔁 Refresh", callback_data="log_refresh")],
                 [InlineKeyboardButton("🌍 URL", url=paste_url)]
             ]
         )
