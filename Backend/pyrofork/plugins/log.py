@@ -511,10 +511,7 @@ async def reload_log_data(data: dict):
 
     data["total_pages"] = total_pages
     data["url"] = paste_url
-    if data["view_mode"] == "tail":
-        data["index"] = total_pages - 1
-    else:
-        data["index"] = min(data["index"], total_pages - 1)
+    data["index"] = min(data["index"], total_pages - 1)
 
     return total_pages
 
