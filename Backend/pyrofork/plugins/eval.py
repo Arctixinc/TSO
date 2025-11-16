@@ -22,15 +22,13 @@ async def shell_handler(client, message):
     try:
         cmd = None
 
-        # ✅ Use replied message first
+        # Use replied message first
         if message.reply_to_message:
             reply = message.reply_to_message
             if reply.text:
                 cmd = reply.text.strip()
-                LOGGER.debug("Using replied message text as shell command.")
             elif reply.caption:
                 cmd = reply.caption.strip()
-                LOGGER.debug("Using replied caption as shell command.")
             elif (
                 reply.document
                 and reply.document.file_name.endswith(('.sh', '.txt'))
@@ -39,9 +37,8 @@ async def shell_handler(client, message):
                 with open(path, "r") as f:
                     cmd = f.read().strip()
                 os.remove(path)
-                LOGGER.debug(f"Loaded command from attached file: {path}")
 
-        # ✅ Fallback to inline command
+        # Fallback to inline command
         if not cmd:
             parts = message.text.split(maxsplit=1)
             if len(parts) < 2:
@@ -49,13 +46,12 @@ async def shell_handler(client, message):
                     "❗**Usage:** `/sh <command>`",
                     parse_mode=ParseMode.MARKDOWN
                 )
-                return  # stop here — keep usage message
+                return
             cmd = parts[1]
-            LOGGER.debug("Using inline command argument.")
 
         LOGGER.info(f"Executing shell command: {cmd}")
 
-        # ✅ Execute command
+        # Execute command
         start_time = time.time()
         process = await asyncio.create_subprocess_shell(
             cmd,
@@ -66,9 +62,11 @@ async def shell_handler(client, message):
         end_time = time.time()
         execution_time = round(end_time - start_time, 2)
 
+        # Raw outputs
         o = stdout.decode().strip() or "No Output"
         e = stderr.decode().strip() or "No Error"
 
+        # HTML escaped for Telegram
         cmd_html = html.escape(cmd)
         o_html = html.escape(o)
         e_html = html.escape(e)
@@ -82,9 +80,17 @@ async def shell_handler(client, message):
             f"<b>✅ STDOUT:</b>\n<code>{o_html}</code>"
         )
 
+        # If too long — send file with RAW text (no HTML escape!)
         if len(output) > 4096:
-            LOGGER.debug("Output too long — sending as document.")
-            with BytesIO(output.encode()) as out_file:
+            raw_output = (
+                f"Command:\n{cmd}\n\n"
+                f"PID: {process.pid}\n"
+                f"Time: {execution_time}s\n\n"
+                f"STDERR:\n{e}\n\n"
+                f"STDOUT:\n{o}"
+            )
+
+            with BytesIO(raw_output.encode()) as out_file:
                 out_file.name = "shell_output.txt"
                 await message.reply_document(
                     document=out_file,
@@ -94,8 +100,6 @@ async def shell_handler(client, message):
         else:
             await message.reply_text(output, parse_mode=ParseMode.HTML)
 
-        LOGGER.info("Shell command executed successfully.")
-
     except Exception as err:
         LOGGER.error(f"Error during shell execution: {err}", exc_info=True)
         await message.reply_text(
@@ -104,10 +108,8 @@ async def shell_handler(client, message):
         )
 
     finally:
-        # ✅ Only delete if we didn’t show usage
         try:
-            if status_message.text != "❗**Usage:** `/sh <command>`":
-                await status_message.delete()
+            await status_message.delete()
         except Exception:
             pass
 
@@ -122,15 +124,13 @@ async def eval_handler(client, message):
     cmd = None
 
     try:
-        # ✅ Replied message logic
+        # Replied message logic
         if message.reply_to_message:
             reply = message.reply_to_message
             if reply.text:
                 cmd = reply.text.strip()
-                LOGGER.debug("Using replied message text as eval code.")
             elif reply.caption:
                 cmd = reply.caption.strip()
-                LOGGER.debug("Using replied caption as eval code.")
             elif (
                 reply.document
                 and reply.document.file_name.endswith(('.py', '.txt'))
@@ -139,9 +139,8 @@ async def eval_handler(client, message):
                 with open(path, "r") as f:
                     cmd = f.read()
                 os.remove(path)
-                LOGGER.debug(f"Loaded eval code from file: {path}")
 
-        # ✅ Inline fallback
+        # Inline fallback
         if not cmd:
             parts = message.text.split(maxsplit=1)
             if len(parts) < 2:
@@ -151,11 +150,10 @@ async def eval_handler(client, message):
                 )
                 return
             cmd = parts[1]
-            LOGGER.debug("Using inline eval argument.")
 
         LOGGER.info(f"Executing eval code: {cmd[:80]}...")
 
-        # ✅ Capture stdout/stderr
+        # Capture stdout/stderr
         old_stdout, old_stderr = sys.stdout, sys.stderr
         sys.stdout, sys.stderr = io.StringIO(), io.StringIO()
         exc = None
@@ -165,7 +163,6 @@ async def eval_handler(client, message):
             await aexec(cmd, client, message)
         except Exception:
             exc = traceback.format_exc()
-            LOGGER.error("Exception during eval execution", exc_info=True)
         end_time = time.time()
         execution_time = round(end_time - start_time, 2)
 
@@ -182,7 +179,7 @@ async def eval_handler(client, message):
         else:
             evaluation = "✅ Success"
 
-        # Escape output for safe HTML display
+        # Escape for Telegram (HTML mode)
         cmd_html = html.escape(cmd)
         evaluation_html = html.escape(evaluation)
 
@@ -193,9 +190,15 @@ async def eval_handler(client, message):
             f"<b>🖨 Output:</b>\n<code>{evaluation_html}</code>"
         )
 
+        # Too long — send RAW output in file
         if len(final_output) > 4096:
-            LOGGER.debug("Eval output too long — sending as document.")
-            with BytesIO(final_output.encode()) as out_file:
+            raw_output = (
+                f"Code:\n{cmd}\n\n"
+                f"Time: {execution_time}s\n\n"
+                f"Output:\n{evaluation}"
+            )
+
+            with BytesIO(raw_output.encode()) as out_file:
                 out_file.name = "eval_output.txt"
                 await message.reply_document(
                     document=out_file,
@@ -204,8 +207,6 @@ async def eval_handler(client, message):
                 )
         else:
             await message.reply_text(final_output, parse_mode=ParseMode.HTML)
-
-        LOGGER.info("Eval executed successfully.")
 
     except Exception as err:
         LOGGER.error(f"Error during eval handling: {err}", exc_info=True)
