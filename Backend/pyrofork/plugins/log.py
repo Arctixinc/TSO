@@ -258,7 +258,7 @@ async def log_command(client: Client, message: Message):
             paste_content = await f.read()
 
         yaso_url = await paste_to_yaso(paste_content)
-        paste_url = yaso_url if not yaso_url.startswith("Error") else await paste_to_spacebin(paste_content)
+        paste_url = yaso_url if not yaso_url.startswith("Error") else await paste_to_fragbin(paste_content)
 
         view_mode = 'tail'
         index = total_pages - 1
@@ -417,7 +417,7 @@ async def unified_log_refresh_handler(client, query: CallbackQuery):
 
         # Update paste URL
         yaso_url = await paste_to_yaso(paste_content)
-        paste_url = yaso_url if not yaso_url.startswith("Error") else await paste_to_spacebin(paste_content)
+        paste_url = yaso_url if not yaso_url.startswith("Error") else await paste_to_fragbin(paste_content)
         data["total_pages"] = total_pages
         data["url"] = paste_url
 
@@ -498,7 +498,7 @@ async def regenerate_expired_log(query: CallbackQuery):
     paste_content = "".join(pages[-MAX_PASTE_PAGES:]) if len(pages) > MAX_PASTE_PAGES else content
 
     yaso_url = await paste_to_yaso(paste_content)
-    paste_url = yaso_url if not yaso_url.startswith("Error") else await paste_to_spacebin(paste_content)
+    paste_url = yaso_url if not yaso_url.startswith("Error") else await paste_to_fragbin(paste_content)
 
     total_pages = len(pages)
     index = total_pages - 1
