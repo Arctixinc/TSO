@@ -17,7 +17,7 @@ from Backend.helper.encrypt import decode_string
 # -------------------------------
 CANCEL_REQUESTED = False
 CURRENT_TASK = ""
-SEM = Semaphore(10)  # initial concurrency
+# SEM = Semaphore(10)
 INITIAL_CONCURRENCY = 10
 MAX_CONCURRENCY = 20
 MIN_CONCURRENCY = 2
@@ -56,11 +56,16 @@ async def cancel_smartclean(_, query):
 # -------------------------------
 @Client.on_message(filters.command("smartclean") & filters.private & CustomFilters.owner, group=10)
 async def smartclean(client: Client, message: Message):
-    global CANCEL_REQUESTED, CURRENT_TASK, SEM
+    global CANCEL_REQUESTED, CURRENT_TASK
     CANCEL_REQUESTED = False
     CURRENT_TASK = ""
     start_time = time()
 
+    # -------------------------------
+    # Initial concurrency semaphore
+    # -------------------------------
+    SEM = Semaphore(INITIAL_CONCURRENCY)
+    
     args = message.text.split()
     delete_mode = len(args) > 1 and args[1].lower() == "delete"
     mode_text = "🧹 Cleanup Mode (deleting broken entries...)" if delete_mode else "🔍 Scan Mode (report only)"
