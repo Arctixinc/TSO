@@ -201,9 +201,28 @@ def build_selector_markup(msg_id: int, page_range_start: int = -1):
     # -------------------------------
     # RANGE SELECTOR (NEW SYSTEM)
     # -------------------------------
-    ranges_per_page = 12       # how many range buttons per screen
     pages_per_range = 50       # pages per single range-block
 
+    # If a page range has been selected, display the pages within it
+    if page_range_start != -1:
+        start = page_range_start
+        end = min(start + pages_per_range, total_pages)
+
+        row = []
+        for i in range(start, end):
+            row.append(InlineKeyboardButton(str(i + 1), callback_data=f"log_page_{i}"))
+            if len(row) == 5:
+                buttons.append(row)
+                row = []
+        if row:
+            buttons.append(row)
+
+        # Navigation to go back to the main range selector
+        nav_row = [InlineKeyboardButton("⏪ Back to Ranges", callback_data="log_selector")]
+        buttons.append(nav_row)
+        return InlineKeyboardMarkup(buttons)
+
+    ranges_per_page = 12       # how many range buttons per screen
     total_ranges = (total_pages + pages_per_range - 1) // pages_per_range
 
     # get or default range index
@@ -332,6 +351,8 @@ async def range_button(client, query: CallbackQuery):
         if markup:
             await query.message.edit_reply_markup(markup)
         await safe_answer(query, f"Showing pages {page_range_start+1}-{page_range_start+50}")
+    except MessageNotModified:
+        await safe_answer(query, "Already viewing this page range.")
     except Exception as e:
         LOGGER.exception(f"Error in range_button: {e}")
 
