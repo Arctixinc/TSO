@@ -46,8 +46,8 @@ async def cancel_fix(_, query):
 # -------------------------------
 # Main metadata fix handler
 # -------------------------------
-@Client.on_message(filters.command("fixmetadata") & filters.private & CustomFilters.owner, group=10)
-async def fix_metadata_handler(_, message):
+@Client.on_message(filters.command("fixmetadata_") & filters.private & CustomFilters.owner, group=10)
+async def fix_metadata_handler_(_, message):
     global CANCEL_REQUESTED, CURRENT_TASK, SHOW_EPISODE_PROGRESS
     CANCEL_REQUESTED = False
     CURRENT_TASK = ""
