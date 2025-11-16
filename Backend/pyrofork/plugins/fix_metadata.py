@@ -13,6 +13,7 @@ from Backend.logger import LOGGER
 # -------------------------------
 CANCEL_REQUESTED = False
 CURRENT_TASK = ""
+SHOW_EPISODE_PROGRESS = False
 SEM = asyncio.Semaphore(15)  # concurrency limiter
 
 # -------------------------------
@@ -47,9 +48,10 @@ async def cancel_fix(_, query):
 # -------------------------------
 @Client.on_message(filters.command("fixmetadata") & filters.private & CustomFilters.owner, group=10)
 async def fix_metadata_handler(_, message):
-    global CANCEL_REQUESTED, CURRENT_TASK
+    global CANCEL_REQUESTED, CURRENT_TASK, SHOW_EPISODE_PROGRESS
     CANCEL_REQUESTED = False
     CURRENT_TASK = ""
+    SHOW_EPISODE_PROGRESS = False
     start_time = time.time()
 
     # -------------------------------
@@ -139,7 +141,7 @@ async def fix_metadata_handler(_, message):
     # TV show processor
     # -------------------------------
     async def process_tv_show(tv, collection):
-        nonlocal episodes_done, tv_shows_done, elapsed_episodes, start_episodes
+        nonlocal episodes_done, tv_shows_done, elapsed_episodes, start_episodes, current_tv_show_episodes_done
 
         if CANCEL_REQUESTED:
             return
@@ -164,6 +166,7 @@ async def fix_metadata_handler(_, message):
 
         # Fetch metadata concurrently
         async def fetch_episode(ep_info):
+            nonlocal current_tv_show_episodes_done
             async with SEM:
                 if CANCEL_REQUESTED:
                     return None, None
@@ -179,6 +182,7 @@ async def fix_metadata_handler(_, message):
                         encoded_string=None,
                         year=year
                     )
+                    current_tv_show_episodes_done += 1
                     return (season_num, ep_num), meta
                 except Exception as e:
                     LOGGER.error(f"Error fetching metadata for {title} S{season_num}E{ep_num}: {e}")
@@ -247,16 +251,22 @@ async def fix_metadata_handler(_, message):
     # Update TV shows
     # -------------------------------
     async def update_tv():
-        tasks = []
+        nonlocal current_tv_show_total_episodes, current_tv_show_episodes_done
+        global SHOW_EPISODE_PROGRESS
+        SHOW_EPISODE_PROGRESS = True
         for i in range(1, db.current_db_index + 1):
             if CANCEL_REQUESTED:
                 break
             key = f"storage_{i}"
             collection = db.dbs[key]["tv"]
             async for tv in collection.find({}):
-                tasks.append(asyncio.create_task(process_tv_show(tv, collection)))
+                if CANCEL_REQUESTED:
+                    break
 
-        await asyncio.gather(*tasks)
+                current_tv_show_total_episodes = sum(len(s.get("episodes", [])) for s in tv.get("seasons", []))
+                current_tv_show_episodes_done = 0
+
+                await process_tv_show(tv, collection)
 
     # -------------------------------
     # Progress updater
@@ -274,8 +284,11 @@ async def fix_metadata_handler(_, message):
             msg = (
                 f"🎬 Movies: {movies_done}/{total_movies}\n"
                 f"🌄 TV Show: {tv_shows_done}/{total_tv_shows}\n"
-                f"📺 All Episodes: {episodes_done}/{total_episodes}\n\n"
-                f"{bar}\n"
+            )
+            if SHOW_EPISODE_PROGRESS and current_tv_show_total_episodes > 0:
+                msg += f"→ Episodes: {current_tv_show_episodes_done}/{current_tv_show_total_episodes}\n"
+            msg += f"📺 All Episodes: {episodes_done}/{total_episodes}\n\n"
+            msg += f"{bar}\n"
             msg += f"⏱ ETA: {format_eta(total_eta)}\n"
             msg += f"⏲ Elapsed: {format_eta(time.time() - start_time)}\n"
             msg += f"Last: {CURRENT_TASK}"
