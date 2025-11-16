@@ -460,6 +460,7 @@ async def log_close_handler(client, query: CallbackQuery):
 async def regenerate_expired_log(query: CallbackQuery):
     await safe_answer(query, "♻️ Regenerating log...", show_alert=True)
     await asyncio.sleep(1)
+    
     if not ospath.exists(LOG_FILE_PATH):
         return await query.message.reply_text("> ❌ Log file not found.")
 
@@ -472,22 +473,38 @@ async def regenerate_expired_log(query: CallbackQuery):
     yaso_url = await paste_to_yaso(paste_content)
     paste_url = yaso_url if not yaso_url.startswith("Error") else await paste_to_spacebin(paste_content)
 
-    preview_lines = content.strip().splitlines()[-20:]
-    preview_text = "<pre>" + "\n".join(preview_lines) + "</pre>"
+    total_pages = len(pages)
+    
+    # --- Single-page minimal UI ---
+    if total_pages == 1:
+        minimal_markup = InlineKeyboardMarkup(
+            [
+                [InlineKeyboardButton("🔁 Refresh", callback_data="log_refresh_small")],
+                [InlineKeyboardButton("🌍 URL", url=paste_url)]
+            ]
+        )
+        await query.message.edit_text(f"<pre>{pages[0]}</pre>", reply_markup=minimal_markup)
+        return await safe_answer(query, "Log regenerated successfully")
 
-    markup = build_main_markup(len(pages)-1, len(pages), paste_url, "tail")
-    sent_msg = await query.message.reply_text(preview_text, reply_markup=markup, quote=True)
+    # --- Multi-page full UI ---
+    index = total_pages - 1
+    markup = build_main_markup(index, total_pages, paste_url, "tail")
+    sent_msg = await query.message.reply_text("<pre>" + "\n".join(content.strip().splitlines()[-20:]) + "</pre>",
+                                              reply_markup=markup, quote=True)
 
     LOG_CACHE[sent_msg.id] = {
         "file_path": LOG_FILE_PATH,
-        "total_pages": len(pages),
+        "total_pages": total_pages,
         "url": paste_url,
-        "index": len(pages)-1,
+        "index": index,
         "selector_start": 0,
         "view_mode": "tail"
     }
+
     try:
         await query.message.delete()
     except Exception:
         pass
+
     LOGGER.info(f"New log regenerated and sent for message_id {sent_msg.id}")
+
