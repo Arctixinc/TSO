@@ -26,7 +26,7 @@ LOG_FILE_PATH = ospath.abspath("log.txt")
 # STATIC CONSTANTS
 # -------------------------------
 LOG_CONTEXT_LOST_MSG = "⚠️ Log data not available — please reopen logs."
-MAX_CHARS = 50000
+MAX_CHARS = 100000
 
 def trim_content(content: str) -> str:
     if len(content) > MAX_CHARS:
