@@ -12,18 +12,13 @@ from Backend.logger import LOGGER
 # Global state
 # -------------------------------
 CANCEL_REQUESTED = False
-CURRENT_DONE = 0
-CURRENT_TOTAL = 0
 CURRENT_TASK = ""
-SEM = asyncio.Semaphore(10)  # Limit concurrency to avoid rate limits
+SEM = asyncio.Semaphore(5)  # Limit concurrency to avoid rate limits
+SHOW_EPISODE_PROGRESS = False  # Track if we should show episode line
 
 # -------------------------------
 # Progress & ETA helpers
 # -------------------------------
-def progress_bar(done, total, length=20):
-    filled = int(length * (done / total)) if total else 0
-    return f"[{'█' * filled}{'░' * (length - filled)}] {done}/{total}"
-
 def format_eta(seconds):
     minutes, sec = divmod(int(seconds), 60)
     hours, minutes = divmod(minutes, 60)
@@ -32,6 +27,10 @@ def format_eta(seconds):
     if minutes > 0:
         return f"{minutes}m {sec}s"
     return f"{sec}s"
+
+def progress_bar(done, total, length=20):
+    filled = int(length * done / max(1, total))
+    return f"[{'█'*filled}{'░'*(length-filled)}] {done}/{total}"
 
 # -------------------------------
 # Cancel handler
@@ -49,45 +48,61 @@ async def cancel_fix(_, query):
 # -------------------------------
 @Client.on_message(filters.command("fixmetadata") & filters.private & CustomFilters.owner, group=10)
 async def fix_metadata_handler(_, message):
-    global CANCEL_REQUESTED, CURRENT_DONE, CURRENT_TOTAL, CURRENT_TASK
+    global CANCEL_REQUESTED, CURRENT_TASK, SHOW_EPISODE_PROGRESS
     CANCEL_REQUESTED = False
-    CURRENT_DONE = 0
     CURRENT_TASK = ""
+    SHOW_EPISODE_PROGRESS = False
     start_time = time.time()
 
     # -------------------------------
-    # Count total items accurately
+    # Count totals
     # -------------------------------
-    CURRENT_TOTAL = 0
-    # Movies
-    for i in range(1, db.current_db_index + 1):
-        key = f"storage_{i}"
-        CURRENT_TOTAL += await db.dbs[key]["movie"].count_documents({})
+    total_movies = 0
+    total_tv_shows = 0
+    total_episodes = 0
 
-    # TV episodes
     for i in range(1, db.current_db_index + 1):
         key = f"storage_{i}"
+        total_movies += await db.dbs[key]["movie"].count_documents({})
         async for tv in db.dbs[key]["tv"].find({}):
+            total_tv_shows += 1
             for season in tv.get("seasons", []):
-                CURRENT_TOTAL += len(season.get("episodes", []))
+                total_episodes += len(season.get("episodes", []))
 
+    # -------------------------------
+    # Progress counters
+    # -------------------------------
+    movies_done = 0
+    tv_shows_done = 0
+    episodes_done = 0
+    current_tv_show_total_episodes = 0
+    current_tv_show_episodes_done = 0
+
+    # -------------------------------
+    # Initial message (no episode line)
+    # -------------------------------
     status = await message.reply_text(
-        f"⏳ Initializing metadata fixing...\nTotal items: {CURRENT_TOTAL}",
+        f"⏳ Initializing metadata fixing...\n"
+        f"🎬 Movies: 0/{total_movies}\n"
+        f"🌄 TV Show: 0/{total_tv_shows}\n"
+        f"📺 All Episodes: 0/{total_episodes}\n"
+        f"[{'░'*20}] 0/{total_movies + total_episodes}",
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("❌ Cancel", callback_data="cancel_fix")]
         ])
     )
 
-    LOGGER.info(f"Starting metadata fix: Total items = {CURRENT_TOTAL}")
+    LOGGER.info(f"Starting metadata fix: Movies={total_movies}, TV Shows={total_tv_shows}, Episodes={total_episodes}")
 
     # -------------------------------
-    # Process a single movie
+    # Movie processor
     # -------------------------------
     async def process_movie(movie, collection):
-        global CURRENT_DONE, CURRENT_TASK
+        nonlocal movies_done
         async with SEM:
             if CANCEL_REQUESTED:
                 return
+            global CURRENT_TASK
             try:
                 tmdb_id = movie["tmdb_id"]
                 title = movie["title"]
@@ -109,18 +124,19 @@ async def fix_metadata_handler(_, message):
                             "rating": meta.get("rate"),
                         }}
                     )
-                CURRENT_DONE += 1
+                movies_done += 1
             except Exception as e:
                 LOGGER.error(f"Error updating {CURRENT_TASK}: {e}")
 
     # -------------------------------
-    # Process a single TV episode
+    # TV episode processor
     # -------------------------------
     async def process_tv_episode(tv, season_num, ep, collection):
-        global CURRENT_DONE, CURRENT_TASK
+        nonlocal episodes_done, current_tv_show_episodes_done
         async with SEM:
             if CANCEL_REQUESTED:
                 return
+            global CURRENT_TASK
             try:
                 tmdb_id = tv["tmdb_id"]
                 title = tv["title"]
@@ -147,12 +163,13 @@ async def fix_metadata_handler(_, message):
                             {"e.episode_number": ep["episode_number"]}
                         ]
                     )
-                CURRENT_DONE += 1
+                episodes_done += 1
+                current_tv_show_episodes_done += 1
             except Exception as e:
                 LOGGER.error(f"Error updating {CURRENT_TASK}: {e}")
 
     # -------------------------------
-    # Update all movies
+    # Update movies
     # -------------------------------
     async def update_movies():
         tasks = []
@@ -166,47 +183,59 @@ async def fix_metadata_handler(_, message):
         await asyncio.gather(*tasks)
 
     # -------------------------------
-    # Update all TV shows and episodes
+    # Update TV shows
     # -------------------------------
     async def update_tv():
-        tasks = []
+        nonlocal tv_shows_done, current_tv_show_total_episodes, current_tv_show_episodes_done, SHOW_EPISODE_PROGRESS
+        SHOW_EPISODE_PROGRESS = True  # Enable episode line
         for i in range(1, db.current_db_index + 1):
             if CANCEL_REQUESTED:
                 break
             key = f"storage_{i}"
             collection = db.dbs[key]["tv"]
             async for tv in collection.find({}):
-                # Show-level metadata (first episode as reference)
-                tasks.append(asyncio.create_task(process_tv_episode(tv, 1, {"episode_number":1}, collection)))
+                tv_shows_done += 1
+                current_tv_show_total_episodes = sum(len(s.get("episodes", [])) for s in tv.get("seasons", []))
+                current_tv_show_episodes_done = 0
+
                 for season in tv.get("seasons", []):
                     for ep in season.get("episodes", []):
-                        tasks.append(asyncio.create_task(process_tv_episode(tv, season["season_number"], ep, collection)))
-        await asyncio.gather(*tasks)
+                        await process_tv_episode(tv, season["season_number"], ep, collection)
 
     # -------------------------------
     # Progress updater
     # -------------------------------
     async def run_progress():
-        while not CANCEL_REQUESTED and CURRENT_DONE < CURRENT_TOTAL:
+        while not CANCEL_REQUESTED and (movies_done + episodes_done < total_movies + total_episodes):
             elapsed = time.time() - start_time
-            eta = (elapsed / max(1, CURRENT_DONE)) * (CURRENT_TOTAL - CURRENT_DONE)
-            await status.edit_text(
-                f"⏳ Updating Metadata...\n"
-                f"{progress_bar(CURRENT_DONE, CURRENT_TOTAL)}\n"
-                f"⏱ ETA: {format_eta(eta)}\n"
-                f"⏲ Elapsed: {format_eta(elapsed)}\n"
-                f"Last: {CURRENT_TASK}",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("❌ Cancel", callback_data="cancel_fix")]
-                ])
+            overall_done = movies_done + episodes_done
+            overall_total = total_movies + total_episodes
+            bar = progress_bar(overall_done, overall_total)
+
+            msg = (
+                f"🎬 Movies: {movies_done}/{total_movies}\n"
+                f"🌄 TV Show: {tv_shows_done}/{total_tv_shows}\n"
             )
+            if SHOW_EPISODE_PROGRESS and current_tv_show_total_episodes > 0:
+                msg += f"→ Episodes: {current_tv_show_episodes_done}/{current_tv_show_total_episodes}\n"
+            msg += f"📺 All Episodes: {episodes_done}/{total_episodes}\n\n"
+            msg += f"{bar}\n"
+            msg += f"⏱ ETA: {format_eta((elapsed / max(1, overall_done)) * (overall_total - overall_done))}\n"
+            msg += f"⏲ Elapsed: {format_eta(elapsed)}\n"
+            msg += f"Last: {CURRENT_TASK}"
+
+            await status.edit_text(msg, reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("❌ Cancel", callback_data="cancel_fix")]
+            ]))
             await asyncio.sleep(5)
 
     # -------------------------------
-    # Run movies & TV concurrently
+    # Run tasks
     # -------------------------------
     progress_task = asyncio.create_task(run_progress())
-    await asyncio.gather(update_movies(), update_tv())
+    await update_movies()
+    if not CANCEL_REQUESTED:
+        await update_tv()
     progress_task.cancel()
 
     # -------------------------------
@@ -217,9 +246,15 @@ async def fix_metadata_handler(_, message):
         return
 
     elapsed = time.time() - start_time
-    await status.edit_text(
+    overall_done = movies_done + episodes_done
+    overall_total = total_movies + total_episodes
+    final_msg = (
         f"🎉 **Metadata Fix Completed!**\n"
-        f"{progress_bar(CURRENT_DONE, CURRENT_TOTAL)}\n"
-        f"⏱ Time Taken: {format_eta(elapsed)}"
+        f"🎬 Movies: {movies_done}/{total_movies}\n"
+        f"🌄 TV Show: {tv_shows_done}/{total_tv_shows}\n"
+        f"📺 All Episodes: {episodes_done}/{total_episodes}\n\n"
+        f"{progress_bar(overall_done, overall_total)}\n"
+        f"⏲ Time Taken: {format_eta(elapsed)}"
     )
-    LOGGER.info(f"Metadata fix completed: {CURRENT_DONE}/{CURRENT_TOTAL} items updated.")
+    await status.edit_text(final_msg)
+    LOGGER.info(f"Metadata fix completed: Movies={movies_done}, TV Shows={tv_shows_done}, Episodes={episodes_done}")
