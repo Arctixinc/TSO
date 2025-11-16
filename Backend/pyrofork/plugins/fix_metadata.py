@@ -13,7 +13,6 @@ from Backend.logger import LOGGER
 # -------------------------------
 CANCEL_REQUESTED = False
 CURRENT_TASK = ""
-SHOW_EPISODE_PROGRESS = False
 SEM = asyncio.Semaphore(15)  # concurrency limiter
 
 # -------------------------------
@@ -48,10 +47,9 @@ async def cancel_fix(_, query):
 # -------------------------------
 @Client.on_message(filters.command("fixmetadata") & filters.private & CustomFilters.owner, group=10)
 async def fix_metadata_handler(_, message):
-    global CANCEL_REQUESTED, CURRENT_TASK, SHOW_EPISODE_PROGRESS
+    global CANCEL_REQUESTED, CURRENT_TASK
     CANCEL_REQUESTED = False
     CURRENT_TASK = ""
-    SHOW_EPISODE_PROGRESS = False
     start_time = time.time()
 
     # -------------------------------
