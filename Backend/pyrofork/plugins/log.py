@@ -452,9 +452,9 @@ async def reload_log_data(data: dict):
         return None
 
     async with aiofiles.open(file_path, 'r') as f:
-        f.seek(0, 2)
-        size = f.tell()
-        f.seek(max(0, size - MAX_PASTE_PAGES * CHUNK_SIZE), 0)
+        await f.seek(0, 2)
+        size = await f.tell()
+        await f.seek(max(0, size - MAX_PASTE_PAGES * CHUNK_SIZE), 0)
         paste_content = await f.read()
 
     yaso_url = await paste_to_yaso(paste_content)
