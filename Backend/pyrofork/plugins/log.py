@@ -240,9 +240,10 @@ async def log_command(client: Client, message: Message):
 
         if total_pages == 1:
             minimal_markup = InlineKeyboardMarkup(
-                [[InlineKeyboardButton("🔁 Refresh", callback_data="log_refresh_small")],
+                [[InlineKeyboardButton("🔁 Refresh", callback_data="log_refresh")],
                  [InlineKeyboardButton("🌍 URL", url=paste_url)]])
             sent_msg = await message.reply_text(f"<pre>{await get_page(file_path, 0)}</pre>", reply_markup=minimal_markup)
+            LOG_CACHE[sent_msg.id] = temp_cache
             return
 
         initial_page_content = await get_page(file_path, index)
@@ -364,7 +365,7 @@ async def toggle_view_mode(client, query: CallbackQuery):
     await safe_answer(query, f"Switched to {'Head' if data['view_mode']=='head' else 'Tail'} mode")
 
 # Refresh
-@Client.on_callback_query(filters.regex(r"^log_refresh(_small)?$"))
+@Client.on_callback_query(filters.regex(r"^log_refresh$"))
 async def unified_log_refresh_handler(client, query: CallbackQuery):
     msg_id = query.message.id
     data = LOG_CACHE.get(msg_id)
@@ -385,6 +386,10 @@ async def unified_log_refresh_handler(client, query: CallbackQuery):
         # Reload log file
         file_path = data["file_path"]
         total_pages = get_total_pages(file_path)
+        if total_pages == 0:
+            await query.message.edit_text("> Log file is empty after refresh.")
+            return await safe_answer(query)
+            
         async with aiofiles.open(file_path, 'r') as f:
             await f.seek(0, 2)
             size = await f.tell()
