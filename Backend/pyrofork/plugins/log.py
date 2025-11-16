@@ -26,7 +26,13 @@ LOG_FILE_PATH = ospath.abspath("log.txt")
 # STATIC CONSTANTS
 # -------------------------------
 LOG_CONTEXT_LOST_MSG = "⚠️ Log data not available — please reopen logs."
+MAX_CHARS = 50000
 
+def trim_content(content: str) -> str:
+    if len(content) > MAX_CHARS:
+        return content[-MAX_CHARS:]
+    return content
+    
 # -------------------------------
 # HELPERS
 # -------------------------------
@@ -34,6 +40,7 @@ async def generate_random_string(length=32):
     return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
 
 async def paste_to_spacebin(content: str):
+    content = trim_content(content)
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(
@@ -54,6 +61,7 @@ async def paste_to_spacebin(content: str):
         return f"Error: {e}"
 
 async def paste_to_yaso(content: str):
+    content = trim_content(content)
     try:
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False)) as session:
             async with session.post("https://api.yaso.su/v1/auth/guest") as auth:
