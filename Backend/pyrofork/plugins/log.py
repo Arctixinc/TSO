@@ -140,9 +140,9 @@ def build_main_markup(index: int, total: int, url: str, view_mode: str):
     # Jump buttons
     jump_row = []
     if index > 1:
-        jump_row.append(InlineKeyboardButton("⟵ -2", callback_data="log_prev2"))
+        jump_row.append(InlineKeyboardButton("⏪", callback_data="log_prev2"))
     if index < total - 2:
-        jump_row.append(InlineKeyboardButton("+2 ⟶", callback_data="log_next2"))
+        jump_row.append(InlineKeyboardButton("⏩", callback_data="log_next2"))
 
     if jump_row:
         buttons.append(jump_row)
@@ -151,10 +151,10 @@ def build_main_markup(index: int, total: int, url: str, view_mode: str):
     actions_row = [
         InlineKeyboardButton("🔁 Refresh", callback_data="log_refresh"),
         InlineKeyboardButton(
-            f"View Mode: {'📥 Tail' if view_mode == 'tail' else '📤 Head'}",
+            f"{'📥 Tail' if view_mode == 'tail' else '📤 Head'}",
             callback_data="log_toggle_view_mode"
         ),
-        InlineKeyboardButton("📤 Export Log", callback_data="log_sendfile"),
+        InlineKeyboardButton("📤 Export", callback_data="log_sendfile"),
     ]
     buttons.append(actions_row)
 
