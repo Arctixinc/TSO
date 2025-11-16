@@ -110,25 +110,45 @@ def build_main_markup(index: int, total: int, url: str, view_mode: str):
     """Builds the main UI markup with a modern look."""
     buttons = []
 
-    # Top navigation row
-    nav_row = [
-        InlineKeyboardButton("⏪", callback_data="log_first"),
-        InlineKeyboardButton("⬅️", callback_data="log_prev"),
-        InlineKeyboardButton(f"📄 {index + 1}/{total}", callback_data="log_selector"),
-        InlineKeyboardButton("➡️", callback_data="log_next"),
-        InlineKeyboardButton("⏩", callback_data="log_last"),
+    # Page number and selector
+    page_row = [
+        InlineKeyboardButton(f"📄 Page {index + 1}/{total}", callback_data="log_selector"),
     ]
+    buttons.append(page_row)
+
+    # Main navigation
+    nav_row = []
+    if index > 0:
+        nav_row.append(InlineKeyboardButton("⏪ First", callback_data="log_first"))
+        nav_row.append(InlineKeyboardButton("⬅️ Prev", callback_data="log_prev"))
+    if index < total - 1:
+        nav_row.append(InlineKeyboardButton("Next ➡️", callback_data="log_next"))
+        nav_row.append(InlineKeyboardButton("Last ⏩", callback_data="log_last"))
     buttons.append(nav_row)
 
-    # Bottom actions row
+    # Dynamic page jump buttons
+    jump_row = []
+    if index > 1:
+        jump_row.append(InlineKeyboardButton("-2", callback_data="log_prev2"))
+    if index < total - 2:
+        jump_row.append(InlineKeyboardButton("+2", callback_data="log_next2"))
+    if jump_row:
+        buttons.append(jump_row)
+
+    # Actions row
     actions_row = [
-        InlineKeyboardButton("🔄", callback_data="log_refresh"),
+        InlineKeyboardButton("🔄 Refresh", callback_data="log_refresh"),
         InlineKeyboardButton(f"View: {'Tail' if view_mode == 'tail' else 'Head'}", callback_data="log_toggle_view_mode"),
-        InlineKeyboardButton("📎", callback_data="log_sendfile"),
-        InlineKeyboardButton("🌐", url=url),
-        InlineKeyboardButton("❌", callback_data="log_close"),
+        InlineKeyboardButton("📎 Send File", callback_data="log_sendfile"),
     ]
     buttons.append(actions_row)
+
+    # Footer row
+    footer_row = [
+        InlineKeyboardButton("🌐 URL", url=url),
+        InlineKeyboardButton("❌ Close", callback_data="log_close"),
+    ]
+    buttons.append(footer_row)
 
     return InlineKeyboardMarkup(buttons)
 
@@ -217,8 +237,10 @@ async def log_command(client: Client, message: Message):
 
         # Smartly decide what to paste
         async with aiofiles.open(file_path, 'r') as f:
-            content = await f.read() # Read only for pasting, can be optimized further
-            paste_content = content[-MAX_PASTE_PAGES*3500:]
+            f.seek(0, 2)
+            size = f.tell()
+            f.seek(max(0, size - MAX_PASTE_PAGES * CHUNK_SIZE), 0)
+            paste_content = await f.read()
 
         yaso_url = await paste_to_yaso(paste_content)
         paste_url = yaso_url if not yaso_url.startswith("Error") else await paste_to_spacebin(paste_content)
@@ -363,7 +385,7 @@ async def selector_null(client, query: CallbackQuery):
 # -------------------------------
 # NAVIGATION HANDLERS
 # -------------------------------
-@Client.on_callback_query(filters.regex(r"^log_(prev|next|first|last)$"))
+@Client.on_callback_query(filters.regex(r"^log_(prev|next|first|last|prev2|next2)$"))
 async def navigation_handler(client, query: CallbackQuery):
     try:
         msg_id = query.message.id
@@ -374,16 +396,26 @@ async def navigation_handler(client, query: CallbackQuery):
         action = query.data.split("_")[-1]
         total_pages = data["total_pages"]
 
-        if action == "prev" and data["index"] > 0:
-            data["index"] -= 1
-        elif action == "next" and data["index"] < total_pages - 1:
-            data["index"] += 1
-        elif action == "first":
+        if action == "first":
+            if data["index"] == 0:
+                return await safe_answer(query, "You are already on the first page.")
             data["index"] = 0
         elif action == "last":
+            if data["index"] == total_pages - 1:
+                return await safe_answer(query, "You are already on the last page.")
             data["index"] = total_pages - 1
-        else:
-            return await safe_answer(query, "Cannot navigate further")
+        elif action == "prev":
+            if data["index"] == 0:
+                return await safe_answer(query, "You are already on the first page.")
+            data["index"] -= 1
+        elif action == "next":
+            if data["index"] == total_pages - 1:
+                return await safe_answer(query, "You are already on the last page.")
+            data["index"] += 1
+        elif action == "prev2":
+            data["index"] = max(0, data["index"] - 2)
+        elif action == "next2":
+            data["index"] = min(total_pages - 1, data["index"] + 2)
 
         page_content = await get_page(data["file_path"], data["index"])
         markup = build_main_markup(data["index"], total_pages, data["url"], data["view_mode"])
@@ -412,8 +444,10 @@ async def reload_log_data(data: dict):
         return None
 
     async with aiofiles.open(file_path, 'r') as f:
-        content = await f.read()
-        paste_content = content[-MAX_PASTE_PAGES * CHUNK_SIZE:]
+        f.seek(0, 2)
+        size = f.tell()
+        f.seek(max(0, size - MAX_PASTE_PAGES * CHUNK_SIZE), 0)
+        paste_content = await f.read()
 
     yaso_url = await paste_to_yaso(paste_content)
     paste_url = yaso_url if not yaso_url.startswith("Error") else await paste_to_spacebin(paste_content)
