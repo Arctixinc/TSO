@@ -104,6 +104,24 @@ async def safe_tmdb_search(title: str, type_: str, year=None):
         return None
 
 
+async def _tmdb_movie_details(movie_id):
+    if movie_id in TMDB_DETAILS_CACHE:
+        return TMDB_DETAILS_CACHE[movie_id]
+    try:
+        async with API_SEMAPHORE:
+            details = await tmdb.movie(movie_id).details(
+                append_to_response="external_ids,credits"
+            )
+            images = await tmdb.movie(movie_id).images()
+            details.images = images
+
+        TMDB_DETAILS_CACHE[movie_id] = details
+        return details
+    except Exception as e:
+        LOGGER.warning(f"TMDb movie details fetch failed for id={movie_id}: {e}")
+        TMDB_DETAILS_CACHE[movie_id] = None
+        return None
+
 async def _tmdb_tv_details(tv_id):
     if tv_id in TMDB_DETAILS_CACHE:
         return TMDB_DETAILS_CACHE[tv_id]
