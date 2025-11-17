@@ -204,6 +204,7 @@ class Database:
                 backdrop=metadata_info['backdrop'],
                 logo=metadata_info['logo'],
                 cast=metadata_info['cast'],
+                runtime=metadata_info['runtime'],
                 media_type=metadata_info['media_type'],
                 telegram=[QualityDetail(
                     quality=metadata_info['quality'],
@@ -227,6 +228,7 @@ class Database:
                 backdrop=metadata_info['backdrop'],
                 logo=metadata_info['logo'],
                 cast=metadata_info['cast'],
+                runtime=metadata_info['runtime'],
                 media_type=metadata_info['media_type'],
                 seasons=[Season(
                     season_number=metadata_info['season_number'],
