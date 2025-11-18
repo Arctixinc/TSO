@@ -1,5 +1,3 @@
-# imdb.py
-
 import httpx
 import re
 import asyncio
@@ -15,148 +13,120 @@ async def _get_client() -> httpx.AsyncClient:
     global _client
     async with _client_lock:
         if _client is None or _client.is_closed:
-            _client = httpx.AsyncClient(timeout=20.0)
+            _client = httpx.AsyncClient(
+                timeout=15.0,
+                follow_redirects=True
+            )
         return _client
 
 
-def extract_first_year(value) -> int:
-    """Extract first 4-digit year from any string."""
-    if not value:
+def extract_first_year(year_string) -> int:
+    if not year_string:
         return 0
-    match = re.search(r"(\d{4})", str(value))
-    return int(match.group(1)) if match else 0
+    year_str = str(year_string)
+    year_match = re.search(r'(\d{4})', year_str)
+    if year_match:
+        return int(year_match.group(1))
+    return 0
 
 
-# ---------------------------------------------------------
-# SEARCH
-# ---------------------------------------------------------
 async def search_title(query: str, type: str) -> Optional[Dict[str, Any]]:
     """
-    Search title using Cinemeta.
-    type: 'movie' or 'tvSeries'
+    Query Cinemeta search endpoint for a title.
+    type = 'tvSeries' or 'movie' (your code uses 'tvSeries' for TV)
     """
-
     client = await _get_client()
-
-    # Cinemeta uses "series" instead of tvSeries
-    cinemeta_type = "series" if type == "tvSeries" else "movie"
-
+    cinemeta_type = "series" if type == "tvSeries" else type
     url = f"{BASE_URL}/catalog/{cinemeta_type}/imdb/search={query}.json"
-
     try:
         resp = await client.get(url)
         if resp.status_code != 200:
             return None
-
         data = resp.json()
-        metas = data.get("metas", [])
-        if not metas:
-            return None
-
-        m = metas[0]
-
-        return {
-            "id": m.get("imdb_id") or m.get("id", ""),
-            "type": type,
-            "title": m.get("name", ""),
-            "year": extract_first_year(m.get("releaseInfo")),
-            "poster": m.get("poster", "")
-        }
+        if data and 'metas' in data and data['metas']:
+            meta = data['metas'][0]
+            return {
+                'id': meta.get('imdb_id', meta.get('id', '')),
+                'type': type,
+                'title': meta.get('name', ''),
+                'year': meta.get('releaseInfo', ''),
+                'poster': meta.get('poster', '')
+            }
+        return None
     except Exception:
         return None
 
 
-# ---------------------------------------------------------
-# GET DETAIL
-# ---------------------------------------------------------
-async def get_detail(imdb_id: str) -> Optional[Dict[str, Any]]:
-    """
-    Returns detailed meta for IMDB ID.
-    Tries both movie + series automatically.
-    """
-
+async def get_detail(imdb_id: str, media_type: str) -> Optional[Dict[str, Any]]:
     client = await _get_client()
 
-    for media in ["movie", "series"]:
-        url = f"{BASE_URL}/meta/{media}/{imdb_id}.json"
+    if media_type == "tvSeries":
+        media_types = ["series"]
+    else:
+        media_types = ["movie"]
 
+    for media_type in media_types:
         try:
+            url = f"{BASE_URL}/meta/{media_type}/{imdb_id}.json"
             resp = await client.get(url)
             if resp.status_code != 200:
                 continue
-
             data = resp.json()
-            meta = data.get("meta")
-            if not meta:
+            if 'meta' not in data:
                 continue
-
-            # YEAR
-            year = 0
-            for f in ["year", "releaseInfo", "released"]:
-                if meta.get(f):
-                    year = extract_first_year(meta[f])
-                    if year:
+            meta = data['meta']
+            year_value = 0
+            for field in ['year', 'releaseInfo', 'released']:
+                if meta.get(field):
+                    year_value = extract_first_year(meta[field])
+                    if year_value:
                         break
 
             return {
-                "id": meta.get("imdb_id") or meta.get("id"),
-                "moviedb_id": meta.get("moviedb_id"),
-                "type": meta.get("type") or media,
-                "title": meta.get("name", ""),
-                "plot": meta.get("description", ""),
-                "genre": meta.get("genres") or meta.get("genre", []),
-                "releaseDetailed": {"year": year},
-                "rating": {
-                    "star": float(meta.get("imdbRating") or 0)
-                },
-                "poster": meta.get("poster", ""),
-                "background": meta.get("background", ""),
-                "logo": meta.get("logo", ""),
-                "runtime": meta.get("runtime", ""),
-                "director": meta.get("director", []),
-                "cast": meta.get("cast", []),
-                "videos": meta.get("videos", [])
+                'id': meta.get('imdb_id', meta.get('id')),
+                'moviedb_id': meta.get('moviedb_id', None),
+                'type': meta.get('type', media_type),
+                'title': meta.get('name', ''),
+                'plot': meta.get('description', ''),
+                'genre': meta.get('genres', []) or meta.get('genre', []),
+                'releaseDetailed': {'year': year_value},
+                'rating': {'star': float(meta.get('imdbRating', 0))},
+                'poster': meta.get('poster', ''),
+                'background': meta.get('background', ''),
+                'logo': meta.get('logo', ''),
+                'runtime': meta.get('runtime', ''),
+                'director': meta.get('director', []),
+                'cast': meta.get('cast', []),
+                'videos': meta.get('videos', [])
             }
-
         except Exception:
             continue
-
     return None
 
 
-# ---------------------------------------------------------
-# GET EPISODE
-# ---------------------------------------------------------
 async def get_season(imdb_id: str, season_id: int, episode_id: int) -> Optional[Dict[str, Any]]:
     """
-    Returns specific season/episode meta from Cinemeta.
+    Return episode meta for a specific season/episode using Cinemeta series endpoint.
     """
-
     client = await _get_client()
-
-    url = f"{BASE_URL}/meta/series/{imdb_id}.json"
-
     try:
+        url = f"{BASE_URL}/meta/series/{imdb_id}.json"
         resp = await client.get(url)
         if resp.status_code != 200:
             return None
-
         data = resp.json()
-        meta = data.get("meta", {})
-        videos = meta.get("videos", [])
-
-        for v in videos:
-            if str(v.get("season")) == str(season_id) and str(v.get("episode")) == str(episode_id):
-                return {
-                    "title": v.get("title") or f"Episode {episode_id}",
-                    "no": str(episode_id),
-                    "season": str(season_id),
-                    "image": v.get("thumbnail", ""),
-                    "plot": v.get("overview", ""),
-                    "released": v.get("released", "")
-                }
-
+        if 'meta' in data and 'videos' in data['meta']:
+            for video in data['meta']['videos']:
+                if (str(video.get('season', '')) == str(season_id) and
+                        str(video.get('episode', '')) == str(episode_id)):
+                    return {
+                        'title': video.get('title', f'Episode {episode_id}'),
+                        'no': str(episode_id),
+                        'season': str(season_id),
+                        'image': video.get('thumbnail', ''),
+                        'plot': video.get('overview', ''),
+                        'released': video.get('released', '')
+                    }
         return None
-
     except Exception:
         return None
