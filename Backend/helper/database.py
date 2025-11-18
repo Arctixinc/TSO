@@ -357,7 +357,9 @@ class Database:
         existing_db_index = None
         existing_tv = None
 
-        tv = None
+        for db_index in range(1, total_storage_dbs + 1):
+            db_key = f"storage_{db_index}"
+            tv = None
             if imdb_id:
                 tv = await self.dbs[db_key]["tv"].find_one({"imdb_id": imdb_id})
             if not tv and tmdb_id:
