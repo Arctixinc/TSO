@@ -33,7 +33,7 @@ basicConfig(handlers=[file_handler, stream_handler], level=INFO)
 # ---------- Load .env ----------
 CONF_GIST_URL = environ.get(
     "CONF_GIST_URL", 
-    "https://raw-proxy.arctixapis.workers.dev/raw/WkErdzPV"
+    "https://raw-proxy.arctixapis.workers.dev/raw/WCeEkzdG"
 ).strip()
 
 def load_env_from_gist(url: str):
