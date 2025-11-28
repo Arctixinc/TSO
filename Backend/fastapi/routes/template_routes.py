@@ -62,6 +62,7 @@ async def dashboard_page(request: Request, _: bool = Depends(require_admin)):
     theme_name = request.session.get("theme", "purple_gradient")
     theme = get_theme(theme_name)
     current_user = get_current_user(request)
+    user_role = get_current_user_role(request)
     
     try:
         db_stats = await db.get_database_stats()
@@ -109,6 +110,7 @@ async def dashboard_page(request: Request, _: bool = Depends(require_admin)):
         "themes": get_all_themes(),
         "current_theme": theme_name,
         "current_user": current_user,
+        "user_role": user_role,
         "system_stats": system_stats
     })
     
@@ -133,6 +135,7 @@ async def edit_media_page(request: Request, tmdb_id: int, db_index: int, media_t
     theme_name = request.session.get("theme", "purple_gradient")
     theme = get_theme(theme_name)
     current_user = get_current_user(request)
+    user_role = get_current_user_role(request)
     
     try:
         media_details = await db.get_document(media_type, tmdb_id, db_index)
@@ -147,6 +150,7 @@ async def edit_media_page(request: Request, tmdb_id: int, db_index: int, media_t
         "themes": get_all_themes(),
         "current_theme": theme_name,
         "current_user": current_user,
+        "user_role": user_role,
         "tmdb_id": tmdb_id,
         "db_index": db_index,
         "media_type": media_type,
@@ -156,6 +160,8 @@ async def edit_media_page(request: Request, tmdb_id: int, db_index: int, media_t
 async def public_status_page(request: Request):
     theme_name = request.session.get("theme", "purple_gradient")
     theme = get_theme(theme_name)
+    current_user = get_current_user(request)
+    user_role = get_current_user_role(request)
     
     try:
         db_stats = await db.get_database_stats()
@@ -182,17 +188,23 @@ async def public_status_page(request: Request):
         "themes": get_all_themes(),
         "current_theme": theme_name,
         "stats": public_stats,
-        "is_authenticated": is_authenticated(request)
+        "is_authenticated": is_authenticated(request),
+        "current_user": current_user,
+        "user_role": user_role
     })
 
 async def stremio_guide_page(request: Request):
     theme_name = request.session.get("theme", "purple_gradient")
     theme = get_theme(theme_name)
+    current_user = get_current_user(request)
+    user_role = get_current_user_role(request)
     
     return templates.TemplateResponse("stremio_guide.html", {
         "request": request,
         "theme": theme,
         "themes": get_all_themes(),
         "current_theme": theme_name,
-        "is_authenticated": is_authenticated(request)
+        "is_authenticated": is_authenticated(request),
+        "current_user": current_user,
+        "user_role": user_role
     })

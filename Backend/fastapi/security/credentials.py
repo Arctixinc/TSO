@@ -15,8 +15,6 @@ def hash_password(password: str) -> str:
 def verify_password(password: str) -> bool:
     return hashlib.sha256(password.encode()).hexdigest() == ADMIN_PASSWORD_HASH
 
-from Backend.logger import LOGGER
-
 async def verify_credentials(username: str, password: str) -> Optional[str]:
     """
     Verify credentials against Env Admin or Database Users.
@@ -30,11 +28,10 @@ async def verify_credentials(username: str, password: str) -> Optional[str]:
     try:
         user = await db.get_user(username)
         if user:
-            # LOGGER.info(f"Checking DB user: {username}, stored_hash={user.get('password')}, input_hash={hash_password(password)}")
             if user.get("password") == hash_password(password):
                 return user.get("role", "user")
-    except Exception as e:
-        LOGGER.error(f"DB Auth Error: {e}")
+    except Exception:
+        pass
 
     return None
 

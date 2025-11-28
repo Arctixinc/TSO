@@ -3,12 +3,9 @@ from pyrogram.types import Message
 from Backend.config import Telegram
 from Backend import db
 from Backend.fastapi.security.credentials import hash_password
+from Backend.helper.custom_filter import CustomFilters
 
-# Only Owner/Admins can run these commands
-async def is_admin(client, message):
-    return message.from_user.id in Telegram.AUTH_CHANNEL or message.from_user.id == Telegram.OWNER_ID
-
-@Client.on_message(filters.command("adduser") & filters.user(Telegram.OWNER_ID))
+@Client.on_message(filters.command("adduser") & CustomFilters.owner)
 async def add_user_cmd(client: Client, message: Message):
     if len(message.command) != 3:
         return await message.reply_text("Usage: /adduser <username> <password>")
@@ -25,7 +22,7 @@ async def add_user_cmd(client: Client, message: Message):
     else:
         await message.reply_text(f"User '{username}' already exists!")
 
-@Client.on_message(filters.command("deluser") & filters.user(Telegram.OWNER_ID))
+@Client.on_message(filters.command("deluser") & CustomFilters.owner)
 async def del_user_cmd(client: Client, message: Message):
     if len(message.command) != 2:
         return await message.reply_text("Usage: /deluser <username>")
@@ -41,7 +38,7 @@ async def del_user_cmd(client: Client, message: Message):
     else:
         await message.reply_text(f"User '{username}' not found!")
 
-@Client.on_message(filters.command("alluser") & filters.user(Telegram.OWNER_ID))
+@Client.on_message(filters.command("alluser") & CustomFilters.owner)
 async def all_user_cmd(client: Client, message: Message):
     users = await db.list_users()
     if not users:
@@ -53,7 +50,7 @@ async def all_user_cmd(client: Client, message: Message):
 
     await message.reply_text(response)
 
-@Client.on_message(filters.command("upuser") & filters.user(Telegram.OWNER_ID))
+@Client.on_message(filters.command("upuser") & CustomFilters.owner)
 async def up_user_cmd(client: Client, message: Message):
     if len(message.command) != 3:
         return await message.reply_text("Usage: /upuser <username> <new_password>")

@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from Backend import __version__
 
-from Backend.fastapi.security.credentials import require_auth, require_admin
+from Backend.fastapi.security.credentials import require_auth, require_admin, get_current_user_role
 from Backend.fastapi.routes.stream_routes import router as stream_router
 from Backend.fastapi.routes.stremio_routes import router as stremio_router
 from Backend.fastapi.routes.template_routes import (
@@ -71,7 +71,10 @@ async def stremio_guide(request: Request):
 
 # --- Protected Routes (Authentication Required) ---
 @app.get("/", response_class=HTMLResponse)
-async def root(request: Request, _: bool = Depends(require_admin)):
+async def root(request: Request, _: bool = Depends(require_auth)):
+    role = get_current_user_role(request)
+    if role != "admin":
+        return RedirectResponse(url="/media/manage", status_code=302)
     return await dashboard_page(request, _)
 
 @app.get("/media/manage", response_class=HTMLResponse)
