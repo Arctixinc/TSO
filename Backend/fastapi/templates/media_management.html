@@ -7,16 +7,21 @@
     <!-- Header -->
     <div class="mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
+            {% if user_role == 'admin' %}
             <h1 class="text-3xl font-bold">Media Management</h1>
             <p class="theme-text-secondary mt-2">Manage your movie and TV show collections</p>
+            {% else %}
+            <h1 class="text-3xl font-bold">Media Library</h1>
+            <p class="theme-text-secondary mt-2">Explore movies and TV shows</p>
+            {% endif %}
         </div>
         
         <div class="flex space-x-2">
-            <a href="/media/manage?media_type=movie" 
+            <a href="?media_type=movie"
                class="px-4 py-2 rounded-md transition-colors text-sm font-medium {% if media_type == 'movie' %}theme-primary text-white{% else %}theme-card border hover:bg-gray-50{% endif %}">
                 Movies
             </a>
-            <a href="/media/manage?media_type=tv" 
+            <a href="?media_type=tv"
                class="px-4 py-2 rounded-md transition-colors text-sm font-medium {% if media_type == 'tv' %}theme-primary text-white{% else %}theme-card border hover:bg-gray-50{% endif %}">
                 TV Shows
             </a>

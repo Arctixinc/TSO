@@ -194,6 +194,58 @@ THEMES = {
             "text_secondary": "#D1D5DB"
         },
         "css_classes": "theme-midnight-carbon"
+    },
+    "slate_minimalist": {
+        "name": "Slate Minimalist",
+        "colors": {
+            "primary": "#475569",
+            "secondary": "#334155",
+            "accent": "#64748B",
+            "background": "#F8FAFC",
+            "card": "#FFFFFF",
+            "text": "#0F172A",
+            "text_secondary": "#64748B"
+        },
+        "css_classes": "theme-slate-minimalist"
+    },
+    "royal_gold": {
+        "name": "Royal Gold",
+        "colors": {
+            "primary": "#F59E0B",
+            "secondary": "#B45309",
+            "accent": "#FBBF24",
+            "background": "#1C1917",
+            "card": "#292524",
+            "text": "#FAFAF9",
+            "text_secondary": "#A8A29E"
+        },
+        "css_classes": "theme-royal-gold"
+    },
+    "mint_fresh": {
+        "name": "Mint Fresh",
+        "colors": {
+            "primary": "#2DD4BF",
+            "secondary": "#0F766E",
+            "accent": "#5EEAD4",
+            "background": "#F0FDFA",
+            "card": "#FFFFFF",
+            "text": "#134E4A",
+            "text_secondary": "#5F8B8B"
+        },
+        "css_classes": "theme-mint-fresh"
+    },
+    "deep_space": {
+        "name": "Deep Space",
+        "colors": {
+            "primary": "#6366F1",
+            "secondary": "#4338CA",
+            "accent": "#818CF8",
+            "background": "#0B0C15",
+            "card": "#151725",
+            "text": "#E0E7FF",
+            "text_secondary": "#818CF8"
+        },
+        "css_classes": "theme-deep-space"
     }
 }
 

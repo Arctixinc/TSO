@@ -37,7 +37,7 @@ async def login_post(request: Request, username: str = Form(...), password: str 
         if role == "admin":
             return RedirectResponse(url="/", status_code=302)
         else:
-            return RedirectResponse(url="/media/manage", status_code=302)
+            return RedirectResponse(url="/library", status_code=302)
     else:
         theme_name = request.session.get("theme", "purple_gradient")
         theme = get_theme(theme_name)

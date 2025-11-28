@@ -81,6 +81,10 @@ async def root(request: Request, _: bool = Depends(require_auth)):
 async def media_management(request: Request, media_type: str = "movie", _: bool = Depends(require_auth)):
     return await media_management_page(request, media_type, _)
 
+@app.get("/library", response_class=HTMLResponse)
+async def library_page_route(request: Request, media_type: str = "movie", _: bool = Depends(require_auth)):
+    return await media_management_page(request, media_type, _)
+
 @app.get("/media/edit", response_class=HTMLResponse)
 async def edit_media(request: Request, tmdb_id: int, db_index: int, media_type: str, _: bool = Depends(require_admin)):
     return await edit_media_page(request, tmdb_id, db_index, media_type, _)
