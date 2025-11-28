@@ -430,9 +430,22 @@ class Database:
             if any(keyword in str(e).lower() for keyword in ["storage", "quota"]):
                 return await self._handle_storage_error(self.update_tv_show, tv_show_data, total_storage_dbs=total_storage_dbs)
             
-    async def sort_movies(self, sort_params, page, page_size, genre_filter=None):
+    async def sort_movies(self, sort_params, page, page_size, genre_filter=None, search_query=None):
         sort_dict = self._get_sort_dict(sort_params)
-        filter_dict = {"genres": {"$in": [genre_filter]}} if genre_filter else {}
+        filter_dict = {}
+
+        if genre_filter:
+            filter_dict["genres"] = {"$in": [genre_filter]}
+
+        if search_query:
+            regex_query = {"$regex": search_query, "$options": "i"}
+            # Search in title or telegram.name for consistency
+            # MongoDB treats top-level keys as AND.
+            filter_dict["$or"] = [
+                {"title": regex_query},
+                {"telegram.name": regex_query}
+            ]
+
         results, dbs_checked, total_count = await self._paginate_collection(
             "movie", sort_dict, page, page_size, filter_dict=filter_dict
         )
@@ -445,9 +458,20 @@ class Database:
             "movies": [convert_objectid_to_str(result) for result in results],
         }
 
-    async def sort_tv_shows(self, sort_params, page, page_size, genre_filter=None):
+    async def sort_tv_shows(self, sort_params, page, page_size, genre_filter=None, search_query=None):
         sort_dict = self._get_sort_dict(sort_params)
-        filter_dict = {"genres": {"$in": [genre_filter]}} if genre_filter else {}
+        filter_dict = {}
+
+        if genre_filter:
+            filter_dict["genres"] = {"$in": [genre_filter]}
+
+        if search_query:
+            regex_query = {"$regex": search_query, "$options": "i"}
+            filter_dict["$or"] = [
+                {"title": regex_query},
+                {"seasons.episodes.telegram.name": regex_query}
+            ]
+
         results, dbs_checked, total_count = await self._paginate_collection(
             "tv", sort_dict, page, page_size, filter_dict=filter_dict
         )

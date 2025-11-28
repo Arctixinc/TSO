@@ -7,28 +7,18 @@ async def list_media_api(
     media_type: str = Query("movie", regex="^(movie|tv)$"),
     page: int = Query(1, ge=1),
     page_size: int = Query(24, ge=1, le=100),
-    search: str = Query("", max_length=100)
+    search: str = Query("", max_length=100),
+    sort_by: str = Query("updated_on"),
+    sort_order: str = Query("desc", regex="^(asc|desc)$"),
+    genre: str = Query(None)
 ):
     try:
-        if search:
-            result = await db.search_documents(search, page, page_size)
-            filtered_results = [item for item in result['results'] if item.get('media_type') == media_type]
-            total_filtered = len(filtered_results)
-            start_index = (page - 1) * page_size
-            end_index = start_index + page_size
-            paged_results = filtered_results[start_index:end_index]
-            
-            return {
-                "total_count": total_filtered,
-                "current_page": page,
-                "total_pages": (total_filtered + page_size - 1) // page_size,
-                "movies" if media_type == "movie" else "tv_shows": paged_results
-            }
+        sort_params = [(sort_by, sort_order)]
+
+        if media_type == "movie":
+            return await db.sort_movies(sort_params, page, page_size, genre_filter=genre, search_query=search)
         else:
-            if media_type == "movie":
-                return await db.sort_movies([], page, page_size)
-            else:
-                return await db.sort_tv_shows([], page, page_size)
+            return await db.sort_tv_shows(sort_params, page, page_size, genre_filter=genre, search_query=search)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
