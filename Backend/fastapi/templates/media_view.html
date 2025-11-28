@@ -30,7 +30,7 @@
                     </div>
 
                     <!-- Text Info -->
-                    <div class="text-white flex-1 mb-2">
+                    <div class="{% if media_details.backdrop %}text-white{% else %}theme-text{% endif %} flex-1 mb-2">
                         <h1 class="text-3xl sm:text-4xl font-bold mb-2">{{ media_details.title }}</h1>
                         <div class="flex flex-wrap items-center gap-4 text-sm sm:text-base opacity-90">
                             {% if media_details.release_year %}
@@ -120,7 +120,7 @@
                                     </svg>
                                 </button>
                                 <button onclick="playVideo('{{ item.id }}', '{{ item.name|replace('\'', '\\\'') }}', '{{ media_details.title|replace('\'', '\\\'') }} - {{ item.quality }}')"
-                                        class="theme-primary text-white px-4 py-2 rounded-full hover:opacity-90 transition-opacity flex items-center gap-2 text-sm font-medium">
+                                        class="theme-primary text-on-primary px-4 py-2 rounded-full hover:opacity-90 transition-opacity flex items-center gap-2 text-sm font-medium">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />

@@ -13,6 +13,7 @@
                 extend: {
                     colors: {
                         primary: '{{ theme.colors.primary }}',
+                        'on-primary': '{{ theme.colors.on_primary }}',
                         secondary: '{{ theme.colors.secondary }}',
                         accent: '{{ theme.colors.accent }}',
                         background: '{{ theme.colors.background }}',
@@ -31,6 +32,11 @@
         .theme-secondary { background-color: {{ theme.colors.secondary }}; }
         .theme-accent { background-color: {{ theme.colors.accent }}; }
         .theme-text-secondary { color: {{ theme.colors.text_secondary }}; }
+        input, select, textarea {
+            background-color: {{ theme.colors.card }};
+            color: {{ theme.colors.text }};
+            border-color: {{ theme.colors.text_secondary }}40; /* 25% opacity */
+        }
     </style>
 </head>
 <body class="min-h-screen">
@@ -74,7 +80,7 @@
                         </a>
                     </div>
                     {% else %}
-                    <a href="/login" class="theme-primary text-white px-5 py-2 rounded-md hover:opacity-90 transition-opacity text-sm font-medium shadow-sm">
+                    <a href="/login" class="theme-primary text-on-primary px-5 py-2 rounded-md hover:opacity-90 transition-opacity text-sm font-medium shadow-sm">
                         Login
                     </a>
                     {% endif %}

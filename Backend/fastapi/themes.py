@@ -4,6 +4,7 @@ THEMES = {
         "name": "Purple Gradient",
         "colors": {
             "primary": "#A855F7",
+            "on_primary": "#FFFFFF",
             "secondary": "#7C3AED", 
             "accent": "#C084FC",
             "background": "#F8FAFC",
@@ -17,6 +18,7 @@ THEMES = {
         "name": "Navy Blue",
         "colors": {
             "primary": "#1E40AF",
+            "on_primary": "#FFFFFF",
             "secondary": "#1E3A8A",
             "accent": "#3B82F6",
             "background": "#F1F5F9",
@@ -30,6 +32,7 @@ THEMES = {
         "name": "Sunset Warm",
         "colors": {
             "primary": "#F59E0B",
+            "on_primary": "#1F2937",
             "secondary": "#DC2626",
             "accent": "#EC4899",
             "background": "#FFFBEB",
@@ -43,6 +46,7 @@ THEMES = {
         "name": "Ocean Mint",
         "colors": {
             "primary": "#10B981",
+            "on_primary": "#1F2937",
             "secondary": "#059669",
             "accent": "#06B6D4",
             "background": "#F0FDF4",
@@ -56,6 +60,7 @@ THEMES = {
         "name": "Dark Professional",
         "colors": {
             "primary": "#06B6D4",
+            "on_primary": "#0F172A",
             "secondary": "#0891B2",
             "accent": "#22D3EE",
             "background": "#0F172A",
@@ -69,6 +74,7 @@ THEMES = {
         "name": "Crimson Elegance",
         "colors": {
             "primary": "#DC2626",
+            "on_primary": "#FFFFFF",
             "secondary": "#991B1B",
             "accent": "#F87171",
             "background": "#FEF2F2",
@@ -82,6 +88,7 @@ THEMES = {
         "name": "Coral Bliss",
         "colors": {
             "primary": "#FF6B6B",
+            "on_primary": "#FFFFFF",
             "secondary": "#EE5A6F",
             "accent": "#FFB347",
             "background": "#FFF5F5",
@@ -95,6 +102,7 @@ THEMES = {
         "name": "Cyber Neon",
         "colors": {
             "primary": "#00FFF0",
+            "on_primary": "#0A0E27",
             "secondary": "#FF00FF",
             "accent": "#00FF88",
             "background": "#0A0E27",
@@ -108,6 +116,7 @@ THEMES = {
         "name": "Forest Earth",
         "colors": {
             "primary": "#2D5016",
+            "on_primary": "#FFFFFF",
             "secondary": "#50623A",
             "accent": "#86A789",
             "background": "#F5F5DC",
@@ -121,6 +130,7 @@ THEMES = {
         "name": "Lavender Dream",
         "colors": {
             "primary": "#B08BBB",
+            "on_primary": "#FFFFFF",
             "secondary": "#9370DB",
             "accent": "#DDA0DD",
             "background": "#FAF5FF",
@@ -134,6 +144,7 @@ THEMES = {
         "name": "Golden Luxury",
         "colors": {
             "primary": "#D4AF37",
+            "on_primary": "#1A202C",
             "secondary": "#B8860B",
             "accent": "#FFD700",
             "background": "#FFFEF7",
@@ -147,6 +158,7 @@ THEMES = {
         "name": "Arctic Frost",
         "colors": {
             "primary": "#B0E0E6",
+            "on_primary": "#1E3A5F",
             "secondary": "#4682B4",
             "accent": "#87CEEB",
             "background": "#F0F8FF",
@@ -160,6 +172,7 @@ THEMES = {
         "name": "Cherry Cola",
         "colors": {
             "primary": "#BF1922",
+            "on_primary": "#FFFFFF",
             "secondary": "#8B0000",
             "accent": "#DC143C",
             "background": "#FFF0F0",
@@ -173,6 +186,7 @@ THEMES = {
         "name": "Emerald Tech",
         "colors": {
             "primary": "#047857",
+            "on_primary": "#FFFFFF",
             "secondary": "#065F46",
             "accent": "#10B981",
             "background": "#ECFDF5",
@@ -186,6 +200,7 @@ THEMES = {
         "name": "Midnight Carbon",
         "colors": {
             "primary": "#3B82F6",
+            "on_primary": "#FFFFFF",
             "secondary": "#1E40AF",
             "accent": "#60A5FA",
             "background": "#111827",
@@ -199,6 +214,7 @@ THEMES = {
         "name": "Slate Minimalist",
         "colors": {
             "primary": "#475569",
+            "on_primary": "#FFFFFF",
             "secondary": "#334155",
             "accent": "#64748B",
             "background": "#F8FAFC",
@@ -212,6 +228,7 @@ THEMES = {
         "name": "Royal Gold",
         "colors": {
             "primary": "#F59E0B",
+            "on_primary": "#1C1917",
             "secondary": "#B45309",
             "accent": "#FBBF24",
             "background": "#1C1917",
@@ -225,6 +242,7 @@ THEMES = {
         "name": "Mint Fresh",
         "colors": {
             "primary": "#2DD4BF",
+            "on_primary": "#134E4A",
             "secondary": "#0F766E",
             "accent": "#5EEAD4",
             "background": "#F0FDFA",
@@ -238,6 +256,7 @@ THEMES = {
         "name": "Deep Space",
         "colors": {
             "primary": "#6366F1",
+            "on_primary": "#FFFFFF",
             "secondary": "#4338CA",
             "accent": "#818CF8",
             "background": "#0B0C15",
