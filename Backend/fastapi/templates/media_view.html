@@ -114,6 +114,27 @@
                             <p class="text-white">Your browser does not support HTML5 video.</p>
                         </video>
                     </div>
+
+                    <!-- External Player Controls -->
+                    <div class="p-4 bg-gray-800/80 backdrop-blur border-t border-white/5 flex flex-wrap gap-4 justify-center items-center">
+                        <span class="text-gray-400 text-sm font-semibold uppercase tracking-wider mr-2">Open In:</span>
+
+                        <!-- VLC Button -->
+                        <a id="btn-vlc" href="#" class="flex items-center gap-2 bg-orange-600 hover:bg-orange-500 text-white px-4 py-2 rounded-lg transition-all shadow-lg hover:scale-105 group/vlc">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
+                            </svg>
+                            <span class="font-medium">VLC</span>
+                        </a>
+
+                        <!-- PlayIt Button -->
+                        <a id="btn-playit" href="#" class="flex items-center gap-2 bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg transition-all shadow-lg hover:scale-105 group/playit">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
+                            </svg>
+                            <span class="font-medium">PlayIt</span>
+                        </a>
+                    </div>
                 </div>
             </div>
 
@@ -298,6 +319,42 @@ function playVideo(fileId, fileName, title) {
     });
 
     player.play().catch(e => console.log('Auto-play prevented:', e));
+
+    // Update external player links
+    updateExternalLinks(currentStreamUrl);
+}
+
+function updateExternalLinks(url) {
+    const isAndroid = /Android/i.test(navigator.userAgent);
+    const vlcBtn = document.getElementById('btn-vlc');
+    const playitBtn = document.getElementById('btn-playit');
+
+    // Ensure URL is absolute
+    if (url.startsWith('/')) {
+        url = window.location.origin + url;
+    }
+
+    if (isAndroid) {
+        // VLC Android Intent
+        // scheme must match the protocol of the URL (http or https)
+        const scheme = url.split(':')[0];
+        const cleanUrl = url.replace(`${scheme}://`, '');
+        vlcBtn.href = `intent://${cleanUrl}#Intent;package=org.videolan.vlc;type=video/*;scheme=${scheme};end`;
+
+        // PlayIt Android Intent
+        // Standard PlayIt intent usually works with the raw URL or specific scheme
+        playitBtn.href = `intent://${cleanUrl}#Intent;package=com.playit.videoplayer;type=video/*;scheme=${scheme};end`;
+    } else {
+        // Windows / Desktop
+        // VLC Protocol Handler (requires setup on client)
+        vlcBtn.href = `vlc://${url}`;
+
+        // PlayIt fallback (no standard PC protocol, but providing link for registered handlers)
+        playitBtn.href = `playit://${url}`;
+
+        // Add tooltip to explain requirement
+        vlcBtn.title = "Requires VLC Protocol Handler installed on PC";
+    }
 }
 
 function closePlayer() {
