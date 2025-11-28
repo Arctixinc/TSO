@@ -437,20 +437,31 @@ function retryLoad() {
 }
 
 // Fetch search suggestions
+let suggestionAbortController = null;
+
 async function fetchSuggestions(query) {
     if (!query) return;
 
+    // Abort previous request
+    if (suggestionAbortController) {
+        suggestionAbortController.abort();
+    }
+    suggestionAbortController = new AbortController();
+
     try {
-        const url = `/api/media/list?media_type=${mediaType}&search=${encodeURIComponent(query)}&page_size=5`;
-        const response = await fetch(url, { credentials: 'same-origin' });
+        // Use specialized lightweight endpoint
+        const url = `/api/media/suggestions?media_type=${mediaType}&query=${encodeURIComponent(query)}`;
+        const response = await fetch(url, {
+            credentials: 'same-origin',
+            signal: suggestionAbortController.signal
+        });
 
         if (response.ok) {
-            const data = await response.json();
-            const mediaKey = mediaType === 'movie' ? 'movies' : 'tv_shows';
-            const suggestions = data[mediaKey] || [];
+            const suggestions = await response.json();
             showSuggestions(suggestions);
         }
     } catch (error) {
+        if (error.name === 'AbortError') return;
         console.error('Error fetching suggestions:', error);
     }
 }
@@ -545,7 +556,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
              searchTimeout = setTimeout(() => {
                 fetchSuggestions(searchValue);
-            }, 300);
+            }, 150);
         }
     });
 

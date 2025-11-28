@@ -491,7 +491,48 @@ class Database:
             "tv_shows": [convert_objectid_to_str(result) for result in results],
         }
 
+    async def get_suggestions(self, media_type: str, query: str, limit: int = 10):
+        """Fast search for autocomplete suggestions with projection."""
+        words = query.split()
+        if not words:
+            return []
 
+        regex_pattern = '.*' + '.*'.join([re.escape(word) for word in words]) + '.*'
+        regex_query = {"$regex": regex_pattern, "$options": "i"}
+
+        # Search in title only for speed (or telegram.name if critical, but title is faster)
+        filter_dict = {"title": regex_query}
+
+        collection_name = "movie" if media_type == "movie" else "tv"
+
+        # Projection to fetch minimal data
+        projection = {
+            "title": 1,
+            "release_year": 1,
+            "tmdb_id": 1,
+            "db_index": 1,
+            "_id": 0
+        }
+
+        results = []
+        # Check current DB first (most likely to have recent adds)
+        # But we should probably check all DBs or just the main ones.
+        # Pagination logic loops all DBs. Here we just want top N suggestions.
+        # Let's check from current backwards.
+
+        for i in range(self.current_db_index, 0, -1):
+            if len(results) >= limit:
+                break
+
+            db_key = f"storage_{i}"
+            cursor = self.dbs[db_key][collection_name].find(
+                filter_dict, projection
+            ).limit(limit - len(results))
+
+            docs = await cursor.to_list(None)
+            results.extend(docs)
+
+        return results
 
     async def search_documents(
             self, 

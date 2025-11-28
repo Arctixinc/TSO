@@ -15,7 +15,8 @@ from Backend.fastapi.routes.template_routes import (
 from Backend.fastapi.routes.api_routes import (
     list_media_api, delete_media_api, update_media_api,
     delete_movie_quality_api, delete_tv_quality_api,
-    delete_tv_episode_api, delete_tv_season_api
+    delete_tv_episode_api, delete_tv_season_api,
+    search_suggestions_api
 )
 
 app = FastAPI(
@@ -93,6 +94,14 @@ async def list_media(
     _: bool = Depends(require_auth)
 ):
     return await list_media_api(media_type, page, page_size, search, sort_by, sort_order, genre)
+
+@app.get("/api/media/suggestions")
+async def search_suggestions(
+    media_type: str = Query("movie", regex="^(movie|tv)$"),
+    query: str = Query(..., min_length=1),
+    _: bool = Depends(require_auth)
+):
+    return await search_suggestions_api(media_type, query)
 
 @app.delete("/api/media/delete")
 async def delete_media(tmdb_id: int, db_index: int, media_type: str, _: bool = Depends(require_auth)):

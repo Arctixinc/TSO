@@ -109,6 +109,15 @@ async def get_media_details_api(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+async def search_suggestions_api(
+    media_type: str = Query("movie", regex="^(movie|tv)$"),
+    query: str = Query(..., min_length=1)
+):
+    try:
+        return await db.get_suggestions(media_type, query, limit=10)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 async def delete_movie_quality_api(tmdb_id: int, db_index: int, quality: str):
     try:
         result = await db.delete_movie_quality(tmdb_id, db_index, quality)
