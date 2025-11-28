@@ -27,10 +27,13 @@
     <div class="theme-card p-6 rounded-lg shadow mb-8">
         <div class="flex flex-col gap-4">
             <!-- Search Bar -->
-            <div class="flex flex-col md:flex-row gap-4">
-                <div class="flex-1">
+            <div class="flex flex-col md:flex-row gap-4 relative">
+                <div class="flex-1 relative">
                     <input type="text" id="search-input" placeholder="Search {{ media_type }}s by title..."
-                           class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm">
+                           class="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
+                           autocomplete="off">
+                    <!-- Suggestions Dropdown -->
+                    <div id="search-suggestions" class="absolute w-full bg-white border border-gray-300 rounded-md shadow-lg mt-1 z-50 hidden max-h-60 overflow-y-auto"></div>
                 </div>
                 <div class="flex gap-2">
                     <button onclick="searchMedia()"
@@ -433,6 +436,51 @@ function retryLoad() {
     loadMedia(currentPage, currentSearch);
 }
 
+// Fetch search suggestions
+async function fetchSuggestions(query) {
+    if (!query) return;
+
+    try {
+        const url = `/api/media/list?media_type=${mediaType}&search=${encodeURIComponent(query)}&page_size=5`;
+        const response = await fetch(url, { credentials: 'same-origin' });
+
+        if (response.ok) {
+            const data = await response.json();
+            const mediaKey = mediaType === 'movie' ? 'movies' : 'tv_shows';
+            const suggestions = data[mediaKey] || [];
+            showSuggestions(suggestions);
+        }
+    } catch (error) {
+        console.error('Error fetching suggestions:', error);
+    }
+}
+
+// Show suggestions dropdown
+function showSuggestions(suggestions) {
+    const container = document.getElementById('search-suggestions');
+    if (suggestions.length === 0) {
+        container.classList.add('hidden');
+        return;
+    }
+
+    container.innerHTML = suggestions.map(item => `
+        <div onclick="selectSuggestion('${(item.title || item.name).replace(/'/g, "\\'")}')"
+             class="px-4 py-2 hover:bg-gray-100 cursor-pointer flex justify-between items-center text-sm">
+            <span class="font-medium text-gray-800">${item.title || item.name}</span>
+            <span class="text-xs text-gray-500">${item.release_year || ''}</span>
+        </div>
+    `).join('');
+
+    container.classList.remove('hidden');
+}
+
+// Select a suggestion
+function selectSuggestion(title) {
+    document.getElementById('search-input').value = title;
+    document.getElementById('search-suggestions').classList.add('hidden');
+    searchMedia();
+}
+
 // Delete media with confirmation
 async function deleteMedia(tmdbId, dbIndex, title) {
     if (!confirm(`Are you sure you want to delete "${title}"?\n\nThis action cannot be undone.`)) return;
@@ -490,9 +538,23 @@ document.addEventListener('DOMContentLoaded', () => {
         const searchValue = e.target.value.trim();
         
         if (searchValue.length === 0) {
+            document.getElementById('search-suggestions').classList.add('hidden');
             searchTimeout = setTimeout(() => {
                 loadMedia(1, '');
             }, 300);
+        } else {
+             searchTimeout = setTimeout(() => {
+                fetchSuggestions(searchValue);
+            }, 300);
+        }
+    });
+
+    // Close suggestions when clicking outside
+    document.addEventListener('click', (e) => {
+        const container = document.getElementById('search-suggestions');
+        const input = document.getElementById('search-input');
+        if (!container.contains(e.target) && e.target !== input) {
+            container.classList.add('hidden');
         }
     });
 });

@@ -439,7 +439,7 @@ class Database:
 
         if search_query:
             words = search_query.split()
-            regex_pattern = '.*' + '.*'.join(words) + '.*'
+            regex_pattern = '.*' + '.*'.join([re.escape(word) for word in words]) + '.*'
             regex_query = {"$regex": regex_pattern, "$options": "i"}
 
             # MongoDB treats top-level keys as AND.
@@ -470,7 +470,7 @@ class Database:
 
         if search_query:
             words = search_query.split()
-            regex_pattern = '.*' + '.*'.join(words) + '.*'
+            regex_pattern = '.*' + '.*'.join([re.escape(word) for word in words]) + '.*'
             regex_query = {"$regex": regex_pattern, "$options": "i"}
 
             filter_dict["$or"] = [
