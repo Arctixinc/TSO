@@ -406,8 +406,14 @@ class Database:
                         existing_episode["telegram"] = self.sort_telegram_list(existing_episode["telegram"])
                     else:
                         existing_season["episodes"].append(episode)
+
+                # Sort episodes in this season
+                existing_season["episodes"].sort(key=lambda x: x["episode_number"])
             else:
                 existing_tv["seasons"].append(season)
+
+        # Sort seasons
+        existing_tv["seasons"].sort(key=lambda x: x["season_number"])
     
         existing_tv["updated_on"] = datetime.utcnow()
     
@@ -690,6 +696,15 @@ class Database:
         else:
             collection_name = "movie"
         document = await self.dbs[db_key][collection_name].find_one({"tmdb_id": int(tmdb_id)})
+
+        if document and collection_name == "tv" and "seasons" in document:
+            # Sort seasons
+            document["seasons"].sort(key=lambda x: x.get("season_number", 0))
+            # Sort episodes in each season
+            for season in document["seasons"]:
+                if "episodes" in season:
+                    season["episodes"].sort(key=lambda x: x.get("episode_number", 0))
+
         return convert_objectid_to_str(document) if document else None
 
     async def update_document(
