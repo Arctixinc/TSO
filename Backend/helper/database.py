@@ -438,13 +438,16 @@ class Database:
             filter_dict["genres"] = {"$in": [genre_filter]}
 
         if search_query:
-            regex_query = {"$regex": search_query, "$options": "i"}
-            # Search in title or telegram.name for consistency
+            words = search_query.split()
+            regex_pattern = '.*' + '.*'.join(words) + '.*'
+            regex_query = {"$regex": regex_pattern, "$options": "i"}
+
             # MongoDB treats top-level keys as AND.
             filter_dict["$or"] = [
                 {"title": regex_query},
                 {"telegram.name": regex_query}
             ]
+            LOGGER.info(f"Filtering movies with: {filter_dict}")
 
         results, dbs_checked, total_count = await self._paginate_collection(
             "movie", sort_dict, page, page_size, filter_dict=filter_dict
@@ -466,11 +469,15 @@ class Database:
             filter_dict["genres"] = {"$in": [genre_filter]}
 
         if search_query:
-            regex_query = {"$regex": search_query, "$options": "i"}
+            words = search_query.split()
+            regex_pattern = '.*' + '.*'.join(words) + '.*'
+            regex_query = {"$regex": regex_pattern, "$options": "i"}
+
             filter_dict["$or"] = [
                 {"title": regex_query},
                 {"seasons.episodes.telegram.name": regex_query}
             ]
+            LOGGER.info(f"Filtering TV shows with: {filter_dict}")
 
         results, dbs_checked, total_count = await self._paginate_collection(
             "tv", sort_dict, page, page_size, filter_dict=filter_dict
