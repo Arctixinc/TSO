@@ -4,7 +4,14 @@
 
 {% block content %}
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-    <div class="theme-card rounded-lg shadow-lg overflow-hidden">
+    <div class="theme-card rounded-lg shadow-lg overflow-hidden relative">
+        <!-- Back Button -->
+        <a href="/media/manage?media_type={{ media_type }}" class="absolute top-4 left-4 z-20 bg-black bg-opacity-50 text-white p-2 rounded-full hover:bg-opacity-80 transition-all shadow-md group" title="Back to {{ media_type|title }}s">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+        </a>
+
         <!-- Backdrop & Header -->
         <div class="relative h-64 sm:h-96">
             {% if media_details.backdrop %}
@@ -63,19 +70,33 @@
                 <p class="theme-text-secondary leading-relaxed">{{ media_details.description or 'No description available.' }}</p>
             </div>
 
-            <!-- Video Player (Hidden by default) -->
-            <div id="video-player-container" class="hidden mb-10">
-                <div class="aspect-w-16 aspect-h-9 bg-black rounded-lg overflow-hidden relative group">
-                    <video id="video-player" controls class="w-full h-full" preload="none">
-                        <p>Your browser does not support HTML5 video.</p>
-                    </video>
-                    <button onclick="closePlayer()" class="absolute top-4 right-4 bg-black bg-opacity-50 text-white rounded-full p-2 hover:bg-opacity-80 transition-all opacity-0 group-hover:opacity-100">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    </button>
+            <!-- Video Player Modal -->
+            <div id="video-player-modal" class="fixed inset-0 z-50 hidden bg-black bg-opacity-90 flex items-center justify-center p-4 sm:p-8 backdrop-blur-sm transition-opacity duration-300">
+                <div class="w-full max-w-6xl bg-black rounded-xl overflow-hidden shadow-2xl relative flex flex-col max-h-[90vh]">
+                    <!-- Header -->
+                    <div class="flex justify-between items-center p-4 bg-gray-900 border-b border-gray-800">
+                        <h3 id="player-title" class="text-white font-semibold truncate pr-4"></h3>
+                        <div class="flex items-center space-x-3">
+                            <button onclick="copyStreamLink()" class="text-gray-400 hover:text-white transition-colors p-2 rounded-full hover:bg-gray-800" title="Copy Stream Link">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                                </svg>
+                            </button>
+                            <button onclick="closePlayer()" class="text-gray-400 hover:text-white transition-colors p-2 rounded-full hover:bg-red-900 hover:text-red-500">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Player -->
+                    <div class="flex-1 bg-black relative flex items-center justify-center">
+                        <video id="video-player" controls class="max-w-full max-h-[70vh] w-auto h-auto focus:outline-none shadow-lg" preload="none">
+                            <p class="text-white">Your browser does not support HTML5 video.</p>
+                        </video>
+                    </div>
                 </div>
-                <div id="playing-info" class="mt-2 text-sm font-medium theme-text-secondary"></div>
             </div>
 
             <!-- Content Listing -->
@@ -91,14 +112,22 @@
                                 <div class="font-semibold text-lg">{{ item.quality }}</div>
                                 <div class="text-xs theme-text-secondary">{{ item.size }}</div>
                             </div>
-                            <button onclick="playVideo('{{ item.id }}', '{{ item.name|replace('\'', '\\\'') }}', '{{ media_details.title|replace('\'', '\\\'') }} - {{ item.quality }}')"
-                                    class="theme-primary text-white px-4 py-2 rounded-full hover:opacity-90 transition-opacity flex items-center gap-2 text-sm font-medium">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                                Play
-                            </button>
+                            <div class="flex items-center gap-2">
+                                <button onclick="copyLink('{{ item.id }}', '{{ item.name|replace('\'', '\\\'') }}')"
+                                        class="p-2 text-gray-500 hover:text-primary transition-colors rounded-full hover:bg-gray-100" title="Copy Stream Link">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                                    </svg>
+                                </button>
+                                <button onclick="playVideo('{{ item.id }}', '{{ item.name|replace('\'', '\\\'') }}', '{{ media_details.title|replace('\'', '\\\'') }} - {{ item.quality }}')"
+                                        class="theme-primary text-white px-4 py-2 rounded-full hover:opacity-90 transition-opacity flex items-center gap-2 text-sm font-medium">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    Play
+                                </button>
+                            </div>
                         </div>
                         {% endfor %}
                     </div>
@@ -127,15 +156,23 @@
                                         <div class="flex flex-wrap gap-2">
                                             {% if episode.telegram %}
                                                 {% for item in episode.telegram %}
-                                                <button onclick="playVideo('{{ item.id }}', '{{ item.name|replace('\'', '\\\'') }}', 'S{{ season.season_number }}E{{ episode.episode_number }} - {{ item.quality }}')"
-                                                        class="theme-card border hover:border-primary px-3 py-1.5 rounded text-xs flex items-center gap-2 transition-colors">
-                                                    <span class="font-bold text-primary">{{ item.quality }}</span>
-                                                    <span class="text-gray-500 border-l pl-2 ml-1">{{ item.size }}</span>
-                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-primary ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                    </svg>
-                                                </button>
+                                                <div class="flex items-center theme-card border hover:border-primary rounded overflow-hidden">
+                                                    <button onclick="playVideo('{{ item.id }}', '{{ item.name|replace('\'', '\\\'') }}', 'S{{ season.season_number }}E{{ episode.episode_number }} - {{ item.quality }}')"
+                                                            class="px-3 py-1.5 flex items-center gap-2 hover:bg-gray-50 transition-colors text-xs">
+                                                        <span class="font-bold text-primary">{{ item.quality }}</span>
+                                                        <span class="text-gray-500 border-l pl-2 ml-1">{{ item.size }}</span>
+                                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-primary ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                        </svg>
+                                                    </button>
+                                                    <button onclick="copyLink('{{ item.id }}', '{{ item.name|replace('\'', '\\\'') }}')"
+                                                            class="px-2 py-1.5 border-l hover:bg-gray-100 text-gray-500 hover:text-primary transition-colors" title="Copy Link">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                                                        </svg>
+                                                    </button>
+                                                </div>
                                                 {% endfor %}
                                             {% else %}
                                                 <span class="text-xs text-gray-400 italic">No sources</span>
@@ -171,31 +208,68 @@ function toggleAccordion(id) {
     }
 }
 
+let currentStreamUrl = '';
+
 function playVideo(fileId, fileName, title) {
-    const playerContainer = document.getElementById('video-player-container');
+    const playerModal = document.getElementById('video-player-modal');
     const player = document.getElementById('video-player');
-    const info = document.getElementById('playing-info');
+    const titleEl = document.getElementById('player-title');
 
     // Construct stream URL
-    const streamUrl = `/dl/${fileId}/${encodeURIComponent(fileName)}`;
+    currentStreamUrl = `${window.location.origin}/dl/${fileId}/${encodeURIComponent(fileName)}`;
 
-    player.src = streamUrl;
+    player.src = currentStreamUrl;
+    titleEl.textContent = title;
+
+    playerModal.classList.remove('hidden');
     player.play();
-
-    info.textContent = `Playing: ${title}`;
-    playerContainer.classList.remove('hidden');
-
-    // Scroll to player
-    playerContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 function closePlayer() {
-    const playerContainer = document.getElementById('video-player-container');
+    const playerModal = document.getElementById('video-player-modal');
     const player = document.getElementById('video-player');
 
     player.pause();
     player.src = '';
-    playerContainer.classList.add('hidden');
+    currentStreamUrl = '';
+    playerModal.classList.add('hidden');
+}
+
+function copyStreamLink() {
+    if (!currentStreamUrl) return;
+
+    navigator.clipboard.writeText(currentStreamUrl).then(() => {
+        showToast('Stream URL copied to clipboard!');
+    });
+}
+
+function copyLink(fileId, fileName) {
+    const url = `${window.location.origin}/dl/${fileId}/${encodeURIComponent(fileName)}`;
+    navigator.clipboard.writeText(url).then(() => {
+        showToast('Link copied to clipboard!');
+    });
+}
+
+function showToast(message) {
+    const toast = document.createElement('div');
+    toast.className = 'fixed top-4 right-4 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg z-[60] transform transition-all duration-300 translate-x-full flex items-center';
+    toast.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+        </svg>
+        ${message}
+    `;
+    document.body.appendChild(toast);
+
+    // Trigger animation
+    requestAnimationFrame(() => {
+        toast.classList.remove('translate-x-full');
+    });
+
+    setTimeout(() => {
+        toast.classList.add('translate-x-full');
+        setTimeout(() => document.body.removeChild(toast), 300);
+    }, 3000);
 }
 </script>
 
