@@ -74,7 +74,7 @@ async def stremio_guide(request: Request):
 async def root(request: Request, _: bool = Depends(require_auth)):
     role = get_current_user_role(request)
     if role != "admin":
-        return RedirectResponse(url="/media/manage", status_code=302)
+        return RedirectResponse(url="/library", status_code=302)
     return await dashboard_page(request, _)
 
 @app.get("/media/manage", response_class=HTMLResponse)
