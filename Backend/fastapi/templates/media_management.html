@@ -482,7 +482,7 @@ function showSuggestions(suggestions) {
     container.innerHTML = suggestions.map(item => {
         const title = item.title || item.name;
         const year = item.release_year || '';
-        const image = item.logo || item.poster || 'https://via.placeholder.com/45x68/e5e7eb/9ca3af?text=No+Img';
+        const image = item.poster || item.logo || 'https://via.placeholder.com/45x68/e5e7eb/9ca3af?text=No+Img';
         const displayTitle = title.replace(/'/g, "\\'");
 
         return `
