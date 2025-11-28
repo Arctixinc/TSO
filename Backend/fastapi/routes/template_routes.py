@@ -157,6 +157,36 @@ async def edit_media_page(request: Request, tmdb_id: int, db_index: int, media_t
         "media_details": media_details
     })
 
+async def media_view_page(request: Request, tmdb_id: int, db_index: int, media_type: str, _: bool = Depends(require_auth)):
+    theme_name = request.session.get("theme", "purple_gradient")
+    theme = get_theme(theme_name)
+    current_user = get_current_user(request)
+    user_role = get_current_user_role(request)
+
+    # If admin, redirect to edit (or allow view? User asked for user role specifically)
+    if user_role == "admin":
+        return RedirectResponse(url=f"/media/edit?tmdb_id={tmdb_id}&db_index={db_index}&media_type={media_type}", status_code=302)
+
+    try:
+        media_details = await db.get_document(media_type, tmdb_id, db_index)
+        if not media_details:
+            raise HTTPException(status_code=404, detail="Media not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return templates.TemplateResponse("media_view.html", {
+        "request": request,
+        "theme": theme,
+        "themes": get_all_themes(),
+        "current_theme": theme_name,
+        "current_user": current_user,
+        "user_role": user_role,
+        "tmdb_id": tmdb_id,
+        "db_index": db_index,
+        "media_type": media_type,
+        "media_details": media_details
+    })
+
 async def public_status_page(request: Request):
     theme_name = request.session.get("theme", "purple_gradient")
     theme = get_theme(theme_name)

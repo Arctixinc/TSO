@@ -10,7 +10,7 @@ from Backend.fastapi.routes.stream_routes import router as stream_router
 from Backend.fastapi.routes.stremio_routes import router as stremio_router
 from Backend.fastapi.routes.template_routes import (
     login_page, login_post, logout, set_theme, dashboard_page,
-    media_management_page, edit_media_page, public_status_page, stremio_guide_page
+    media_management_page, edit_media_page, media_view_page, public_status_page, stremio_guide_page
 )
 from Backend.fastapi.routes.api_routes import (
     list_media_api, delete_media_api, update_media_api,
@@ -84,6 +84,10 @@ async def media_management(request: Request, media_type: str = "movie", _: bool 
 @app.get("/media/edit", response_class=HTMLResponse)
 async def edit_media(request: Request, tmdb_id: int, db_index: int, media_type: str, _: bool = Depends(require_admin)):
     return await edit_media_page(request, tmdb_id, db_index, media_type, _)
+
+@app.get("/media/view", response_class=HTMLResponse)
+async def view_media(request: Request, tmdb_id: int, db_index: int, media_type: str, _: bool = Depends(require_auth)):
+    return await media_view_page(request, tmdb_id, db_index, media_type, _)
 
 @app.get("/api/media/list")
 async def list_media(

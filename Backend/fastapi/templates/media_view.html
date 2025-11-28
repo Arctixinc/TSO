@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+
+{% block title %}View {{ media_type|title }} - Telegram Stremio{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="theme-card rounded-lg shadow-lg overflow-hidden">
+        <!-- Backdrop & Header -->
+        <div class="relative h-64 sm:h-96">
+            {% if media_details.backdrop %}
+            <div class="absolute inset-0 bg-cover bg-center" style="background-image: url('{{ media_details.backdrop }}');"></div>
+            <div class="absolute inset-0 bg-black bg-opacity-60"></div>
+            {% else %}
+            <div class="absolute inset-0 theme-primary bg-opacity-20"></div>
+            {% endif %}
+
+            <div class="absolute bottom-0 left-0 right-0 p-6 sm:p-8 flex items-end">
+                <div class="flex flex-col sm:flex-row items-start sm:items-end gap-6 w-full">
+                    <!-- Poster -->
+                    <div class="hidden sm:block flex-shrink-0 w-48 h-72 rounded-lg shadow-2xl overflow-hidden border-4 border-white transform translate-y-16">
+                        <img src="{{ media_details.poster or 'https://via.placeholder.com/300x450/e5e7eb/9ca3af?text=No+Image' }}"
+                             alt="{{ media_details.title }}" class="w-full h-full object-cover">
+                    </div>
+
+                    <!-- Text Info -->
+                    <div class="text-white flex-1 mb-2">
+                        <h1 class="text-3xl sm:text-4xl font-bold mb-2">{{ media_details.title }}</h1>
+                        <div class="flex flex-wrap items-center gap-4 text-sm sm:text-base opacity-90">
+                            {% if media_details.release_year %}
+                            <span>{{ media_details.release_year }}</span>
+                            {% endif %}
+
+                            {% if media_details.rating %}
+                            <span class="flex items-center">
+                                <span class="text-yellow-400 mr-1">★</span> {{ media_details.rating }}
+                            </span>
+                            {% endif %}
+
+                            {% if media_details.genres %}
+                            <span class="flex gap-2">
+                                {% for genre in media_details.genres %}
+                                <span class="bg-white bg-opacity-20 px-2 py-0.5 rounded-full text-xs">{{ genre }}</span>
+                                {% endfor %}
+                            </span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Content Body -->
+        <div class="p-6 sm:p-8 pt-20 sm:pt-12">
+            <!-- Mobile Poster (Visible only on small screens) -->
+            <div class="sm:hidden mb-6 w-40 h-60 mx-auto rounded-lg shadow-xl overflow-hidden">
+                <img src="{{ media_details.poster or 'https://via.placeholder.com/300x450/e5e7eb/9ca3af?text=No+Image' }}"
+                     alt="{{ media_details.title }}" class="w-full h-full object-cover">
+            </div>
+
+            <!-- Description -->
+            <div class="mb-10">
+                <h3 class="text-xl font-semibold mb-3">Overview</h3>
+                <p class="theme-text-secondary leading-relaxed">{{ media_details.description or 'No description available.' }}</p>
+            </div>
+
+            <!-- Video Player (Hidden by default) -->
+            <div id="video-player-container" class="hidden mb-10">
+                <div class="aspect-w-16 aspect-h-9 bg-black rounded-lg overflow-hidden relative group">
+                    <video id="video-player" controls class="w-full h-full" preload="none">
+                        <p>Your browser does not support HTML5 video.</p>
+                    </video>
+                    <button onclick="closePlayer()" class="absolute top-4 right-4 bg-black bg-opacity-50 text-white rounded-full p-2 hover:bg-opacity-80 transition-all opacity-0 group-hover:opacity-100">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+                <div id="playing-info" class="mt-2 text-sm font-medium theme-text-secondary"></div>
+            </div>
+
+            <!-- Content Listing -->
+            <div>
+                <h3 class="text-xl font-semibold mb-6">Available Content</h3>
+
+                {% if media_type == 'movie' %}
+                    {% if media_details.telegram %}
+                    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        {% for item in media_details.telegram %}
+                        <div class="theme-card border p-4 rounded-lg flex justify-between items-center hover:shadow-md transition-shadow">
+                            <div>
+                                <div class="font-semibold text-lg">{{ item.quality }}</div>
+                                <div class="text-xs theme-text-secondary">{{ item.size }}</div>
+                            </div>
+                            <button onclick="playVideo('{{ item.id }}', '{{ item.name|replace('\'', '\\\'') }}', '{{ media_details.title|replace('\'', '\\\'') }} - {{ item.quality }}')"
+                                    class="theme-primary text-white px-4 py-2 rounded-full hover:opacity-90 transition-opacity flex items-center gap-2 text-sm font-medium">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                Play
+                            </button>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="theme-text-secondary">No playable content available.</p>
+                    {% endif %}
+
+                {% else %} <!-- TV Show -->
+                    {% if media_details.seasons %}
+                    <div class="space-y-4">
+                        {% for season in media_details.seasons %}
+                        <div class="border rounded-lg overflow-hidden">
+                            <button onclick="toggleAccordion('season-{{ season.season_number }}')"
+                                    class="w-full px-6 py-4 flex justify-between items-center bg-gray-50 hover:bg-gray-100 transition-colors">
+                                <span class="font-semibold">Season {{ season.season_number }}</span>
+                                <svg id="season-{{ season.season_number }}-icon" class="w-5 h-5 transform transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
+
+                            <div id="season-{{ season.season_number }}" class="hidden border-t">
+                                <div class="p-4 space-y-3">
+                                    {% for episode in season.episodes %}
+                                    <div class="border-b last:border-0 pb-3 last:pb-0">
+                                        <div class="mb-2 font-medium text-sm text-gray-700">Episode {{ episode.episode_number }}: {{ episode.title }}</div>
+                                        <div class="flex flex-wrap gap-2">
+                                            {% if episode.telegram %}
+                                                {% for item in episode.telegram %}
+                                                <button onclick="playVideo('{{ item.id }}', '{{ item.name|replace('\'', '\\\'') }}', 'S{{ season.season_number }}E{{ episode.episode_number }} - {{ item.quality }}')"
+                                                        class="theme-card border hover:border-primary px-3 py-1.5 rounded text-xs flex items-center gap-2 transition-colors">
+                                                    <span class="font-bold text-primary">{{ item.quality }}</span>
+                                                    <span class="text-gray-500 border-l pl-2 ml-1">{{ item.size }}</span>
+                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-primary ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                    </svg>
+                                                </button>
+                                                {% endfor %}
+                                            {% else %}
+                                                <span class="text-xs text-gray-400 italic">No sources</span>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="theme-text-secondary">No seasons found.</p>
+                    {% endif %}
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleAccordion(id) {
+    const content = document.getElementById(id);
+    const icon = document.getElementById(id + '-icon');
+
+    if (content.classList.contains('hidden')) {
+        content.classList.remove('hidden');
+        icon.classList.add('rotate-180');
+    } else {
+        content.classList.add('hidden');
+        icon.classList.remove('rotate-180');
+    }
+}
+
+function playVideo(fileId, fileName, title) {
+    const playerContainer = document.getElementById('video-player-container');
+    const player = document.getElementById('video-player');
+    const info = document.getElementById('playing-info');
+
+    // Construct stream URL
+    const streamUrl = `/dl/${fileId}/${encodeURIComponent(fileName)}`;
+
+    player.src = streamUrl;
+    player.play();
+
+    info.textContent = `Playing: ${title}`;
+    playerContainer.classList.remove('hidden');
+
+    // Scroll to player
+    playerContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function closePlayer() {
+    const playerContainer = document.getElementById('video-player-container');
+    const player = document.getElementById('video-player');
+
+    player.pause();
+    player.src = '';
+    playerContainer.classList.add('hidden');
+}
+</script>
+
+<style>
+.aspect-w-16 {
+    position: relative;
+    padding-bottom: 56.25%; /* 16:9 */
+}
+
+.aspect-w-16 > video {
+    position: absolute;
+    height: 100%;
+    width: 100%;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+}
+</style>
+{% endblock %}
