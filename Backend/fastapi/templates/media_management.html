@@ -479,13 +479,26 @@ function showSuggestions(suggestions) {
         return;
     }
 
-    container.innerHTML = suggestions.map(item => `
-        <div onclick="selectSuggestion('${(item.title || item.name).replace(/'/g, "\\'")}')"
-             class="px-4 py-2 hover:bg-gray-100 cursor-pointer flex justify-between items-center text-sm">
-            <span class="font-medium text-gray-800">${item.title || item.name}</span>
-            <span class="text-xs text-gray-500">${item.release_year || ''}</span>
+    container.innerHTML = suggestions.map(item => {
+        const title = item.title || item.name;
+        const year = item.release_year || '';
+        const image = item.logo || item.poster || 'https://via.placeholder.com/45x68/e5e7eb/9ca3af?text=No+Img';
+        const displayTitle = title.replace(/'/g, "\\'");
+
+        return `
+        <div onclick="selectSuggestion('${displayTitle}')"
+             class="px-4 py-3 hover:bg-gray-50 cursor-pointer flex items-center gap-3 border-b border-gray-100 last:border-0 transition-colors">
+            <div class="flex-shrink-0 w-10 h-14 bg-gray-200 rounded overflow-hidden shadow-sm">
+                <img src="${image}" alt="${title}" class="w-full h-full object-cover"
+                     onerror="this.src='https://via.placeholder.com/40x60/e5e7eb/9ca3af?text=No+Img'">
+            </div>
+            <div class="flex-1 min-w-0">
+                <p class="font-medium text-gray-800 text-sm truncate">${title}</p>
+                <p class="text-xs text-gray-500">${year}</p>
+            </div>
         </div>
-    `).join('');
+        `;
+    }).join('');
 
     container.classList.remove('hidden');
 }

@@ -511,6 +511,8 @@ class Database:
             "release_year": 1,
             "tmdb_id": 1,
             "db_index": 1,
+            "logo": 1,
+            "poster": 1,
             "_id": 0
         }
 

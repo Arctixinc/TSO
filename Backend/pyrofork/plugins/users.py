@@ -9,25 +9,27 @@ from Backend.helper.custom_filter import CustomFilters
 
 def get_main_menu_keyboard():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("👥 List Users", callback_data="users_list"),
-         InlineKeyboardButton("➕ Add User", callback_data="users_add")],
-        [InlineKeyboardButton("❌ Close", callback_data="users_close")]
+        [InlineKeyboardButton("👥 View All Users", callback_data="users_list")],
+        [InlineKeyboardButton("➕ Add New User", callback_data="users_add")],
+        [InlineKeyboardButton("❌ Close Panel", callback_data="users_close")]
     ])
 
 def get_users_list_keyboard(users):
     buttons = []
     for user in users:
         username = user.get("username", "Unknown")
-        buttons.append([InlineKeyboardButton(f"👤 {username}", callback_data=f"user_detail_{username}")])
+        role = user.get("role", "user")
+        emoji = "🛡️" if role == "admin" else "👤"
+        buttons.append([InlineKeyboardButton(f"{emoji} {username}", callback_data=f"user_detail_{username}")])
 
-    buttons.append([InlineKeyboardButton("🔙 Back", callback_data="users_main")])
+    buttons.append([InlineKeyboardButton("🔙 Back to Menu", callback_data="users_main")])
     return InlineKeyboardMarkup(buttons)
 
 def get_user_detail_keyboard(username):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🔑 Change Password", callback_data=f"user_pass_{username}")],
         [InlineKeyboardButton("🗑️ Delete User", callback_data=f"user_del_{username}")],
-        [InlineKeyboardButton("🔙 Back", callback_data="users_list")]
+        [InlineKeyboardButton("🔙 Back to List", callback_data="users_list")]
     ])
 
 def get_back_keyboard():
@@ -38,7 +40,9 @@ def get_back_keyboard():
 @Client.on_message(filters.command("users") & CustomFilters.owner)
 async def users_command(client: Client, message: Message):
     await message.reply_text(
-        "**👥 User Management Panel**\nSelect an action below:",
+        "**👥 User Management System**\n\n"
+        "Manage access to the Stremio Media Server.\n"
+        "Select an option below to proceed:",
         reply_markup=get_main_menu_keyboard()
     )
 
@@ -47,7 +51,9 @@ async def users_command(client: Client, message: Message):
 @Client.on_callback_query(filters.regex("^users_main$"))
 async def users_main_cb(client: Client, callback: CallbackQuery):
     await callback.edit_message_text(
-        "**👥 User Management Panel**\nSelect an action below:",
+        "**👥 User Management System**\n\n"
+        "Manage access to the Stremio Media Server.\n"
+        "Select an option below to proceed:",
         reply_markup=get_main_menu_keyboard()
     )
 
