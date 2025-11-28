@@ -99,7 +99,7 @@ THEMES = {
             "accent": "#00FF88",
             "background": "#0A0E27",
             "card": "#1A1F3A",
-            "text": "#FFFFFF",
+            "text": "#E2E8F0",
             "text_secondary": "#A0AEC0"
         },
         "css_classes": "theme-cyber-neon"
@@ -194,6 +194,19 @@ THEMES = {
             "text_secondary": "#D1D5DB"
         },
         "css_classes": "theme-midnight-carbon"
+    },
+    "dracula": {
+        "name": "Dracula",
+        "colors": {
+            "primary": "#BD93F9",
+            "secondary": "#6272A4",
+            "accent": "#FF79C6",
+            "background": "#282A36",
+            "card": "#44475A",
+            "text": "#F8F8F2",
+            "text_secondary": "#BFBFBF"
+        },
+        "css_classes": "theme-dracula"
     }
 }
 
