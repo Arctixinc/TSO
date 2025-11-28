@@ -49,3 +49,9 @@ class MovieSchema(BaseModel):
     media_type: str
     updated_on: datetime = Field(default_factory=datetime.utcnow) 
     telegram: Optional[List[QualityDetail]]
+
+class UserSchema(BaseModel):
+    username: str
+    password: str
+    role: str = "user"
+    created_at: datetime = Field(default_factory=datetime.utcnow)

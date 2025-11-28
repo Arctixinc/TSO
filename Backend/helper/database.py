@@ -10,7 +10,7 @@ from Backend.logger import LOGGER
 from Backend.config import Telegram
 import re
 from Backend.helper.encrypt import decode_string, encode_string
-from Backend.helper.modal import Episode, MovieSchema, QualityDetail, Season, TVShowSchema
+from Backend.helper.modal import Episode, MovieSchema, QualityDetail, Season, TVShowSchema, UserSchema
 from Backend.helper.task_manager import delete_message
 
 
@@ -966,3 +966,44 @@ class Database:
                     "dataSize": db_stats.get("dataSize", 0)
                 })
         return stats
+
+    # -------------------------------
+    # User Management
+    # -------------------------------
+
+    async def add_user(self, username: str, password_hash: str, role: str = "user") -> bool:
+        db = self.dbs["tracking"]
+        existing = await db["users"].find_one({"username": username})
+        if existing:
+            return False
+
+        user_data = UserSchema(
+            username=username,
+            password=password_hash,
+            role=role
+        )
+        await db["users"].insert_one(user_data.dict())
+        return True
+
+    async def get_user(self, username: str) -> Optional[dict]:
+        db = self.dbs["tracking"]
+        return await db["users"].find_one({"username": username})
+
+    async def delete_user(self, username: str) -> bool:
+        db = self.dbs["tracking"]
+        result = await db["users"].delete_one({"username": username})
+        return result.deleted_count > 0
+
+    async def list_users(self) -> List[dict]:
+        db = self.dbs["tracking"]
+        cursor = db["users"].find({})
+        users = await cursor.to_list(None)
+        return [convert_objectid_to_str(u) for u in users]
+
+    async def update_user_password(self, username: str, password_hash: str) -> bool:
+        db = self.dbs["tracking"]
+        result = await db["users"].update_one(
+            {"username": username},
+            {"$set": {"password": password_hash}}
+        )
+        return result.modified_count > 0

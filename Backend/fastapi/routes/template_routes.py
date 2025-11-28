@@ -1,7 +1,7 @@
 from fastapi import Request, Form, HTTPException, Depends
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
-from Backend.fastapi.security.credentials import verify_credentials, require_auth, is_authenticated, get_current_user
+from Backend.fastapi.security.credentials import verify_credentials, require_auth, require_admin, is_authenticated, get_current_user, get_current_user_role
 from Backend.fastapi.themes import get_theme, get_all_themes
 from Backend import db
 from Backend.pyrofork.bot import work_loads, multi_clients, StreamBot
@@ -27,10 +27,17 @@ async def login_page(request: Request):
     })
 
 async def login_post(request: Request, username: str = Form(...), password: str = Form(...)):
-    if verify_credentials(username, password):
+    role = await verify_credentials(username, password)
+    if role:
         request.session["authenticated"] = True
         request.session["username"] = username
-        return RedirectResponse(url="/", status_code=302)
+        request.session["role"] = role
+
+        # Redirect based on role
+        if role == "admin":
+            return RedirectResponse(url="/", status_code=302)
+        else:
+            return RedirectResponse(url="/media/manage", status_code=302)
     else:
         theme_name = request.session.get("theme", "purple_gradient")
         theme = get_theme(theme_name)
@@ -51,7 +58,7 @@ async def set_theme(request: Request, theme: str = Form(...)):
         request.session["theme"] = theme
     return RedirectResponse(url=request.headers.get("referer", "/"), status_code=302)
 
-async def dashboard_page(request: Request, _: bool = Depends(require_auth)):
+async def dashboard_page(request: Request, _: bool = Depends(require_admin)):
     theme_name = request.session.get("theme", "purple_gradient")
     theme = get_theme(theme_name)
     current_user = get_current_user(request)
@@ -110,6 +117,7 @@ async def media_management_page(request: Request, media_type: str = "movie", _: 
     theme_name = request.session.get("theme", "purple_gradient")
     theme = get_theme(theme_name)
     current_user = get_current_user(request)
+    user_role = get_current_user_role(request)
     
     return templates.TemplateResponse("media_management.html", {
         "request": request,
@@ -117,10 +125,11 @@ async def media_management_page(request: Request, media_type: str = "movie", _: 
         "themes": get_all_themes(),
         "current_theme": theme_name,
         "current_user": current_user,
+        "user_role": user_role,
         "media_type": media_type
     })
 
-async def edit_media_page(request: Request, tmdb_id: int, db_index: int, media_type: str, _: bool = Depends(require_auth)):
+async def edit_media_page(request: Request, tmdb_id: int, db_index: int, media_type: str, _: bool = Depends(require_admin)):
     theme_name = request.session.get("theme", "purple_gradient")
     theme = get_theme(theme_name)
     current_user = get_current_user(request)

@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from Backend import __version__
 
-from Backend.fastapi.security.credentials import require_auth
+from Backend.fastapi.security.credentials import require_auth, require_admin
 from Backend.fastapi.routes.stream_routes import router as stream_router
 from Backend.fastapi.routes.stremio_routes import router as stremio_router
 from Backend.fastapi.routes.template_routes import (
@@ -71,7 +71,7 @@ async def stremio_guide(request: Request):
 
 # --- Protected Routes (Authentication Required) ---
 @app.get("/", response_class=HTMLResponse)
-async def root(request: Request, _: bool = Depends(require_auth)):
+async def root(request: Request, _: bool = Depends(require_admin)):
     return await dashboard_page(request, _)
 
 @app.get("/media/manage", response_class=HTMLResponse)
@@ -79,7 +79,7 @@ async def media_management(request: Request, media_type: str = "movie", _: bool 
     return await media_management_page(request, media_type, _)
 
 @app.get("/media/edit", response_class=HTMLResponse)
-async def edit_media(request: Request, tmdb_id: int, db_index: int, media_type: str, _: bool = Depends(require_auth)):
+async def edit_media(request: Request, tmdb_id: int, db_index: int, media_type: str, _: bool = Depends(require_admin)):
     return await edit_media_page(request, tmdb_id, db_index, media_type, _)
 
 @app.get("/api/media/list")
@@ -104,32 +104,32 @@ async def search_suggestions(
     return await search_suggestions_api(media_type, query)
 
 @app.delete("/api/media/delete")
-async def delete_media(tmdb_id: int, db_index: int, media_type: str, _: bool = Depends(require_auth)):
+async def delete_media(tmdb_id: int, db_index: int, media_type: str, _: bool = Depends(require_admin)):
     return await delete_media_api(tmdb_id, db_index, media_type)
 
 @app.put("/api/media/update")
-async def update_media(request: Request, tmdb_id: int, db_index: int, media_type: str, _: bool = Depends(require_auth)):
+async def update_media(request: Request, tmdb_id: int, db_index: int, media_type: str, _: bool = Depends(require_admin)):
     return await update_media_api(request, tmdb_id, db_index, media_type)
 
 @app.delete("/api/media/delete-quality")
-async def delete_movie_quality(tmdb_id: int, db_index: int, quality: str, _: bool = Depends(require_auth)):
+async def delete_movie_quality(tmdb_id: int, db_index: int, quality: str, _: bool = Depends(require_admin)):
     return await delete_movie_quality_api(tmdb_id, db_index, quality)
 
 @app.delete("/api/media/delete-tv-quality")
-async def delete_tv_quality(tmdb_id: int, db_index: int, season: int, episode: int, quality: str, _: bool = Depends(require_auth)):
+async def delete_tv_quality(tmdb_id: int, db_index: int, season: int, episode: int, quality: str, _: bool = Depends(require_admin)):
     return await delete_tv_quality_api(tmdb_id, db_index, season, episode, quality)
 
 @app.delete("/api/media/delete-tv-episode")
-async def delete_tv_episode(tmdb_id: int, db_index: int, season: int, episode: int, _: bool = Depends(require_auth)):
+async def delete_tv_episode(tmdb_id: int, db_index: int, season: int, episode: int, _: bool = Depends(require_admin)):
     return await delete_tv_episode_api(tmdb_id, db_index, season, episode)
 
 @app.delete("/api/media/delete-tv-season")
-async def delete_tv_season(tmdb_id: int, db_index: int, season: int, _: bool = Depends(require_auth)):
+async def delete_tv_season(tmdb_id: int, db_index: int, season: int, _: bool = Depends(require_admin)):
     return await delete_tv_season_api(tmdb_id, db_index, season)
 
 
 @app.get("/api/system/workloads")
-async def get_workloads(_: bool = Depends(require_auth)):
+async def get_workloads(_: bool = Depends(require_admin)):
     try:
         from Backend.pyrofork.bot import work_loads
         return {
