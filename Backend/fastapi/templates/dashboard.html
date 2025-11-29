@@ -5,12 +5,26 @@
 {% block content %}
 <div class="min-h-screen">
     <!-- Header with just status pill -->
-    <header class="theme-card shadow-lg mb-8">
+    <header class="theme-card shadow-lg mb-8 bg-opacity-90 backdrop-blur-md">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-            <div class="flex items-center justify-between">
+            <div class="flex flex-col md:flex-row items-center justify-between gap-4">
                 <div class="flex items-center space-x-4">
-                    <h1 class="text-3xl font-bold text-primary">System Overview</h1>
+                    <h1 class="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-primary to-purple-600">
+                        System Overview
+                    </h1>
                 </div>
+                <!-- Quick Search -->
+                <form action="/media/manage" method="get" class="w-full md:w-auto flex-1 max-w-md relative">
+                    <input
+                        type="text"
+                        name="search"
+                        placeholder="Search media..."
+                        class="w-full pl-10 pr-4 py-2 rounded-full border border-gray-200 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                    >
+                    <svg class="w-5 h-5 absolute left-3 top-2.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                </form>
             </div>
         </div>
     </header>

@@ -61,8 +61,23 @@ class Database:
 
             LOGGER.info(f"Active storage DB: storage_{self.current_db_index}")
 
+            # Create Indexes
+            await self.create_indexes()
+
         except Exception as e:
             LOGGER.error(f"Database connection error: {e}")
+
+    async def create_indexes(self):
+        """Create indexes for all storage databases to optimize search."""
+        for key in self.dbs.keys():
+            if key.startswith("storage_"):
+                db = self.dbs[key]
+                try:
+                    await db["movie"].create_index([("title", "text")])
+                    await db["tv"].create_index([("title", "text")])
+                    LOGGER.info(f"✅ Text indexes created for {key}")
+                except Exception as e:
+                    LOGGER.error(f"❌ Failed to create indexes for {key}: {e}")
 
     async def disconnect(self):
         for client in self.clients.values():
@@ -551,12 +566,31 @@ class Database:
 
             skip = (page - 1) * page_size
             
+            # Try Text Search First
+            text_query = {"$text": {"$search": query}}
+
+            # Fallback to Regex if needed (e.g. for partial word matches not covered by text index)
+            # But let's start with a hybrid approach:
+            # We construct a pipeline that tries to match text score first.
+
+            # However, MongoDB $text cannot be in $or easily with non-text conditions without complications.
+            # Simplified approach: Use $text if query is simple words, else regex.
+            # For now, let's keep the robust Regex as fallback but prioritize Text if we wanted.
+            # Given the request to optimize: Let's use Regex as the primary 'contains' search because
+            # $text search is word-based (tokenized). "Aveng" won't find "Avengers" in standard $text search.
+            # "Avengers" will find "Avengers".
+
+            # User wants "Smart" search.
+            # Let's stick to the Regex for partial matching (most user friendly for file names)
+            # BUT optimize the regex pattern to be less greedy if possible, or use text index if exact match.
+
             words = query.split()
             regex_query = {
-                '$regex': '.*' + '.*'.join(words) + '.*', 
+                '$regex': '.*' + '.*'.join([re.escape(w) for w in words]) + '.*',
                 '$options': 'i'
             }
             
+            # Pipeline
             tv_pipeline = [
                 {"$match": {"$or": [
                     {"title": regex_query},
@@ -584,6 +618,7 @@ class Database:
             results = []
             dbs_checked = []
             
+            # Search Active DB
             active_db_key = f"storage_{self.current_db_index}"
             active_db = self.dbs[active_db_key]
             dbs_checked.append(self.current_db_index)
@@ -593,6 +628,7 @@ class Database:
             combined = tv_results + movie_results
             results.extend(combined)
             
+            # If not enough results, check previous DBs
             if len(results) < page_size:
                 previous_db_index = self.current_db_index - 1
                 while previous_db_index > 0 and len(results) < page_size:
@@ -605,6 +641,7 @@ class Database:
                     dbs_checked.append(previous_db_index)
                     previous_db_index -= 1
 
+            # Count total (approximate, scanning checked DBs)
             total_count = 0
             for db_index in dbs_checked:
                 key = f"storage_{db_index}"

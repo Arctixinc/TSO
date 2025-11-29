@@ -26,18 +26,31 @@ def format_imdb_images(imdb_id: str) -> dict:
         "logo": f"https://images.metahub.space/logo/medium/{imdb_id}/img",
     }
 
+async def retry_async(func, *args, retries=3, delay=2, **kwargs):
+    """Retry an async function multiple times."""
+    last_exception = None
+    for i in range(retries):
+        try:
+            return await func(*args, **kwargs)
+        except Exception as e:
+            last_exception = e
+            LOGGER.warning(f"Attempt {i+1} failed for {func.__name__}: {e}. Retrying in {delay}s...")
+            await asyncio.sleep(delay)
+            delay *= 2  # Exponential backoff
+    LOGGER.error(f"All {retries} attempts failed for {func.__name__}: {last_exception}")
+    return None
+
 async def safe_imdb_search(title: str, type_: str) -> str | None:
     """Safely search IMDb title and return its ID."""
-    try:
+    async def _search():
         result = await search_title(query=title, type=type_)
         return result["id"] if result else None
-    except Exception as e:
-        LOGGER.warning(f"IMDb search failed for '{title}' [{type_}]: {e}")
-        return None
+
+    return await retry_async(_search)
 
 async def safe_tmdb_search(title: str, type_: str, year=None):
     """Safely search TMDb title."""
-    try:
+    async def _search():
         if type_ == "movie":
             if year:
                 results = await tmdb.search().movies(query=title, year=year)
@@ -46,9 +59,8 @@ async def safe_tmdb_search(title: str, type_: str, year=None):
         else:
             results = await tmdb.search().tv(query=title)
         return results[0] if results else None
-    except Exception as e:
-        LOGGER.error(f"TMDb search failed for '{title}' [{type_}]: {e}")
-        return None
+
+    return await retry_async(_search)
 
 
 import re

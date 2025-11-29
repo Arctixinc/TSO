@@ -59,6 +59,15 @@
                 </div>
             </div>
 
+            <!-- Smart Filter Chips -->
+            <div class="flex flex-wrap gap-2 text-sm">
+                <button onclick="quickFilter('4K')" class="px-3 py-1 rounded-full border bg-gray-50 hover:bg-gray-100 transition-colors">🌟 4K</button>
+                <button onclick="quickFilter('1080p')" class="px-3 py-1 rounded-full border bg-gray-50 hover:bg-gray-100 transition-colors">📺 1080p</button>
+                <button onclick="quickFilter('Action')" class="px-3 py-1 rounded-full border bg-gray-50 hover:bg-gray-100 transition-colors">💥 Action</button>
+                <button onclick="quickFilter('Comedy')" class="px-3 py-1 rounded-full border bg-gray-50 hover:bg-gray-100 transition-colors">😂 Comedy</button>
+                <button onclick="setSort('updated_on', 'desc')" class="px-3 py-1 rounded-full border bg-gray-50 hover:bg-gray-100 transition-colors">🕒 Newest</button>
+            </div>
+
             <!-- Advanced Filters (Hidden by default) -->
             <div id="advanced-filters" class="hidden border-t pt-4 mt-2">
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -573,10 +582,37 @@ async function deleteMedia(tmdbId, dbIndex, title) {
     }
 }
 
+// Quick Filter logic
+function quickFilter(term) {
+    if (term === '4K' || term === '1080p') {
+        // These are qualities, we treat them as search keywords for now since DB search checks regex in file names
+        document.getElementById('search-input').value = term;
+        searchMedia();
+    } else {
+        // Assume genre
+        document.getElementById('genre-filter').value = term;
+        applyFilters();
+    }
+}
+
+function setSort(field, order) {
+    document.getElementById('sort-by').value = field;
+    document.getElementById('sort-order').value = order;
+    applyFilters();
+}
+
 // Initialize page
 document.addEventListener('DOMContentLoaded', () => {
-    // Load media on page load
-    loadMedia();
+    // Check URL params for search/filter
+    const urlParams = new URLSearchParams(window.location.search);
+    const searchParam = urlParams.get('search');
+
+    if (searchParam) {
+        document.getElementById('search-input').value = searchParam;
+        loadMedia(1, searchParam);
+    } else {
+        loadMedia();
+    }
     
     // Add enter key listener to search input
     document.getElementById('search-input').addEventListener('keypress', (e) => {
