@@ -213,12 +213,12 @@
                                                 </div>
                                             </div>
 
-                                            <div class="flex flex-wrap gap-3">
+                                            <div class="grid grid-cols-1 sm:flex sm:flex-wrap gap-3 w-full sm:w-auto">
                                                 {% if episode.telegram %}
                                                     {% for item in episode.telegram %}
                                                     <div class="flex items-center bg-white border theme-border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-all group">
                                                         <button onclick="playVideo('{{ item.id }}', '{{ item.name|replace('\'', '\\\'') }}', 'S{{ season.season_number }}E{{ episode.episode_number }} - {{ item.quality }}')"
-                                                                class="px-4 py-2 flex items-center gap-2 hover:bg-primary/5 transition-colors text-sm font-medium">
+                                                                class="flex-1 justify-center px-4 py-2 flex items-center gap-2 hover:bg-primary/5 transition-colors text-sm font-medium">
                                                             <span class="text-primary group-hover:scale-105 transition-transform">{{ item.quality }}</span>
                                                             <span class="text-gray-300">|</span>
                                                             <span class="text-gray-500 font-mono text-xs">{{ item.size }}</span>
