@@ -60,6 +60,7 @@ async def run_fix_process(client: Client, status_msg: Message):
         total_processed = 0
         total_updated = 0
         errors = 0
+        skipped = 0
 
         # We need to iterate over all DBs
         total_dbs = db.current_db_index
@@ -86,6 +87,7 @@ async def run_fix_process(client: Client, status_msg: Message):
                             f"📁 DB: {db_idx}/{total_dbs}\n"
                             f"🎬 Processed: {total_processed}\n"
                             f"✅ Updated: {total_updated}\n"
+                            f"⚠️ Skipped: {skipped}\n"
                             f"❌ Errors: {errors}\n\n",
                             reply_markup=cancel_btn
                         )
@@ -113,6 +115,10 @@ async def run_fix_process(client: Client, status_msg: Message):
                         if update_fields:
                             await db.update_metadata_fields(tmdb_id, "movie", db_idx, update_fields)
                             total_updated += 1
+                        else:
+                            skipped += 1
+                    else:
+                        skipped += 1
                 except Exception as e:
                     LOGGER.error(f"Error fixing movie {movie.get('title')}: {e}")
                     errors += 1
@@ -129,6 +135,7 @@ async def run_fix_process(client: Client, status_msg: Message):
                             f"📁 DB: {db_idx}/{total_dbs}\n"
                             f"🎬 Processed: {total_processed}\n"
                             f"✅ Updated: {total_updated}\n"
+                            f"⚠️ Skipped: {skipped}\n"
                             f"❌ Errors: {errors}\n\n",
                             reply_markup=cancel_btn
                         )
@@ -183,6 +190,8 @@ async def run_fix_process(client: Client, status_msg: Message):
                                 if should_cancel: break
 
                         total_updated += 1
+                    else:
+                        skipped += 1
 
                 except Exception as e:
                     LOGGER.error(f"Error fixing tv show {tv.get('title')}: {e}")
@@ -192,6 +201,7 @@ async def run_fix_process(client: Client, status_msg: Message):
             f"✅ **Metadata Fix Completed!**\n\n"
             f"🎬 Total Processed: {total_processed}\n"
             f"✅ Total Updated: {total_updated}\n"
+            f"⚠️ Total Skipped: {skipped}\n"
             f"❌ Errors: {errors}"
         )
 
