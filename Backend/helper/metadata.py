@@ -204,7 +204,7 @@ async def fetch_tv_metadata(title, season, episode, encoded_string, year=None, q
         
         tv_id = tmdb_result.id
         try:
-            tv_details = await tmdb.tv(tv_id).details(append_to_response="external_ids")
+            tv_details = await tmdb.tv(tv_id).details(append_to_response="external_ids,credits")
         except Exception as e:
             LOGGER.warning(f"TMDb TV details failed for {title}: {e}")
             return None
@@ -218,6 +218,9 @@ async def fetch_tv_metadata(title, season, episode, encoded_string, year=None, q
     
     # Return TMDb-based data
     if use_tmdb and tv_details:
+        cast = [p.name for p in tv_details.credits.cast[:10]] if hasattr(tv_details, 'credits') and hasattr(tv_details.credits, 'cast') else []
+        runtime = f"{tv_details.episode_run_time[0]} min" if hasattr(tv_details, 'episode_run_time') and tv_details.episode_run_time else None
+
         return {
             "tmdb_id": tv_details.id,
             "imdb_id": tv_details.external_ids.imdb_id,
@@ -230,10 +233,14 @@ async def fetch_tv_metadata(title, season, episode, encoded_string, year=None, q
             "logo": "",
             "genres": [g.name for g in (tv_details.genres or [])],
             "media_type": "tv",
+            "cast": cast,
+            "runtime": runtime,
             "season_number": season,
             "episode_number": episode,
             "episode_title": getattr(ep_details, "name", f"S{season}E{episode}") if ep_details else f"{tv_details.name} S{season}E{episode}",
             "episode_backdrop": format_tmdb_image(getattr(ep_details, "still_path", None), "original") if ep_details else "",
+            "episode_overview": getattr(ep_details, "overview", "") if ep_details else "",
+            "episode_released": getattr(ep_details, "air_date", "") if ep_details else "",
             "quality": quality,
             "encoded_string": encoded_string,
         }
@@ -246,6 +253,10 @@ async def fetch_tv_metadata(title, season, episode, encoded_string, year=None, q
     imdb_id = tv_details.get("id", "")
     images = format_imdb_images(imdb_id)
     
+    cast = tv_details.get("cast", [])
+    if cast and isinstance(cast[0], dict):
+        cast = [c.get("name") for c in cast if c.get("name")]
+
     return {
         "tmdb_id": imdb_id.replace("tt", ""),
         "imdb_id": imdb_id,
@@ -258,10 +269,14 @@ async def fetch_tv_metadata(title, season, episode, encoded_string, year=None, q
         "logo": images["logo"],
         "genres": tv_details.get("genre", []),
         "media_type": "tv",
+        "cast": cast,
+        "runtime": tv_details.get("runtime", ""),
         "season_number": season,
         "episode_number": episode,
         "episode_title": ep_details.get("title", f"S{season}E{episode}") if ep_details else f"{tv_details.get('title', title)} S{season}E{episode}",
         "episode_backdrop": ep_details.get("image", "") if ep_details else "",
+        "episode_overview": ep_details.get("plot", "") if ep_details else "",
+        "episode_released": ep_details.get("released", "") if ep_details else "",
         "quality": quality,
         "encoded_string": encoded_string,
     }
@@ -287,13 +302,16 @@ async def fetch_movie_metadata(title, encoded_string, year=None, quality=None, d
             return None
         
         try:
-            movie_details = await tmdb.movie(tmdb_result.id).details(append_to_response="external_ids")
+            movie_details = await tmdb.movie(tmdb_result.id).details(append_to_response="external_ids,credits")
         except Exception as e:
             LOGGER.warning(f"TMDb movie details failed for {title}: {e}")
             return None
     
     # TMDb result
     if use_tmdb and movie_details:
+        cast = [p.name for p in movie_details.credits.cast[:10]] if hasattr(movie_details, 'credits') and hasattr(movie_details.credits, 'cast') else []
+        runtime = f"{movie_details.runtime} min" if hasattr(movie_details, 'runtime') and movie_details.runtime else None
+
         return {
             "tmdb_id": movie_details.id,
             "imdb_id": movie_details.external_ids.imdb_id,
@@ -306,6 +324,8 @@ async def fetch_movie_metadata(title, encoded_string, year=None, quality=None, d
             "logo": "",
             "media_type": "movie",
             "genres": [g.name for g in (movie_details.genres or [])],
+            "cast": cast,
+            "runtime": runtime,
             "quality": quality,
             "encoded_string": encoded_string,
         }
@@ -314,6 +334,10 @@ async def fetch_movie_metadata(title, encoded_string, year=None, quality=None, d
     imdb_id = movie_details.get("id", "")
     images = format_imdb_images(imdb_id)
     
+    cast = movie_details.get("cast", [])
+    if cast and isinstance(cast[0], dict):
+        cast = [c.get("name") for c in cast if c.get("name")]
+
     return {
         "tmdb_id": imdb_id.replace("tt", ""),
         "imdb_id": imdb_id,
@@ -326,6 +350,8 @@ async def fetch_movie_metadata(title, encoded_string, year=None, quality=None, d
         "logo": images["logo"],
         "media_type": "movie",
         "genres": movie_details.get("genre", []),
+        "cast": cast,
+        "runtime": movie_details.get("runtime", ""),
         "quality": quality,
         "encoded_string": encoded_string,
     }

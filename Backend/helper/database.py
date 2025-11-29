@@ -204,6 +204,8 @@ class Database:
                 backdrop=metadata_info['backdrop'],
                 logo=metadata_info['logo'],
                 media_type=metadata_info['media_type'],
+                cast=metadata_info.get('cast'),
+                runtime=metadata_info.get('runtime'),
                 telegram=[QualityDetail(
                     quality=metadata_info['quality'],
                     id=metadata_info['encoded_string'],
@@ -226,12 +228,16 @@ class Database:
                 backdrop=metadata_info['backdrop'],
                 logo=metadata_info['logo'],
                 media_type=metadata_info['media_type'],
+                cast=metadata_info.get('cast'),
+                runtime=metadata_info.get('runtime'),
                 seasons=[Season(
                     season_number=metadata_info['season_number'],
                     episodes=[Episode(
                         episode_number=metadata_info['episode_number'],
                         title=metadata_info['episode_title'],
                         episode_backdrop=metadata_info['episode_backdrop'],
+                        overview=metadata_info.get('episode_overview'),
+                        released=metadata_info.get('episode_released'),
                         telegram=[QualityDetail(
                             quality=metadata_info['quality'],
                             id=metadata_info['encoded_string'],
@@ -404,6 +410,13 @@ class Database:
                                 existing_episode["telegram"].append(quality)
                         # 🔹 Sort telegram qualities for this episode
                         existing_episode["telegram"] = self.sort_telegram_list(existing_episode["telegram"])
+
+                        # Update episode metadata if not present (or overwrite if improved)
+                        if episode.get("overview") and not existing_episode.get("overview"):
+                            existing_episode["overview"] = episode["overview"]
+                        if episode.get("released") and not existing_episode.get("released"):
+                            existing_episode["released"] = episode["released"]
+
                     else:
                         existing_season["episodes"].append(episode)
 
@@ -1024,3 +1037,55 @@ class Database:
             {"$set": {"password": password_hash}}
         )
         return result.modified_count > 0
+
+    # -------------------------------
+    #  New Method: Update Metadata Fields (Partial Update)
+    # -------------------------------
+    async def update_metadata_fields(
+        self, tmdb_id: int, media_type: str, db_index: int,
+        fields: Dict[str, Any], season_number: Optional[int] = None, episode_number: Optional[int] = None
+    ) -> bool:
+        """
+        Updates specific metadata fields for a Movie or TV Show (or specific episode).
+        Used for backfilling/fixing data without overwriting file links.
+        """
+        db_key = f"storage_{db_index}"
+        if media_type.lower() == "movie":
+            collection = self.dbs[db_key]["movie"]
+            # For movies, just update the top-level fields
+            result = await collection.update_one(
+                {"tmdb_id": tmdb_id},
+                {"$set": fields}
+            )
+            return result.modified_count > 0
+
+        else: # TV Show
+            collection = self.dbs[db_key]["tv"]
+
+            if season_number is not None and episode_number is not None:
+                # Update specific episode fields
+                # We need to construct the update query dynamically
+                # Array filters are the cleanest way to update nested arrays
+
+                # Construct $set dict with array filters placeholders
+                set_dict = {}
+                for key, value in fields.items():
+                    set_dict[f"seasons.$[s].episodes.$[e].{key}"] = value
+
+                result = await collection.update_one(
+                    {"tmdb_id": tmdb_id},
+                    {"$set": set_dict},
+                    array_filters=[
+                        {"s.season_number": season_number},
+                        {"e.episode_number": episode_number}
+                    ]
+                )
+                return result.modified_count > 0
+
+            else:
+                # Update top-level TV show fields
+                result = await collection.update_one(
+                    {"tmdb_id": tmdb_id},
+                    {"$set": fields}
+                )
+                return result.modified_count > 0

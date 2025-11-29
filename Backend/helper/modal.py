@@ -12,6 +12,8 @@ class Episode(BaseModel):
     episode_number: int
     title: str 
     episode_backdrop: Optional[str] = None 
+    overview: Optional[str] = None
+    released: Optional[str] = None
     telegram: Optional[List[QualityDetail]] 
 
 class Season(BaseModel):
@@ -31,6 +33,8 @@ class TVShowSchema(BaseModel):
     backdrop: Optional[str] = None 
     logo: Optional[str] = None
     media_type: str
+    cast: Optional[List[str]] = None
+    runtime: Optional[str] = None
     updated_on: datetime = Field(default_factory=datetime.utcnow)
     seasons: List[Season] 
 
@@ -47,6 +51,8 @@ class MovieSchema(BaseModel):
     backdrop: Optional[str] = None
     logo: Optional[str] = None
     media_type: str
+    cast: Optional[List[str]] = None
+    runtime: Optional[str] = None
     updated_on: datetime = Field(default_factory=datetime.utcnow) 
     telegram: Optional[List[QualityDetail]]
 
