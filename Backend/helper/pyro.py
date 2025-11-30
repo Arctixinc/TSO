@@ -232,6 +232,7 @@ commands = [
     BotCommand("stats",      "📊 View database stats"),
     BotCommand("cleanup",    "🧹 Remove broken links"),
     BotCommand("dbcleanup",  "🗑️ Delete duplicate entries"),
+    BotCommand("fixmetadata", "🔧 Fix metadata"),
     BotCommand("users",      "👥 Manage users"),
     BotCommand("eval",       "🧠 Run Python code"),
     BotCommand("shell",      "💻 Run shell commands"),
