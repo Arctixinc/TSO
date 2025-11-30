@@ -1,5 +1,6 @@
 import asyncio
 import time
+from collections import deque
 from pyrogram import Client, filters
 from pyrogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from Backend.helper.custom_filter import CustomFilters
@@ -213,6 +214,9 @@ async def run_fix_process(client: Client, status_msg: Message, mode: str):
     start_time = time.time()
     last_update_time = time.time()
 
+    # History for smoothing ETA: Store (time, processed_count)
+    rate_history = deque(maxlen=20) # Approx 1 minute of history if updates are every 2-3s
+
     try:
         # Pre-count for progress bar
         total_movies, total_tv_shows, total_episodes = await get_total_counts(db, mode)
@@ -228,10 +232,27 @@ async def run_fix_process(client: Client, status_msg: Message, mode: str):
 
         async def update_status():
             now = time.time()
-            elapsed = now - start_time
-            rate = stats["processed"] / elapsed if elapsed > 0 else 0
+            rate_history.append((now, stats["processed"]))
+
+            # Calculate smoothed rate
+            current_rate = 0.0
+            if len(rate_history) > 1:
+                first = rate_history[0]
+                last = rate_history[-1]
+                time_diff = last[0] - first[0]
+                count_diff = last[1] - first[1]
+                if time_diff > 0:
+                    current_rate = count_diff / time_diff
+
+            # Fallback to global average if history is insufficient or rate is 0
+            if current_rate <= 0:
+                elapsed = now - start_time
+                current_rate = stats["processed"] / elapsed if elapsed > 0 else 0.0
+
             remaining = total_items_to_process - stats["processed"]
-            eta_seconds = remaining / rate if rate > 0 else 0
+            eta_seconds = remaining / current_rate if current_rate > 0 else 0
+
+            elapsed_display = now - start_time
 
             percent = (stats["processed"] / total_items_to_process * 100) if total_items_to_process > 0 else 0
             bar_length = 10
@@ -249,7 +270,7 @@ async def run_fix_process(client: Client, status_msg: Message, mode: str):
                 f"❌ **Errors:** `{stats['errors']}`\n"
                 f"📥 **Processed:** `{stats['processed']}/{total_items_to_process}`\n"
                 f"➖➖➖➖➖➖➖➖➖➖\n"
-                f"⏱ **Elapsed:** `{format_time(elapsed)}`\n"
+                f"⏱ **Elapsed:** `{format_time(elapsed_display)}`\n"
                 f"⏳ **ETA:** `{format_time(eta_seconds)}`\n\n"
                 f"**Currently Processing:**\n`{stats['current_name']}`"
             )
