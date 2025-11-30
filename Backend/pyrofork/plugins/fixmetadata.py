@@ -326,12 +326,17 @@ async def run_fix_process(client: Client, status_msg: Message, mode: str):
                                     process_tv_episode_entry(db, db_idx, tmdb_id, title, s_no, e_no, stats)
                                 )
 
+                    # Process episodes in chunks to update UI frequently
                     if episode_tasks:
-                        await asyncio.gather(*episode_tasks)
+                        chunk_size = 20
+                        for i in range(0, len(episode_tasks), chunk_size):
+                            if should_cancel: break
+                            chunk = episode_tasks[i:i + chunk_size]
+                            await asyncio.gather(*chunk)
 
-                    if time.time() - last_update_time > 2:
-                        await update_status()
-                        last_update_time = time.time()
+                            if time.time() - last_update_time > 2:
+                                await update_status()
+                                last_update_time = time.time()
 
         # Final Summary
         summary_text = (

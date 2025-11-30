@@ -240,7 +240,7 @@ async def fetch_tv_metadata(title, season, episode, encoded_string, year=None, q
             "episode_title": getattr(ep_details, "name", f"S{season}E{episode}") if ep_details else f"{tv_details.name} S{season}E{episode}",
             "episode_backdrop": format_tmdb_image(getattr(ep_details, "still_path", None), "original") if ep_details else "",
             "episode_overview": getattr(ep_details, "overview", "") if ep_details else "",
-            "episode_released": getattr(ep_details, "air_date", "") if ep_details else "",
+            "episode_released": str(getattr(ep_details, "air_date", "")) if getattr(ep_details, "air_date", None) else "",
             "quality": quality,
             "encoded_string": encoded_string,
         }
@@ -276,7 +276,7 @@ async def fetch_tv_metadata(title, season, episode, encoded_string, year=None, q
         "episode_title": ep_details.get("title", f"S{season}E{episode}") if ep_details else f"{tv_details.get('title', title)} S{season}E{episode}",
         "episode_backdrop": ep_details.get("image", "") if ep_details else "",
         "episode_overview": ep_details.get("plot", "") if ep_details else "",
-        "episode_released": ep_details.get("released", "") if ep_details else "",
+        "episode_released": str(ep_details.get("released", "")) if ep_details.get("released") else "",
         "quality": quality,
         "encoded_string": encoded_string,
     }
