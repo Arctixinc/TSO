@@ -141,7 +141,7 @@ async def process_movie_entry(db, db_idx, movie, stats):
             year = movie.get("release_year")
             tmdb_id = movie.get("tmdb_id")
 
-            metadata = await fetch_movie_metadata(title, "dummy", year, None)
+            metadata = await fetch_movie_metadata(title, "dummy", year, None, tmdb_id=tmdb_id)
 
             if metadata:
                 update_fields = {
@@ -173,7 +173,7 @@ async def process_tv_episode_entry(db, db_idx, tmdb_id, title, s_no, e_no, stats
 
     async with SEMAPHORE:
         try:
-            ep_meta = await fetch_tv_metadata(title, s_no, e_no, "dummy")
+            ep_meta = await fetch_tv_metadata(title, s_no, e_no, "dummy", tmdb_id=tmdb_id)
 
             if ep_meta:
                 ep_fields = {
