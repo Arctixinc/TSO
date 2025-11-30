@@ -12,8 +12,8 @@ fix_task = None
 is_fixing = False
 should_cancel = False
 
-# Concurrency Limit
-SEMAPHORE = asyncio.Semaphore(10)
+# Concurrency Limit - Increased for speed
+SEMAPHORE = asyncio.Semaphore(40)
 
 @Client.on_message(filters.command("fixmetadata") & CustomFilters.owner)
 async def fix_metadata_command(client: Client, message: Message):
@@ -211,54 +211,60 @@ async def run_fix_process(client: Client, status_msg: Message, mode: str):
     }
 
     start_time = time.time()
-    last_update_time = time.time()
 
-    try:
-        # Pre-count for progress bar
-        total_movies, total_tv_shows, total_episodes = await get_total_counts(db, mode)
+    # Pre-count for progress bar
+    total_movies, total_tv_shows, total_episodes = await get_total_counts(db, mode)
 
-        total_items_to_process = 0
-        if mode == "movies": total_items_to_process = total_movies
-        elif mode == "tv": total_items_to_process = total_tv_shows + total_episodes # Shows + Episodes
-        elif mode == "all": total_items_to_process = total_movies + total_tv_shows + total_episodes
+    total_items_to_process = 0
+    if mode == "movies": total_items_to_process = total_movies
+    elif mode == "tv": total_items_to_process = total_tv_shows + total_episodes
+    elif mode == "all": total_items_to_process = total_movies + total_tv_shows + total_episodes
 
-        cancel_btn = InlineKeyboardMarkup([
-            [InlineKeyboardButton("❌ Cancel Operation", callback_data="cancel_fix")]
-        ])
+    cancel_btn = InlineKeyboardMarkup([
+        [InlineKeyboardButton("❌ Cancel Operation", callback_data="cancel_fix")]
+    ])
 
-        async def update_status():
-            now = time.time()
-            elapsed = now - start_time
-            rate = stats["processed"] / elapsed if elapsed > 0 else 0
-            remaining = total_items_to_process - stats["processed"]
-            eta_seconds = remaining / rate if rate > 0 else 0
-
-            percent = (stats["processed"] / total_items_to_process * 100) if total_items_to_process > 0 else 0
-            bar_length = 10
-            filled_length = int(bar_length * percent / 100)
-            bar = "▰" * filled_length + "▱" * (bar_length - filled_length)
-
-            mode_display = "Movies" if mode == "movies" else "TV Shows" if mode == "tv" else "Full Library"
-
-            text = (
-                f"**🔄 Metadata Fix in Progress: {mode_display}**\n\n"
-                f"**Progress:** `{bar}` **{percent:.1f}%**\n"
-                f"➖➖➖➖➖➖➖➖➖➖\n"
-                f"✅ **Updated:** `{stats['updated']}`\n"
-                f"⚠️ **Skipped:** `{stats['skipped']}`\n"
-                f"❌ **Errors:** `{stats['errors']}`\n"
-                f"📥 **Processed:** `{stats['processed']}/{total_items_to_process}`\n"
-                f"➖➖➖➖➖➖➖➖➖➖\n"
-                f"⏱ **Elapsed:** `{format_time(elapsed)}`\n"
-                f"⏳ **ETA:** `{format_time(eta_seconds)}`\n\n"
-                f"**Currently Processing:**\n`{stats['current_name']}`"
-            )
-
+    # --- Decoupled UI Updater ---
+    async def ui_loop():
+        while is_fixing and not should_cancel:
             try:
+                now = time.time()
+                elapsed = now - start_time
+                rate = stats["processed"] / elapsed if elapsed > 0 else 0
+                remaining = total_items_to_process - stats["processed"]
+                eta_seconds = remaining / rate if rate > 0 else 0
+
+                percent = (stats["processed"] / total_items_to_process * 100) if total_items_to_process > 0 else 0
+                bar_length = 10
+                filled_length = int(bar_length * percent / 100)
+                bar = "▰" * filled_length + "▱" * (bar_length - filled_length)
+
+                mode_display = "Movies" if mode == "movies" else "TV Shows" if mode == "tv" else "Full Library"
+
+                text = (
+                    f"**🔄 Metadata Fix in Progress: {mode_display}**\n\n"
+                    f"**Progress:** `{bar}` **{percent:.1f}%**\n"
+                    f"➖➖➖➖➖➖➖➖➖➖\n"
+                    f"✅ **Updated:** `{stats['updated']}`\n"
+                    f"⚠️ **Skipped:** `{stats['skipped']}`\n"
+                    f"❌ **Errors:** `{stats['errors']}`\n"
+                    f"📥 **Processed:** `{stats['processed']}/{total_items_to_process}`\n"
+                    f"➖➖➖➖➖➖➖➖➖➖\n"
+                    f"⏱ **Elapsed:** `{format_time(elapsed)}`\n"
+                    f"⏳ **ETA:** `{format_time(eta_seconds)}`\n\n"
+                    f"**Currently Processing:**\n`{stats['current_name']}`"
+                )
+
                 await status_msg.edit_text(text, reply_markup=cancel_btn)
             except Exception:
                 pass
 
+            await asyncio.sleep(3) # Update every 3 seconds
+
+    # Start UI Loop
+    ui_task = asyncio.create_task(ui_loop())
+
+    try:
         total_dbs = db.current_db_index
 
         # --- Fix Movies ---
@@ -275,21 +281,17 @@ async def run_fix_process(client: Client, status_msg: Message, mode: str):
                     LOGGER.error(f"Failed to fetch movie IDs: {e}")
                     continue
 
-                batch_size = 20
+                batch_size = 50
                 for i in range(0, len(movie_ids), batch_size):
                     if should_cancel: break
 
                     batch_ids = movie_ids[i : i + batch_size]
 
-                    # Fetch documents for this batch
                     cursor = database["movie"].find({"_id": {"$in": batch_ids}})
                     movie_batch = await cursor.to_list(length=batch_size)
 
+                    # Run concurrently, UI loop handles updates
                     await asyncio.gather(*[process_movie_entry(db, db_idx, m, stats) for m in movie_batch])
-
-                    if time.time() - last_update_time > 2:
-                        await update_status()
-                        last_update_time = time.time()
 
         # --- Fix TV Shows ---
         if mode in ["tv", "all"] and not should_cancel:
@@ -299,14 +301,12 @@ async def run_fix_process(client: Client, status_msg: Message, mode: str):
                 db_key = f"storage_{db_idx}"
                 database = db.dbs[db_key]
 
-                # Fetch IDs first
                 try:
                     tv_ids = await database["tv"].distinct("_id")
                 except Exception as e:
                     LOGGER.error(f"Failed to fetch TV IDs: {e}")
                     continue
 
-                # Process one TV show at a time
                 for tv_id in tv_ids:
                     if should_cancel: break
 
@@ -325,7 +325,7 @@ async def run_fix_process(client: Client, status_msg: Message, mode: str):
                         s_num = first_season.get("season_number", 1) if first_season else 1
                         e_num = first_episode.get("episode_number", 1) if first_episode else 1
 
-                        metadata = await fetch_tv_metadata(title, s_num, e_num, "dummy")
+                        metadata = await fetch_tv_metadata(title, s_num, e_num, "dummy", tmdb_id=tmdb_id)
 
                         if metadata:
                             show_fields = {
@@ -341,7 +341,7 @@ async def run_fix_process(client: Client, status_msg: Message, mode: str):
                         else:
                             stats["skipped"] += 1
 
-                        stats["processed"] += 1 # Count show itself
+                        stats["processed"] += 1
 
                     except Exception as e:
                         LOGGER.error(f"Error fixing tv show level {tv.get('title')}: {e}")
@@ -359,17 +359,10 @@ async def run_fix_process(client: Client, status_msg: Message, mode: str):
                                     process_tv_episode_entry(db, db_idx, tmdb_id, title, s_no, e_no, stats)
                                 )
 
-                    # Process episodes in chunks to update UI frequently
+                    # Fire all episode tasks for this show concurrently
+                    # The global semaphore (40) prevents flooding
                     if episode_tasks:
-                        chunk_size = 20
-                        for i in range(0, len(episode_tasks), chunk_size):
-                            if should_cancel: break
-                            chunk = episode_tasks[i:i + chunk_size]
-                            await asyncio.gather(*chunk)
-
-                            if time.time() - last_update_time > 2:
-                                await update_status()
-                                last_update_time = time.time()
+                        await asyncio.gather(*episode_tasks)
 
         # Final Summary
         summary_text = (
@@ -401,3 +394,4 @@ async def run_fix_process(client: Client, status_msg: Message, mode: str):
     finally:
         is_fixing = False
         should_cancel = False
+        ui_task.cancel() # Stop the background UI loop
