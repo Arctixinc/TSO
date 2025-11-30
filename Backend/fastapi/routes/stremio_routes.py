@@ -103,8 +103,8 @@ async def get_manifest():
     return {
         "id": "telegram.media",
         "version": ADDON_VERSION,
-        "name": ADDON_NAME,
-        "logo": "https://i.postimg.cc/XqWnmDXr/Picsart-25-10-09-08-09-45-867.png",
+        "name": "StreamGram",
+        "logo": "https://raw.githubusercontent.com/Arctixinc/media/refs/heads/main/TGStremio.png",
         "description": "Streams movies and series from your Telegram.",
         "types": ["movie", "series"],
         "resources": ["catalog", "meta", "stream"],
