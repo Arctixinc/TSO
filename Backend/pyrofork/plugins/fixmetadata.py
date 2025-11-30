@@ -349,23 +349,29 @@ async def run_fix_process(client: Client, status_msg: Message, mode: str):
                         stats["processed"] += 1
 
                     # 2. Fix Episodes
-                    episode_tasks = []
+                    episode_data_list = []
                     if "seasons" in tv:
                         for season in tv["seasons"]:
                             s_no = season.get("season_number")
                             for episode in season.get("episodes", []):
                                 e_no = episode.get("episode_number")
-                                episode_tasks.append(
-                                    process_tv_episode_entry(db, db_idx, tmdb_id, title, s_no, e_no, stats)
-                                )
+                                episode_data_list.append((s_no, e_no))
 
                     # Process episodes in chunks to update UI frequently
-                    if episode_tasks:
+                    if episode_data_list:
                         chunk_size = 100
-                        for i in range(0, len(episode_tasks), chunk_size):
+                        for i in range(0, len(episode_data_list), chunk_size):
                             if should_cancel: break
-                            chunk = episode_tasks[i:i + chunk_size]
-                            await asyncio.gather(*chunk)
+
+                            chunk_data = episode_data_list[i:i + chunk_size]
+
+                            # Create coroutines just before awaiting them
+                            tasks = [
+                                process_tv_episode_entry(db, db_idx, tmdb_id, title, s_no, e_no, stats)
+                                for s_no, e_no in chunk_data
+                            ]
+
+                            await asyncio.gather(*tasks)
 
                             if time.time() - last_update_time > 2:
                                 await update_status()
