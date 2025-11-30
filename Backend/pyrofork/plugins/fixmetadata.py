@@ -150,6 +150,14 @@ async def process_movie_entry(db, db_idx, movie, stats):
                     "overview": metadata.get("description"),
                     "released": metadata.get("year"),
                 }
+
+                # Check for ID correction
+                new_id = metadata.get("tmdb_id")
+                if new_id and str(new_id) != str(tmdb_id):
+                    update_fields["tmdb_id"] = int(new_id)
+                    if metadata.get("imdb_id"):
+                        update_fields["imdb_id"] = metadata.get("imdb_id")
+
                 update_fields = {k: v for k, v in update_fields.items() if v is not None}
 
                 if update_fields:
@@ -183,6 +191,7 @@ async def process_tv_episode_entry(db, db_idx, tmdb_id, title, s_no, e_no, stats
                 ep_fields = {k: v for k, v in ep_fields.items() if v is not None}
 
                 if ep_fields:
+                    # Uses the (possibly updated) tmdb_id to target the document
                     await db.update_metadata_fields(tmdb_id, "tv", db_idx, ep_fields, s_no, e_no)
                     stats["updated"] += 1
                 else:
@@ -315,6 +324,9 @@ async def run_fix_process(client: Client, status_msg: Message, mode: str):
 
                     stats["current_name"] = f"📺 Fixing Show: {tv.get('title')}"
 
+                    # Track correct ID to use for episodes
+                    current_tmdb_id = tv.get("tmdb_id")
+
                     # 1. Fix Show Level Metadata
                     try:
                         title = tv.get("title")
@@ -332,7 +344,18 @@ async def run_fix_process(client: Client, status_msg: Message, mode: str):
                                 "cast": metadata.get("cast"),
                                 "runtime": metadata.get("runtime"),
                             }
+
+                            # Check for ID correction
+                            new_id = metadata.get("tmdb_id")
+                            if new_id and str(new_id) != str(tmdb_id):
+                                show_fields["tmdb_id"] = int(new_id)
+                                if metadata.get("imdb_id"):
+                                    show_fields["imdb_id"] = metadata.get("imdb_id")
+                                # Update current_tmdb_id for episodes
+                                current_tmdb_id = int(new_id)
+
                             show_fields = {k: v for k, v in show_fields.items() if v is not None}
+
                             if show_fields:
                                 await db.update_metadata_fields(tmdb_id, "tv", db_idx, show_fields)
                                 stats["updated"] += 1
@@ -349,6 +372,7 @@ async def run_fix_process(client: Client, status_msg: Message, mode: str):
                         stats["processed"] += 1
 
                     # 2. Fix Episodes
+                    # Use current_tmdb_id (which might be corrected)
                     episode_tasks = []
                     if "seasons" in tv:
                         for season in tv["seasons"]:
@@ -356,7 +380,7 @@ async def run_fix_process(client: Client, status_msg: Message, mode: str):
                             for episode in season.get("episodes", []):
                                 e_no = episode.get("episode_number")
                                 episode_tasks.append(
-                                    process_tv_episode_entry(db, db_idx, tmdb_id, title, s_no, e_no, stats)
+                                    process_tv_episode_entry(db, db_idx, current_tmdb_id, title, s_no, e_no, stats)
                                 )
 
                     # Fire all episode tasks for this show concurrently
