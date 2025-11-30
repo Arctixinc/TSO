@@ -13,7 +13,7 @@ is_fixing = False
 should_cancel = False
 
 # Concurrency Limit
-SEMAPHORE = asyncio.Semaphore(10)
+SEMAPHORE = asyncio.Semaphore(50)
 
 @Client.on_message(filters.command("fixmetadata") & CustomFilters.owner)
 async def fix_metadata_command(client: Client, message: Message):
@@ -275,7 +275,7 @@ async def run_fix_process(client: Client, status_msg: Message, mode: str):
                     LOGGER.error(f"Failed to fetch movie IDs: {e}")
                     continue
 
-                batch_size = 20
+                batch_size = 100
                 for i in range(0, len(movie_ids), batch_size):
                     if should_cancel: break
 
@@ -361,7 +361,7 @@ async def run_fix_process(client: Client, status_msg: Message, mode: str):
 
                     # Process episodes in chunks to update UI frequently
                     if episode_tasks:
-                        chunk_size = 20
+                        chunk_size = 100
                         for i in range(0, len(episode_tasks), chunk_size):
                             if should_cancel: break
                             chunk = episode_tasks[i:i + chunk_size]
