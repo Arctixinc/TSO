@@ -9,7 +9,7 @@ from datetime import datetime, timezone, timedelta
 
 # --- Configuration ---
 BASE_URL = Telegram.BASE_URL
-ADDON_NAME = "Telegram"
+ADDON_NAME = "StreamGram"
 ADDON_VERSION = __version__
 PAGE_SIZE = 15
 
@@ -103,7 +103,7 @@ async def get_manifest():
     return {
         "id": "telegram.media",
         "version": ADDON_VERSION,
-        "name": "StreamGram",
+        "name": ADDON_NAME,
         "logo": "https://raw.githubusercontent.com/Arctixinc/media/refs/heads/main/TGStremio.png",
         "description": "Streams movies and series from your Telegram.",
         "types": ["movie", "series"],
