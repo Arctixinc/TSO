@@ -251,23 +251,34 @@ async def run_fix_process(client: Client, status_msg: Message, mode: str):
                 db_key = f"storage_{db_idx}"
                 database = db.dbs[db_key]
 
-                movie_batch = []
-                async for movie in database["movie"].find({}):
+                # Fetch movies in batches using limit/skip to avoid cursor timeout
+                # Better yet, fetch _ids first and iterate over them? Or find with batch_size?
+                # Using skip/limit is simple but gets slower deep in pagination.
+                # Since we process all, we can just use find() but process the result in memory?
+                # No, memory.
+                # Best approach for stability: Get all IDs first, then process in chunks.
+
+                try:
+                    movie_ids = await database["movie"].distinct("_id")
+                except Exception as e:
+                    LOGGER.error(f"Failed to fetch movie IDs: {e}")
+                    continue
+
+                batch_size = 20
+                for i in range(0, len(movie_ids), batch_size):
                     if should_cancel: break
 
-                    movie_batch.append(movie)
+                    batch_ids = movie_ids[i : i + batch_size]
 
-                    if len(movie_batch) >= 20:
-                        await asyncio.gather(*[process_movie_entry(db, db_idx, m, stats) for m in movie_batch])
-                        movie_batch = []
+                    # Fetch documents for this batch
+                    cursor = database["movie"].find({"_id": {"$in": batch_ids}})
+                    movie_batch = await cursor.to_list(length=batch_size)
 
-                        if time.time() - last_update_time > 2:
-                            await update_status()
-                            last_update_time = time.time()
-
-                if movie_batch and not should_cancel:
                     await asyncio.gather(*[process_movie_entry(db, db_idx, m, stats) for m in movie_batch])
-                    await update_status()
+
+                    if time.time() - last_update_time > 2:
+                        await update_status()
+                        last_update_time = time.time()
 
         # --- Fix TV Shows ---
         if mode in ["tv", "all"] and not should_cancel:
@@ -277,8 +288,19 @@ async def run_fix_process(client: Client, status_msg: Message, mode: str):
                 db_key = f"storage_{db_idx}"
                 database = db.dbs[db_key]
 
-                async for tv in database["tv"].find({}):
+                # Similar strategy: Fetch IDs first
+                try:
+                    tv_ids = await database["tv"].distinct("_id")
+                except Exception as e:
+                    LOGGER.error(f"Failed to fetch TV IDs: {e}")
+                    continue
+
+                # Process one TV show at a time (since one show has many episodes)
+                for tv_id in tv_ids:
                     if should_cancel: break
+
+                    tv = await database["tv"].find_one({"_id": tv_id})
+                    if not tv: continue
 
                     stats["current_name"] = f"📺 Fixing Show: {tv.get('title')}"
 
