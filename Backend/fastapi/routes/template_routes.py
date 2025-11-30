@@ -16,28 +16,53 @@ templates = Jinja2Templates(directory="Backend/fastapi/templates")
 # --- Date Formatting Helper ---
 def format_date_ist(date_str):
     """
-    Converts a UTC date string (YYYY-MM-DD) to IST (DD-MM-YYYY).
-    Assuming the input string is just a date, effectively treating it as UTC midnight or agnostic.
-    For standard YYYY-MM-DD strings stored in DB.
+    Converts various date string formats to IST date string (DD-MM-YYYY).
+    Handles:
+    - YYYY-MM-DD
+    - ISO 8601 (YYYY-MM-DDTHH:MM:SS.mmmmmmZ or variants)
+    - datetime objects
     """
     if not date_str:
         return ""
-    try:
-        # Parse YYYY-MM-DD
-        dt_obj = datetime.strptime(str(date_str), "%Y-%m-%d")
-        # IST is UTC+5:30. Since we only have date, shifting timezone might shift the day depending on time.
-        # But here 'date' usually implies the release day in original country or UTC.
-        # Simple formatting DD-MM-YYYY is usually sufficient for "Indian Format".
-        # If strict timezone conversion is needed from a datetime object:
-        # utc_dt = dt_obj.replace(tzinfo=pytz.utc)
-        # ist_tz = pytz.timezone("Asia/Kolkata")
-        # ist_dt = utc_dt.astimezone(ist_tz)
-        # return ist_dt.strftime("%d-%m-%Y")
 
-        # Just reformatting string is safer if input is just date without time.
+    dt_obj = None
+
+    # If it's already a datetime object
+    if isinstance(date_str, datetime):
+        dt_obj = date_str
+    else:
+        date_str = str(date_str)
+        # Try parsing YYYY-MM-DD
+        try:
+            dt_obj = datetime.strptime(date_str, "%Y-%m-%d")
+        except ValueError:
+            pass
+
+        # Try parsing ISO format with Z or timezone offset
+        if not dt_obj:
+            try:
+                # Replace 'Z' with '+00:00' for fromisoformat compliance in older pythons if needed,
+                # but in 3.11 fromisoformat handles Z.
+                # However, safe cleanup:
+                clean_date = date_str.replace("Z", "+00:00")
+                dt_obj = datetime.fromisoformat(clean_date)
+            except ValueError:
+                pass
+
+        # Try parsing ISO format without Z (if any)
+        if not dt_obj:
+            try:
+                # Handle cases like "2022-08-24T11:00:00.000"
+                dt_obj = datetime.fromisoformat(date_str)
+            except ValueError:
+                pass
+
+    if dt_obj:
+        # We assume the date is UTC if tzinfo is present or implied for release dates.
+        # Just formatting to DD-MM-YYYY is usually desired.
         return dt_obj.strftime("%d-%m-%Y")
-    except ValueError:
-        return str(date_str)
+
+    return str(date_str)
 
 # Register filter
 templates.env.filters["date_ist"] = format_date_ist
