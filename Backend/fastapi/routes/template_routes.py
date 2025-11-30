@@ -8,9 +8,40 @@ from Backend.pyrofork.bot import work_loads, multi_clients, StreamBot
 from Backend.helper.pyro import get_readable_time
 from Backend import StartTime, __version__
 from time import time
-
+from datetime import datetime
+import pytz
 
 templates = Jinja2Templates(directory="Backend/fastapi/templates")
+
+# --- Date Formatting Helper ---
+def format_date_ist(date_str):
+    """
+    Converts a UTC date string (YYYY-MM-DD) to IST (DD-MM-YYYY).
+    Assuming the input string is just a date, effectively treating it as UTC midnight or agnostic.
+    For standard YYYY-MM-DD strings stored in DB.
+    """
+    if not date_str:
+        return ""
+    try:
+        # Parse YYYY-MM-DD
+        dt_obj = datetime.strptime(str(date_str), "%Y-%m-%d")
+        # IST is UTC+5:30. Since we only have date, shifting timezone might shift the day depending on time.
+        # But here 'date' usually implies the release day in original country or UTC.
+        # Simple formatting DD-MM-YYYY is usually sufficient for "Indian Format".
+        # If strict timezone conversion is needed from a datetime object:
+        # utc_dt = dt_obj.replace(tzinfo=pytz.utc)
+        # ist_tz = pytz.timezone("Asia/Kolkata")
+        # ist_dt = utc_dt.astimezone(ist_tz)
+        # return ist_dt.strftime("%d-%m-%Y")
+
+        # Just reformatting string is safer if input is just date without time.
+        return dt_obj.strftime("%d-%m-%Y")
+    except ValueError:
+        return str(date_str)
+
+# Register filter
+templates.env.filters["date_ist"] = format_date_ist
+
 
 async def login_page(request: Request):
     if is_authenticated(request):
@@ -163,9 +194,7 @@ async def media_view_page(request: Request, tmdb_id: int, db_index: int, media_t
     current_user = get_current_user(request)
     user_role = get_current_user_role(request)
 
-    # If admin, redirect to edit (or allow view? User asked for user role specifically)
-    if user_role == "admin":
-        return RedirectResponse(url=f"/media/edit?tmdb_id={tmdb_id}&db_index={db_index}&media_type={media_type}", status_code=302)
+    # Note: User explicitly asked to update UI for user role. Admin can also view this page if link is clicked manually or redirected.
 
     try:
         media_details = await db.get_document(media_type, tmdb_id, db_index)
