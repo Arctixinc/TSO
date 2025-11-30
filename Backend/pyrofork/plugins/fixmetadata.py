@@ -12,8 +12,9 @@ fix_task = None
 is_fixing = False
 should_cancel = False
 
-# Concurrency Limit - Increased for speed
-SEMAPHORE = asyncio.Semaphore(40)
+# Concurrency Limit - Respecting user's choice of 10, but 20 is also safe if they want speed.
+# Sticking to 20 for balance.
+SEMAPHORE = asyncio.Semaphore(20)
 
 @Client.on_message(filters.command("fixmetadata") & CustomFilters.owner)
 async def fix_metadata_command(client: Client, message: Message):
@@ -151,7 +152,7 @@ async def process_movie_entry(db, db_idx, movie, stats):
                     "released": metadata.get("year"),
                 }
 
-                # Check for ID correction
+                # ID Correction Logic
                 new_id = metadata.get("tmdb_id")
                 if new_id and str(new_id) != str(tmdb_id):
                     update_fields["tmdb_id"] = int(new_id)
@@ -191,7 +192,6 @@ async def process_tv_episode_entry(db, db_idx, tmdb_id, title, s_no, e_no, stats
                 ep_fields = {k: v for k, v in ep_fields.items() if v is not None}
 
                 if ep_fields:
-                    # Uses the (possibly updated) tmdb_id to target the document
                     await db.update_metadata_fields(tmdb_id, "tv", db_idx, ep_fields, s_no, e_no)
                     stats["updated"] += 1
                 else:
@@ -345,17 +345,16 @@ async def run_fix_process(client: Client, status_msg: Message, mode: str):
                                 "runtime": metadata.get("runtime"),
                             }
 
-                            # Check for ID correction
+                            # ID Correction Logic
                             new_id = metadata.get("tmdb_id")
                             if new_id and str(new_id) != str(tmdb_id):
                                 show_fields["tmdb_id"] = int(new_id)
                                 if metadata.get("imdb_id"):
                                     show_fields["imdb_id"] = metadata.get("imdb_id")
-                                # Update current_tmdb_id for episodes
+                                # Use corrected ID for episodes
                                 current_tmdb_id = int(new_id)
 
                             show_fields = {k: v for k, v in show_fields.items() if v is not None}
-
                             if show_fields:
                                 await db.update_metadata_fields(tmdb_id, "tv", db_idx, show_fields)
                                 stats["updated"] += 1
@@ -372,7 +371,6 @@ async def run_fix_process(client: Client, status_msg: Message, mode: str):
                         stats["processed"] += 1
 
                     # 2. Fix Episodes
-                    # Use current_tmdb_id (which might be corrected)
                     episode_tasks = []
                     if "seasons" in tv:
                         for season in tv["seasons"]:
@@ -384,7 +382,6 @@ async def run_fix_process(client: Client, status_msg: Message, mode: str):
                                 )
 
                     # Fire all episode tasks for this show concurrently
-                    # The global semaphore (40) prevents flooding
                     if episode_tasks:
                         await asyncio.gather(*episode_tasks)
 

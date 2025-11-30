@@ -181,27 +181,27 @@ async def metadata(filename: str, channel: int, msg_id: int) -> dict | None:
         
 # ----------------- TV Metadata -----------------
 async def fetch_tv_metadata(title, season, episode, encoded_string, year=None, quality=None, default_id=None, tmdb_id=None) -> dict | None:
-    imdb_id = None
     tv_details = None
     ep_details = None
+    imdb_id = None
     use_tmdb = False
 
-    # 1. If we have a TMDB ID, start there
+    # 1. Optimistic Fetch by TMDb ID if provided
     if tmdb_id:
         try:
             tv_details = await tmdb.tv(tmdb_id).details(append_to_response="external_ids,credits")
             if tv_details and tv_details.external_ids:
                 imdb_id = tv_details.external_ids.imdb_id
         except Exception as e:
-            LOGGER.warning(f"TMDb TV details by ID {tmdb_id} failed: {e}")
+            LOGGER.info(f"TMDb TV fetch by ID {tmdb_id} failed ({e}). Falling back to search.")
             tv_details = None
-            tmdb_id = None # Reset so we fallback to search
+            tmdb_id = None  # Reset ID to trigger search
 
-    # 2. Try IMDb if we have an ID (from step 1, or default_id) or fallback to search
+    # 2. Setup IMDb ID if not found above
     if not imdb_id:
         imdb_id = default_id if default_id and default_id.startswith("tt") else await safe_imdb_search(title, "tvSeries")
     
-    # Fetch IMDb details if we have an ID
+    # 3. Try IMDb
     if imdb_id:
         try:
             await asyncio.sleep(DELAY)
@@ -243,13 +243,12 @@ async def fetch_tv_metadata(title, season, episode, encoded_string, year=None, q
             LOGGER.warning(f"IMDb TV fetch failed [{imdb_id}]: {e}")
             pass
     
-    # 3. Fallback to TMDb if IMDb failed or wasn't found
+    # 4. Fallback to TMDb (if IMDb failed or wasn't found)
     use_tmdb = True
 
-    # If we didn't fetch it in Step 1 (or it failed and we reset tmdb_id), fetch it now
+    # If we didn't get details in step 1 (or failed), fetch now
     if not tv_details:
         if not tmdb_id:
-            # Search by title
             tmdb_result = await safe_tmdb_search(title, "tv")
             if not tmdb_result:
                 LOGGER.warning(f"No TMDb result for '{title}'")
@@ -302,25 +301,26 @@ async def fetch_tv_metadata(title, season, episode, encoded_string, year=None, q
 
 # ----------------- Movie Metadata -----------------
 async def fetch_movie_metadata(title, encoded_string, year=None, quality=None, default_id=None, tmdb_id=None) -> dict | None:
-    imdb_id = None
     movie_details = None
+    imdb_id = None
     use_tmdb = False
 
-    # 1. Start with TMDb ID if available
+    # 1. Optimistic Fetch by TMDb ID if provided
     if tmdb_id:
         try:
             movie_details = await tmdb.movie(tmdb_id).details(append_to_response="external_ids,credits")
             if movie_details and movie_details.external_ids:
                 imdb_id = movie_details.external_ids.imdb_id
         except Exception as e:
-            LOGGER.warning(f"TMDb movie fetch by ID {tmdb_id} failed: {e}")
+            LOGGER.info(f"TMDb movie fetch by ID {tmdb_id} failed ({e}). Falling back to search.")
             movie_details = None
-            tmdb_id = None # Reset to force search fallback
+            tmdb_id = None # Reset to trigger search
 
-    # 2. Try IMDb
+    # 2. Setup IMDb ID if not found above
     if not imdb_id:
         imdb_id = default_id if default_id and default_id.startswith("tt") else await safe_imdb_search(f"{title} {year}" if year else title, "movie")
     
+    # 3. Try IMDb
     imdb_data = None
     if imdb_id:
         try:
@@ -353,7 +353,7 @@ async def fetch_movie_metadata(title, encoded_string, year=None, quality=None, d
             "encoded_string": encoded_string,
         }
 
-    # 3. Fallback to TMDb
+    # 4. Fallback to TMDb
     use_tmdb = True
 
     if not movie_details:
