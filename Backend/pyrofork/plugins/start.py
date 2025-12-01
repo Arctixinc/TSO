@@ -69,16 +69,30 @@ async def send_start_message(client: Client, message: Message):
                             await message.reply_text("❌ Failed to retrieve files.")
 
                     elif media_type == "tv":
-                        # Send Web UI Link for TV Shows
-                        web_link = f"{Telegram.BASE_URL}/media/view?tmdb_id={tmdb_id}&db_index={db_index}&media_type={media_type}"
+                        # Send Seasons Menu
+                        seasons = media.get("seasons", [])
+                        if not seasons:
+                            await message.reply_text("❌ No seasons found.")
+                            return
+
+                        # Sort seasons
+                        seasons.sort(key=lambda x: x.get("season_number", 0))
+
+                        buttons = []
+                        row = []
+                        for s in seasons:
+                            s_num = s.get("season_number")
+                            callback_data = f"tv_S_{tmdb_id}_{db_index}_{s_num}"
+                            row.append(InlineKeyboardButton(f"Season {s_num}", callback_data=callback_data))
+                            if len(row) == 3:
+                                buttons.append(row)
+                                row = []
+                        if row:
+                            buttons.append(row)
 
                         await message.reply_text(
-                            f"📺 **{media['title']}**\n\n"
-                            "⚠️ TV Shows contain multiple episodes and cannot be sent via bot directly.\n"
-                            "▶️ **Please use the Player Link below to watch or download:**",
-                            reply_markup=InlineKeyboardMarkup([
-                                [InlineKeyboardButton("▶️ Watch / Download", url=web_link)]
-                            ])
+                            f"📺 **{media['title']}**\nSelect a Season:",
+                            reply_markup=InlineKeyboardMarkup(buttons)
                         )
 
                 except Exception as e:
@@ -94,7 +108,7 @@ async def send_start_message(client: Client, message: Message):
         bot_username = client.me.username
 
         button = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔎 Search Media", switch_inline_query_current_chat="!search")]
+            [InlineKeyboardButton("🔎 Search Media", switch_inline_query_current_chat="!search ")]
         ])
 
         await message.reply_text(
