@@ -57,6 +57,19 @@ async def search_inline(client, query):
             # Web UI Link (Player & Download)
             web_link = f"{Telegram.BASE_URL}/media/view?tmdb_id={tmdb_id}&db_index={db_index}&media_type={media_type}"
 
+            # Download Link Logic (Distinguish from Web Link for Movies)
+            download_link_text = web_link
+            if media_type == "movie" and item.get("telegram"):
+                try:
+                    # Get first file ID to show a direct-ish link example, or just use web link
+                    # Using proper route /dl/ID/video.mkv
+                    first_file = item["telegram"][0]
+                    file_id = first_file.get("id")
+                    if file_id:
+                        download_link_text = f"{Telegram.BASE_URL}/dl/{file_id}/video.mkv"
+                except Exception:
+                    pass
+
             # Encode data for "Get File" button
             # Data: type:tmdb_id:db_index
             data_to_encode = f"{media_type}:{tmdb_id}:{db_index}"
@@ -73,7 +86,7 @@ async def search_inline(client, query):
                 f"⭐ <b>Rating:</b> {item.get('rating', 'N/A')}\n"
                 f"🎭 <b>Genres:</b> {', '.join(item.get('genres', []))}\n\n"
                 f"🔗 <b>Player Link:</b> <a href='{web_link}'>Click Here</a>\n"
-                f"📥 <b>Download Link:</b> <a href='{web_link}'>Click Here</a>"
+                f"📥 <b>Download Link:</b> <a href='{download_link_text}'>Click Here</a>"
             )
 
             buttons = []

@@ -90,7 +90,6 @@ async def send_start_message(client: Client, message: Message):
         addon_url = f"{base_url}/stremio/manifest.json"
 
         # Link to inline search
-        search_link = f"https://t.me/Arctix2_leech_bot?start=search" # Assuming this is the bot username, or dynamically get it?
         # Better: use client.me.username
         bot_username = client.me.username
 
