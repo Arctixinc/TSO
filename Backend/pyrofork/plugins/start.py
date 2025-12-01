@@ -1,11 +1,105 @@
+import asyncio
 from pyrogram import filters, Client, enums
+from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from Backend.helper.custom_filter import CustomFilters
-from pyrogram.types import Message
 from Backend.config import Telegram
+from Backend.helper.encrypt import decode_string, encode_string
+from Backend import db
+from Backend.helper.task_manager import delete_message
+
+# Store self-destruct tasks if needed, or just fire and forget via create_task
+# For this implementation, we use create_task for fire-and-forget deletion.
 
 @Client.on_message(filters.command('start') & filters.private & CustomFilters.owner, group=10)
 async def send_start_message(client: Client, message: Message):
     try:
+        if len(message.command) > 1:
+            payload = message.command[1]
+
+            if payload.startswith("get_"):
+                encoded_data = payload[4:]
+                try:
+                    decoded_str = await decode_string(encoded_data)
+                    media_type, tmdb_id_str, db_index_str = decoded_str.split(":")
+                    tmdb_id = int(tmdb_id_str)
+                    db_index = int(db_index_str)
+
+                    media = await db.get_document(media_type, tmdb_id, db_index)
+                    if not media:
+                        await message.reply_text("❌ Media not found in database.")
+                        return
+
+                    if media_type == "movie":
+                        files_sent = []
+                        files_data = media.get("telegram", [])
+                        if not files_data:
+                            await message.reply_text("❌ No files available for this movie.")
+                            return
+
+                        status_msg = await message.reply_text("📂 Sending movie files...")
+
+                        for file_info in files_data:
+                            try:
+                                encoded_id = file_info.get("id")
+                                file_id_data = await decode_string(encoded_id)
+                                chat_id = int(f"-100{file_id_data['chat_id']}")
+                                msg_id = int(file_id_data['msg_id'])
+
+                                sent_msg = await client.copy_message(
+                                    chat_id=message.chat.id,
+                                    from_chat_id=chat_id,
+                                    message_id=msg_id,
+                                    caption=f"🎬 {media['title']} ({media['release_year']})\n💾 {file_info.get('quality', 'Unknown')} - {file_info.get('size', '')}"
+                                )
+                                files_sent.append(sent_msg.id)
+                            except Exception as e:
+                                print(f"Error sending file: {e}")
+
+                        await status_msg.delete()
+
+                        if files_sent:
+                            warning = await message.reply_text(
+                                "⚠️ **Warning:** These files will be deleted in **1 minute** to prevent copyright issues.\n"
+                                "📥 **Save them to your Saved Messages immediately!**"
+                            )
+
+                            # Schedule deletion
+                            asyncio.create_task(schedule_deletion(client, message.chat.id, files_sent + [warning.id]))
+                        else:
+                            await message.reply_text("❌ Failed to retrieve files.")
+
+                    elif media_type == "tv":
+                        # Send Seasons Menu
+                        seasons = media.get("seasons", [])
+                        if not seasons:
+                            await message.reply_text("❌ No seasons found.")
+                            return
+
+                        # Sort seasons
+                        seasons.sort(key=lambda x: x.get("season_number", 0))
+
+                        buttons = []
+                        row = []
+                        for s in seasons:
+                            s_num = s.get("season_number")
+                            callback_data = f"tv_S_{tmdb_id}_{db_index}_{s_num}"
+                            row.append(InlineKeyboardButton(f"Season {s_num}", callback_data=callback_data))
+                            if len(row) == 3:
+                                buttons.append(row)
+                                row = []
+                        if row:
+                            buttons.append(row)
+
+                        await message.reply_text(
+                            f"📺 **{media['title']}**\nSelect a Season:",
+                            reply_markup=InlineKeyboardMarkup(buttons)
+                        )
+
+                except Exception as e:
+                    await message.reply_text(f"❌ Invalid or expired link. Error: {e}")
+                return
+
+        # Default Start Message
         base_url = Telegram.BASE_URL
         addon_url = f"{base_url}/stremio/manifest.json"
 
@@ -20,3 +114,144 @@ async def send_start_message(client: Client, message: Message):
     except Exception as e:
         await message.reply_text(f"⚠️ Error: {e}")
         print(f"Error in /start handler: {e}")
+
+async def schedule_deletion(client, chat_id, message_ids):
+    await asyncio.sleep(60)
+    try:
+        await client.delete_messages(chat_id, message_ids)
+    except Exception as e:
+        print(f"Failed to auto-delete messages: {e}")
+
+# --- Callback Handlers for TV Show Navigation ---
+
+@Client.on_callback_query(filters.regex(r"^tv_S_(\d+)_(\d+)_(\d+)$"))
+async def tv_season_handler(client: Client, callback_query: CallbackQuery):
+    try:
+        _, _, tmdb_id, db_index, s_num = callback_query.data.split("_")
+        tmdb_id, db_index, s_num = int(tmdb_id), int(db_index), int(s_num)
+
+        media = await db.get_document("tv", tmdb_id, db_index)
+        if not media:
+            await callback_query.answer("TV Show not found.", show_alert=True)
+            return
+
+        target_season = next((s for s in media.get("seasons", []) if s.get("season_number") == s_num), None)
+        if not target_season:
+            await callback_query.answer("Season not found.", show_alert=True)
+            return
+
+        episodes = target_season.get("episodes", [])
+        episodes.sort(key=lambda x: x.get("episode_number", 0))
+
+        buttons = []
+        row = []
+        for ep in episodes:
+            e_num = ep.get("episode_number")
+            # data: tv_E_tmdbId_dbIndex_sNum_eNum
+            cb_data = f"tv_E_{tmdb_id}_{db_index}_{s_num}_{e_num}"
+            row.append(InlineKeyboardButton(f"E{e_num}", callback_data=cb_data))
+            if len(row) == 4:
+                buttons.append(row)
+                row = []
+        if row:
+            buttons.append(row)
+
+        # Back button
+        buttons.append([InlineKeyboardButton("🔙 Back to Seasons", callback_data=f"tv_back_S_{tmdb_id}_{db_index}")])
+
+        await callback_query.message.edit_text(
+            f"📺 **{media['title']}** - Season {s_num}\nSelect an Episode:",
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+    except Exception as e:
+        await callback_query.answer(f"Error: {e}", show_alert=True)
+
+@Client.on_callback_query(filters.regex(r"^tv_E_(\d+)_(\d+)_(\d+)_(\d+)$"))
+async def tv_episode_handler(client: Client, callback_query: CallbackQuery):
+    try:
+        _, _, tmdb_id, db_index, s_num, e_num = callback_query.data.split("_")
+        tmdb_id, db_index, s_num, e_num = int(tmdb_id), int(db_index), int(s_num), int(e_num)
+
+        media = await db.get_document("tv", tmdb_id, db_index)
+        if not media:
+            await callback_query.answer("TV Show not found.", show_alert=True)
+            return
+
+        target_season = next((s for s in media.get("seasons", []) if s.get("season_number") == s_num), None)
+        target_episode = next((e for e in target_season.get("episodes", []) if e.get("episode_number") == e_num), None) if target_season else None
+
+        if not target_episode:
+            await callback_query.answer("Episode not found.", show_alert=True)
+            return
+
+        files_data = target_episode.get("telegram", [])
+        if not files_data:
+            await callback_query.answer("No files for this episode.", show_alert=True)
+            return
+
+        await callback_query.answer("📂 Sending episode files...")
+
+        files_sent = []
+        for file_info in files_data:
+            try:
+                encoded_id = file_info.get("id")
+                file_id_data = await decode_string(encoded_id)
+                chat_id = int(f"-100{file_id_data['chat_id']}")
+                msg_id = int(file_id_data['msg_id'])
+
+                sent_msg = await client.copy_message(
+                    chat_id=callback_query.message.chat.id,
+                    from_chat_id=chat_id,
+                    message_id=msg_id,
+                    caption=f"📺 {media['title']} - S{s_num:02}E{e_num:02}\n💾 {file_info.get('quality', 'Unknown')} - {file_info.get('size', '')}"
+                )
+                files_sent.append(sent_msg.id)
+            except Exception as e:
+                print(f"Error sending file: {e}")
+
+        if files_sent:
+            warning = await client.send_message(
+                callback_query.message.chat.id,
+                "⚠️ **Warning:** These files will be deleted in **1 minute** to prevent copyright issues.\n"
+                "📥 **Save them to your Saved Messages immediately!**"
+            )
+            asyncio.create_task(schedule_deletion(client, callback_query.message.chat.id, files_sent + [warning.id]))
+        else:
+            await client.send_message(callback_query.message.chat.id, "❌ Failed to retrieve files.")
+
+    except Exception as e:
+        await callback_query.answer(f"Error: {e}", show_alert=True)
+
+@Client.on_callback_query(filters.regex(r"^tv_back_S_(\d+)_(\d+)$"))
+async def tv_back_season_handler(client: Client, callback_query: CallbackQuery):
+    # Re-show the season list
+    try:
+        _, _, _, _, tmdb_id, db_index = callback_query.data.split("_")
+        tmdb_id, db_index = int(tmdb_id), int(db_index)
+
+        media = await db.get_document("tv", tmdb_id, db_index)
+        if not media:
+            await callback_query.answer("Media not found.", show_alert=True)
+            return
+
+        seasons = media.get("seasons", [])
+        seasons.sort(key=lambda x: x.get("season_number", 0))
+
+        buttons = []
+        row = []
+        for s in seasons:
+            s_num = s.get("season_number")
+            callback_data = f"tv_S_{tmdb_id}_{db_index}_{s_num}"
+            row.append(InlineKeyboardButton(f"Season {s_num}", callback_data=callback_data))
+            if len(row) == 3:
+                buttons.append(row)
+                row = []
+        if row:
+            buttons.append(row)
+
+        await callback_query.message.edit_text(
+            f"📺 **{media['title']}**\nSelect a Season:",
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+    except Exception as e:
+        await callback_query.answer(f"Error: {e}", show_alert=True)
