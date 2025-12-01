@@ -82,7 +82,8 @@ async def send_start_message(client: Client, message: Message):
                         row = []
                         for s in seasons:
                             s_num = s.get("season_number")
-                            callback_data = f"tv_S_{tmdb_id}_{db_index}_{s_num}"
+                            # Explicitly pass page 0
+                            callback_data = f"tv_S_{tmdb_id}_{db_index}_{s_num}_0"
                             row.append(InlineKeyboardButton(f"Season {s_num}", callback_data=callback_data))
                             if len(row) == 3:
                                 buttons.append(row)
@@ -134,11 +135,21 @@ async def schedule_deletion(client, chat_id, message_ids):
 
 # --- Callback Handlers for TV Show Navigation ---
 
-@Client.on_callback_query(filters.regex(r"^tv_S_(\d+)_(\d+)_(\d+)$"))
+# Regex to capture optional page number: tv_S_tmdb_dbidx_snum(_page)?
+@Client.on_callback_query(filters.regex(r"^tv_S_(\d+)_(\d+)_(\d+)(?:_(\d+))?$"))
 async def tv_season_handler(client: Client, callback_query: CallbackQuery):
     try:
-        _, _, tmdb_id, db_index, s_num = callback_query.data.split("_")
-        tmdb_id, db_index, s_num = int(tmdb_id), int(db_index), int(s_num)
+        data_parts = callback_query.data.split("_")
+        # Existing format: tv_S_tmdb_dbidx_snum (len=5, page default 0)
+        # New format: tv_S_tmdb_dbidx_snum_page (len=6)
+
+        tmdb_id = int(data_parts[2])
+        db_index = int(data_parts[3])
+        s_num = int(data_parts[4])
+
+        page = 0
+        if len(data_parts) > 5:
+            page = int(data_parts[5])
 
         media = await db.get_document("tv", tmdb_id, db_index)
         if not media:
@@ -153,27 +164,48 @@ async def tv_season_handler(client: Client, callback_query: CallbackQuery):
         episodes = target_season.get("episodes", [])
         episodes.sort(key=lambda x: x.get("episode_number", 0))
 
+        # Pagination Logic
+        limit = 50
+        total_episodes = len(episodes)
+        start_idx = page * limit
+        end_idx = min(start_idx + limit, total_episodes)
+
+        # Slice episodes for this page
+        current_episodes = episodes[start_idx:end_idx]
+
         buttons = []
         row = []
-        for ep in episodes:
+        for ep in current_episodes:
             e_num = ep.get("episode_number")
             # data: tv_E_tmdbId_dbIndex_sNum_eNum
             cb_data = f"tv_E_{tmdb_id}_{db_index}_{s_num}_{e_num}"
             row.append(InlineKeyboardButton(f"E{e_num}", callback_data=cb_data))
-            if len(row) == 4:
+            if len(row) == 5: # Compact 5 per row for numbers
                 buttons.append(row)
                 row = []
         if row:
             buttons.append(row)
 
+        # Navigation Buttons
+        nav_row = []
+        if page > 0:
+            nav_row.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"tv_S_{tmdb_id}_{db_index}_{s_num}_{page-1}"))
+
+        if end_idx < total_episodes:
+            nav_row.append(InlineKeyboardButton("Next ➡️", callback_data=f"tv_S_{tmdb_id}_{db_index}_{s_num}_{page+1}"))
+
+        if nav_row:
+            buttons.append(nav_row)
+
         # Back button
         buttons.append([InlineKeyboardButton("🔙 Back to Seasons", callback_data=f"tv_back_S_{tmdb_id}_{db_index}")])
 
         await callback_query.message.edit_text(
-            f"📺 **{media['title']}** - Season {s_num}\nSelect an Episode:",
+            f"📺 **{media['title']}** - Season {s_num} (Page {page+1})\nSelect an Episode:",
             reply_markup=InlineKeyboardMarkup(buttons)
         )
     except Exception as e:
+        print(f"Error in tv_season_handler: {e}")
         await callback_query.answer(f"Error: {e}", show_alert=True)
 
 @Client.on_callback_query(filters.regex(r"^tv_E_(\d+)_(\d+)_(\d+)_(\d+)$"))
@@ -253,7 +285,10 @@ async def tv_back_season_handler(client: Client, callback_query: CallbackQuery):
         row = []
         for s in seasons:
             s_num = s.get("season_number")
-            callback_data = f"tv_S_{tmdb_id}_{db_index}_{s_num}"
+            # When going back to seasons, we should reset to page 0 for episodes if clicked
+            # But here we are building the SEASON list.
+            # The SEASON button will link to page 0 of episodes.
+            callback_data = f"tv_S_{tmdb_id}_{db_index}_{s_num}_0"
             row.append(InlineKeyboardButton(f"Season {s_num}", callback_data=callback_data))
             if len(row) == 3:
                 buttons.append(row)
