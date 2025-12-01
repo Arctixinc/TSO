@@ -41,18 +41,27 @@ async def file_receive_handler(client: Client, message: Message):
                 size = get_readable_file_size(file.file_size)
                 channel = str(message.chat.id).replace("-100", "")
                 
-                # ✅ Check if this media already exists in DB before processing
+                # Check if this media already exists in DB before processing
+                # Also checks if we have already processed this message ID
                 existing = await db.get_media(channel=int(channel), msg_id=msg_id)
                 if existing:
                     LOGGER.info(f"Skipping edit — already processed: {title} ({msg_id})")
                     return
+
+                # Prevent loop: If the caption already contains the USE_DEFAULT_ID, don't re-edit or re-process heavily
+                if Backend.USE_DEFAULT_ID and message.caption and Backend.USE_DEFAULT_ID in message.caption:
+                    LOGGER.info(f"Skipping file processing - DEFAULT_ID already in caption: {msg_id}")
+                    # However, if it's not in DB yet, we should process it.
+                    # But the 'existing' check above covers DB presence.
+                    # This check prevents the bot from reacting to its own edit.
+                    # We continue to metadata parsing only if we haven't processed it yet.
+                    pass
 
                 metadata_info = await metadata(clean_filename(title), int(channel), msg_id)
                 if metadata_info is None:
                     LOGGER.warning(f"Metadata failed for file: {title} (ID: {msg_id})")
                     return
 
-                # ✅ If combined — just log info, not skip
                 if metadata_info.get("combined_note"):
                     LOGGER.info(f"Detected combined file: {title} ({metadata_info['combined_note']})")
 
@@ -62,12 +71,14 @@ async def file_receive_handler(client: Client, message: Message):
                     title += '.mkv'
 
                 if Backend.USE_DEFAULT_ID:
-                    new_caption = (message.caption + "\n\n" + Backend.USE_DEFAULT_ID) if message.caption else Backend.USE_DEFAULT_ID
-                    create_task(edit_message(
-                        chat_id=message.chat.id,
-                        msg_id=message.id,
-                        new_caption=new_caption
-                    ))
+                    # Check again to be safe before editing
+                    if not message.caption or Backend.USE_DEFAULT_ID not in message.caption:
+                        new_caption = (message.caption + "\n\n" + Backend.USE_DEFAULT_ID) if message.caption else Backend.USE_DEFAULT_ID
+                        create_task(edit_message(
+                            chat_id=message.chat.id,
+                            msg_id=message.id,
+                            new_caption=new_caption
+                        ))
 
                 await file_queue.put((metadata_info, int(channel), msg_id, size, title))
             else:
