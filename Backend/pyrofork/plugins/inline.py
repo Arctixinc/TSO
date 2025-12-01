@@ -57,34 +57,6 @@ async def search_inline(client, query):
             # Web UI Link (Player & Download)
             web_link = f"{Telegram.BASE_URL}/media/view?tmdb_id={tmdb_id}&db_index={db_index}&media_type={media_type}"
 
-            # Download Link Logic (Distinguish from Web Link for Movies)
-            download_link_text = web_link
-
-            # For Movies: Try to get a direct file link if available
-            if media_type == "movie" and item.get("telegram"):
-                try:
-                    # Get first file ID to show a direct-ish link example
-                    # Using proper route /dl/ID/video.mkv
-                    # We try to find the best quality or just the first one
-                    first_file = item["telegram"][0]
-                    file_id = first_file.get("id")
-                    file_name = first_file.get("name", "video.mkv")
-                    if file_id:
-                        # User requested format: hosturl/dl/encodedid/filename
-                        # We need to URL encode the filename to be safe, but typically browsers handle it.
-                        # Ideally use a proper url join, but f-string is what was asked.
-                        download_link_text = f"{Telegram.BASE_URL}/dl/{file_id}/{file_name}"
-                except Exception:
-                    pass
-
-            # For TV Shows: User requested NO Download link in text, only Player Link.
-            # So if media_type == "tv", download_link_text remains web_link or we hide it.
-            # "Download link only possible for movies not tv show"
-            # However, the message_text format below has a line "📥 Download Link: ...".
-            # If TV show, we should probably hide that line or point it to WebUI.
-            # The user said "Only send the download link for movies".
-            # So for TV shows, we will NOT show the download link line in the message text logic below.
-
             # Encode data for "Get File" button
             # Data: type:tmdb_id:db_index
             data_to_encode = f"{media_type}:{tmdb_id}:{db_index}"
@@ -95,32 +67,18 @@ async def search_inline(client, query):
 
             desc_text = f"{type_emoji} {year if year else ''} | ⭐ {item.get('rating', 'N/A')}"
 
-            if media_type == "movie":
-                message_text = (
-                    f"<b>{type_emoji} {title}</b> ({year})\n\n"
-                    f"<i>{description[:200]}...</i>\n\n"
-                    f"⭐ <b>Rating:</b> {item.get('rating', 'N/A')}\n"
-                    f"🎭 <b>Genres:</b> {', '.join(item.get('genres', []))}\n\n"
-                    f"🔗 <b>Player Link:</b> <a href='{web_link}'>Click Here</a>\n"
-                    f"📥 <b>Download Link:</b> <a href='{download_link_text}'>Click Here</a>"
-                )
-            else:
-                # TV Show: No download link in text
-                message_text = (
-                    f"<b>{type_emoji} {title}</b> ({year})\n\n"
-                    f"<i>{description[:200]}...</i>\n\n"
-                    f"⭐ <b>Rating:</b> {item.get('rating', 'N/A')}\n"
-                    f"🎭 <b>Genres:</b> {', '.join(item.get('genres', []))}\n\n"
-                    f"🔗 <b>Player Link:</b> <a href='{web_link}'>Click Here</a>"
-                )
+            message_text = (
+                f"<b>{type_emoji} {title}</b> ({year})\n\n"
+                f"<i>{description[:200]}...</i>\n\n"
+                f"⭐ <b>Rating:</b> {item.get('rating', 'N/A')}\n"
+                f"🎭 <b>Genres:</b> {', '.join(item.get('genres', []))}\n\n"
+                f"🔗 <b>Player Link:</b> <a href='{web_link}'>Click Here</a>"
+            )
 
             buttons = []
 
             # "Get Files" button logic
-            # User said: "And the get files has to be button based... send that perticular file when click"
-            # And: "Still it dont gave get files for the tv shows fix that"
-            # So BOTH Movie and TV get "Get Files".
-            # For TV, this will trigger the Season selector in start.py
+            # This will trigger the Season selector in start.py for TV shows, and file delivery for movies
             buttons.append([InlineKeyboardButton("📂 Get Files (Telegram)", url=f"https://t.me/{bot_username}?start=get_{encoded_start_param}")])
 
             # Watch/Download button linking to Web UI
