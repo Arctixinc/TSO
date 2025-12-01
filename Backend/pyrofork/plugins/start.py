@@ -69,30 +69,16 @@ async def send_start_message(client: Client, message: Message):
                             await message.reply_text("❌ Failed to retrieve files.")
 
                     elif media_type == "tv":
-                        # Send Seasons Menu
-                        seasons = media.get("seasons", [])
-                        if not seasons:
-                            await message.reply_text("❌ No seasons found.")
-                            return
-
-                        # Sort seasons
-                        seasons.sort(key=lambda x: x.get("season_number", 0))
-
-                        buttons = []
-                        row = []
-                        for s in seasons:
-                            s_num = s.get("season_number")
-                            callback_data = f"tv_S_{tmdb_id}_{db_index}_{s_num}"
-                            row.append(InlineKeyboardButton(f"Season {s_num}", callback_data=callback_data))
-                            if len(row) == 3:
-                                buttons.append(row)
-                                row = []
-                        if row:
-                            buttons.append(row)
+                        # Send Web UI Link for TV Shows
+                        web_link = f"{Telegram.BASE_URL}/media/view?tmdb_id={tmdb_id}&db_index={db_index}&media_type={media_type}"
 
                         await message.reply_text(
-                            f"📺 **{media['title']}**\nSelect a Season:",
-                            reply_markup=InlineKeyboardMarkup(buttons)
+                            f"📺 **{media['title']}**\n\n"
+                            "⚠️ TV Shows contain multiple episodes and cannot be sent via bot directly.\n"
+                            "▶️ **Please use the Player Link below to watch or download:**",
+                            reply_markup=InlineKeyboardMarkup([
+                                [InlineKeyboardButton("▶️ Watch / Download", url=web_link)]
+                            ])
                         )
 
                 except Exception as e:
@@ -103,12 +89,23 @@ async def send_start_message(client: Client, message: Message):
         base_url = Telegram.BASE_URL
         addon_url = f"{base_url}/stremio/manifest.json"
 
+        # Link to inline search
+        search_link = f"https://t.me/Arctix2_leech_bot?start=search" # Assuming this is the bot username, or dynamically get it?
+        # Better: use client.me.username
+        bot_username = client.me.username
+
+        button = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔎 Search Media", switch_inline_query_current_chat="!search")]
+        ])
+
         await message.reply_text(
             '<b>Welcome to the main Telegram Stremio bot!</b>\n\n'
             'To install the Stremio addon, copy the URL below and add it in the Stremio addons:\n\n'
-            f'<b>Your Addon URL:</b>\n<code>{addon_url}</code>',
+            f'<b>Your Addon URL:</b>\n<code>{addon_url}</code>\n\n'
+            'Click below to search for media:',
             quote=True,
-            parse_mode=enums.ParseMode.HTML
+            parse_mode=enums.ParseMode.HTML,
+            reply_markup=button
         )
 
     except Exception as e:
@@ -226,8 +223,10 @@ async def tv_episode_handler(client: Client, callback_query: CallbackQuery):
 async def tv_back_season_handler(client: Client, callback_query: CallbackQuery):
     # Re-show the season list
     try:
-        _, _, _, _, tmdb_id, db_index = callback_query.data.split("_")
-        tmdb_id, db_index = int(tmdb_id), int(db_index)
+        data_parts = callback_query.data.split("_")
+        # Expected: ['tv', 'back', 'S', tmdb_id, db_index]
+        tmdb_id = int(data_parts[3])
+        db_index = int(data_parts[4])
 
         media = await db.get_document("tv", tmdb_id, db_index)
         if not media:

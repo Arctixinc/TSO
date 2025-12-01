@@ -18,17 +18,30 @@ async def search_inline(client, query):
     if q.startswith("!search"):
         q = q[7:].strip()
 
+    # If query is empty, show random/recent items
     if not q:
+        try:
+            # Fetch latest 10 items from DB as "random/recent" output
+            # Using sort_movies for simplicity, fetching movies
+            latest_movies = await db.sort_movies([("updated_on", "desc")], 1, 5)
+            # And some TV shows
+            latest_tv = await db.sort_tv_shows([("updated_on", "desc")], 1, 5)
+
+            items = latest_movies.get("movies", []) + latest_tv.get("tv_shows", [])
+        except Exception:
+            return
+    else:
+        try:
+            # Reduced limit to 10 for speed
+            results_payload = await db.search_documents(q, 1, 10)
+            items = results_payload.get("results", [])
+        except Exception:
+            return
+
+    if not items:
         return
 
     try:
-        # Reduced limit to 10 for speed
-        results_payload = await db.search_documents(q, 1, 10)
-        items = results_payload.get("results", [])
-
-        if not items:
-            return
-
         answers = []
         bot_username = client.me.username
 
@@ -41,7 +54,7 @@ async def search_inline(client, query):
             poster = item.get("poster")
             description = item.get("description", "")
 
-            # Web UI Link
+            # Web UI Link (Player & Download)
             web_link = f"{Telegram.BASE_URL}/media/view?tmdb_id={tmdb_id}&db_index={db_index}&media_type={media_type}"
 
             # Encode data for "Get File" button
@@ -63,9 +76,17 @@ async def search_inline(client, query):
                 f"📥 <b>Download Link:</b> <a href='{web_link}'>Click Here</a>"
             )
 
-            keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("📂 Get Files (Telegram)", url=f"https://t.me/{bot_username}?start=get_{encoded_start_param}")]
-            ])
+            buttons = []
+            # Only add "Get Files" for Movies (as per user request for TV shows only player link)
+            # Actually user said: "get files has to be button based... but the download link has different some time So do a work for tv shows send only player link"
+            # And "Only send the download link for movies" (implies get files logic for movies)
+            if media_type == "movie":
+                buttons.append([InlineKeyboardButton("📂 Get Files (Telegram)", url=f"https://t.me/{bot_username}?start=get_{encoded_start_param}")])
+
+            # Always have Watch/Download button linking to Web UI
+            buttons.append([InlineKeyboardButton("▶️ Watch / Download", url=web_link)])
+
+            keyboard = InlineKeyboardMarkup(buttons)
 
             answers.append(
                 InlineQueryResultArticle(
