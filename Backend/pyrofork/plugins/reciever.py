@@ -4,7 +4,7 @@ from Backend.helper.task_manager import edit_message
 from Backend.logger import LOGGER
 from Backend import db
 from Backend.config import Telegram
-from Backend.helper.pyro import clean_filename, get_readable_file_size, remove_urls
+from Backend.helper.pyro import clean_filename, get_readable_file_size, remove_urls, extract_tmdb_id
 from Backend.helper.metadata import metadata
 from pyrogram import filters, Client
 from pyrogram.types import Message
@@ -42,20 +42,25 @@ async def file_receive_handler(client: Client, message: Message):
                 channel = str(message.chat.id).replace("-100", "")
                 
                 # Check if this media already exists in DB before processing
-                # Also checks if we have already processed this message ID
                 existing = await db.get_media(channel=int(channel), msg_id=msg_id)
                 if existing:
                     LOGGER.info(f"Skipping edit — already processed: {title} ({msg_id})")
                     return
 
                 # Prevent loop: If the caption already contains the USE_DEFAULT_ID, don't re-edit or re-process heavily
-                if Backend.USE_DEFAULT_ID and message.caption and Backend.USE_DEFAULT_ID in message.caption:
-                    LOGGER.info(f"Skipping file processing - DEFAULT_ID already in caption: {msg_id}")
-                    # However, if it's not in DB yet, we should process it.
-                    # But the 'existing' check above covers DB presence.
-                    # This check prevents the bot from reacting to its own edit.
-                    # We continue to metadata parsing only if we haven't processed it yet.
-                    pass
+                if Backend.USE_DEFAULT_ID and message.caption:
+                    # Robust check: Extract ID (e.g., tt12345) and check if it exists in caption
+                    # This handles cases where URL formatting differs
+                    try:
+                        default_tmdb_id = extract_tmdb_id(Backend.USE_DEFAULT_ID)
+                    except:
+                        default_tmdb_id = Backend.USE_DEFAULT_ID
+
+                    if default_tmdb_id and default_tmdb_id in message.caption:
+                        LOGGER.info(f"Skipping file processing - DEFAULT_ID ({default_tmdb_id}) already in caption: {msg_id}")
+                        # Crucial: RETURN here to stop the recursion loop.
+                        # If we passed, we would queue the file again and trigger db updates/logs.
+                        return
 
                 metadata_info = await metadata(clean_filename(title), int(channel), msg_id)
                 if metadata_info is None:
@@ -72,7 +77,17 @@ async def file_receive_handler(client: Client, message: Message):
 
                 if Backend.USE_DEFAULT_ID:
                     # Check again to be safe before editing
-                    if not message.caption or Backend.USE_DEFAULT_ID not in message.caption:
+                    should_edit = True
+                    if message.caption:
+                        try:
+                            default_tmdb_id = extract_tmdb_id(Backend.USE_DEFAULT_ID)
+                        except:
+                            default_tmdb_id = Backend.USE_DEFAULT_ID
+
+                        if default_tmdb_id and default_tmdb_id in message.caption:
+                            should_edit = False
+
+                    if should_edit:
                         new_caption = (message.caption + "\n\n" + Backend.USE_DEFAULT_ID) if message.caption else Backend.USE_DEFAULT_ID
                         create_task(edit_message(
                             chat_id=message.chat.id,
