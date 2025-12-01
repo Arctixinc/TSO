@@ -1,6 +1,6 @@
 import asyncio
 from pyrogram import filters, Client, enums
-from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, InputMediaPhoto
 from Backend.helper.custom_filter import CustomFilters
 from Backend.config import Telegram
 from Backend.helper.encrypt import decode_string, encode_string
@@ -84,17 +84,34 @@ async def send_start_message(client: Client, message: Message):
                             s_num = s.get("season_number")
                             # Explicitly pass page 0
                             callback_data = f"tv_S_{tmdb_id}_{db_index}_{s_num}_0"
-                            row.append(InlineKeyboardButton(f"Season {s_num}", callback_data=callback_data))
-                            if len(row) == 3:
+                            row.append(InlineKeyboardButton(f"S {s_num:02}", callback_data=callback_data))
+                            if len(row) == 4: # Compact 4 per row
                                 buttons.append(row)
                                 row = []
                         if row:
                             buttons.append(row)
 
-                        await message.reply_text(
-                            f"📺 **{media['title']}**\nSelect a Season:",
-                            reply_markup=InlineKeyboardMarkup(buttons)
+                        # Prepare rich text
+                        genres = ", ".join(media.get("genres", []))
+                        caption_text = (
+                            f"🎬 **{media['title']}** ({media.get('release_year', 'N/A')})\n"
+                            f"⭐ **Rating:** {media.get('rating', 'N/A')}\n"
+                            f"🎭 **Genres:** {genres}\n\n"
+                            f"📂 **Select a Season:**"
                         )
+
+                        poster = media.get("poster") or media.get("backdrop")
+                        if poster and poster.startswith("http"):
+                            await message.reply_photo(
+                                photo=poster,
+                                caption=caption_text,
+                                reply_markup=InlineKeyboardMarkup(buttons)
+                            )
+                        else:
+                            await message.reply_text(
+                                caption_text,
+                                reply_markup=InlineKeyboardMarkup(buttons)
+                            )
 
                 except Exception as e:
                     await message.reply_text(f"❌ Invalid or expired link. Error: {e}")
@@ -140,8 +157,6 @@ async def schedule_deletion(client, chat_id, message_ids):
 async def tv_season_handler(client: Client, callback_query: CallbackQuery):
     try:
         data_parts = callback_query.data.split("_")
-        # Existing format: tv_S_tmdb_dbidx_snum (len=5, page default 0)
-        # New format: tv_S_tmdb_dbidx_snum_page (len=6)
 
         tmdb_id = int(data_parts[2])
         db_index = int(data_parts[3])
@@ -170,17 +185,15 @@ async def tv_season_handler(client: Client, callback_query: CallbackQuery):
         start_idx = page * limit
         end_idx = min(start_idx + limit, total_episodes)
 
-        # Slice episodes for this page
         current_episodes = episodes[start_idx:end_idx]
 
         buttons = []
         row = []
         for ep in current_episodes:
             e_num = ep.get("episode_number")
-            # data: tv_E_tmdbId_dbIndex_sNum_eNum
             cb_data = f"tv_E_{tmdb_id}_{db_index}_{s_num}_{e_num}"
-            row.append(InlineKeyboardButton(f"E{e_num}", callback_data=cb_data))
-            if len(row) == 5: # Compact 5 per row for numbers
+            row.append(InlineKeyboardButton(f"{e_num:02}", callback_data=cb_data))
+            if len(row) == 6: # Compact 6 per row for numbers
                 buttons.append(row)
                 row = []
         if row:
@@ -189,10 +202,10 @@ async def tv_season_handler(client: Client, callback_query: CallbackQuery):
         # Navigation Buttons
         nav_row = []
         if page > 0:
-            nav_row.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"tv_S_{tmdb_id}_{db_index}_{s_num}_{page-1}"))
+            nav_row.append(InlineKeyboardButton("◀️", callback_data=f"tv_S_{tmdb_id}_{db_index}_{s_num}_{page-1}"))
 
         if end_idx < total_episodes:
-            nav_row.append(InlineKeyboardButton("Next ➡️", callback_data=f"tv_S_{tmdb_id}_{db_index}_{s_num}_{page+1}"))
+            nav_row.append(InlineKeyboardButton("▶️", callback_data=f"tv_S_{tmdb_id}_{db_index}_{s_num}_{page+1}"))
 
         if nav_row:
             buttons.append(nav_row)
@@ -200,10 +213,22 @@ async def tv_season_handler(client: Client, callback_query: CallbackQuery):
         # Back button
         buttons.append([InlineKeyboardButton("🔙 Back to Seasons", callback_data=f"tv_back_S_{tmdb_id}_{db_index}")])
 
-        await callback_query.message.edit_text(
-            f"📺 **{media['title']}** - Season {s_num} (Page {page+1})\nSelect an Episode:",
-            reply_markup=InlineKeyboardMarkup(buttons)
+        caption_text = (
+            f"📺 **{media['title']}**\n"
+            f"📂 **Season {s_num:02}** • Page {page+1}\n\n"
+            f"👇 **Select an Episode:**"
         )
+
+        if callback_query.message.photo:
+            await callback_query.message.edit_caption(
+                caption=caption_text,
+                reply_markup=InlineKeyboardMarkup(buttons)
+            )
+        else:
+            await callback_query.message.edit_text(
+                caption_text,
+                reply_markup=InlineKeyboardMarkup(buttons)
+            )
     except Exception as e:
         print(f"Error in tv_season_handler: {e}")
         await callback_query.answer(f"Error: {e}", show_alert=True)
@@ -269,7 +294,6 @@ async def tv_back_season_handler(client: Client, callback_query: CallbackQuery):
     # Re-show the season list
     try:
         data_parts = callback_query.data.split("_")
-        # Expected: ['tv', 'back', 'S', tmdb_id, db_index]
         tmdb_id = int(data_parts[3])
         db_index = int(data_parts[4])
 
@@ -285,20 +309,32 @@ async def tv_back_season_handler(client: Client, callback_query: CallbackQuery):
         row = []
         for s in seasons:
             s_num = s.get("season_number")
-            # When going back to seasons, we should reset to page 0 for episodes if clicked
-            # But here we are building the SEASON list.
-            # The SEASON button will link to page 0 of episodes.
             callback_data = f"tv_S_{tmdb_id}_{db_index}_{s_num}_0"
-            row.append(InlineKeyboardButton(f"Season {s_num}", callback_data=callback_data))
-            if len(row) == 3:
+            row.append(InlineKeyboardButton(f"S {s_num:02}", callback_data=callback_data))
+            if len(row) == 4: # Compact 4 per row
                 buttons.append(row)
                 row = []
         if row:
             buttons.append(row)
 
-        await callback_query.message.edit_text(
-            f"📺 **{media['title']}**\nSelect a Season:",
-            reply_markup=InlineKeyboardMarkup(buttons)
+        # Prepare rich text
+        genres = ", ".join(media.get("genres", []))
+        caption_text = (
+            f"🎬 **{media['title']}** ({media.get('release_year', 'N/A')})\n"
+            f"⭐ **Rating:** {media.get('rating', 'N/A')}\n"
+            f"🎭 **Genres:** {genres}\n\n"
+            f"📂 **Select a Season:**"
         )
+
+        if callback_query.message.photo:
+            await callback_query.message.edit_caption(
+                caption=caption_text,
+                reply_markup=InlineKeyboardMarkup(buttons)
+            )
+        else:
+            await callback_query.message.edit_text(
+                caption_text,
+                reply_markup=InlineKeyboardMarkup(buttons)
+            )
     except Exception as e:
         await callback_query.answer(f"Error: {e}", show_alert=True)
