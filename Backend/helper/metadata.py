@@ -38,13 +38,27 @@ async def safe_imdb_search(title: str, type_: str) -> str | None:
 async def safe_tmdb_search(title: str, type_: str, year=None):
     """Safely search TMDb title."""
     try:
+        search = tmdb.search()
         if type_ == "movie":
-            if year:
-                results = await tmdb.search().movies(query=title, year=year)
-            else:
-                results = await tmdb.search().movies(query=title)
+            results = await search.movies(
+                query=title,
+                year=year,
+                include_adult=False
+            )
         else:
-            results = await tmdb.search().tv(query=title)
+            results = await search.tv(
+                query=title,
+                first_air_date_year=year,
+                include_adult=False
+            )
+
+        # fallback — some shows only resolve without filters
+        if not results:
+            if type_ == "movie":
+                results = await search.movies(query=title)
+            else:
+                results = await search.tv(query=title)
+
         return results[0] if results else None
     except Exception as e:
         LOGGER.error(f"TMDb search failed for '{title}' [{type_}]: {e}")
