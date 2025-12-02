@@ -17,6 +17,8 @@ tmdb = aioTMDb(key=Telegram.TMDB_API, language="en-US", region="US")
 
 # ----------------- Helpers -----------------
 def format_tmdb_image(path: str, size="w500") -> str:
+    if not path:
+        return ""
     return f"https://image.tmdb.org/t/p/{size}{path}"
 
 def format_imdb_images(imdb_id: str) -> dict:
@@ -40,26 +42,50 @@ async def safe_tmdb_search(title: str, type_: str, year=None):
     try:
         search = tmdb.search()
         if type_ == "movie":
+            # Search with Year strict first
             results = await search.movies(
                 query=title,
                 year=year,
                 include_adult=False
             )
+            # Fallback 1: Try without year if strict failed
+            if not results and year:
+                 results = await search.movies(query=title, include_adult=False)
+
         else:
+            # TV Show Search
+            # Search with Year strict first (first_air_date_year)
             results = await search.tv(
                 query=title,
                 first_air_date_year=year,
                 include_adult=False
             )
+            # Fallback 1: Try without year if strict failed
+            if not results and year:
+                results = await search.tv(query=title, include_adult=False)
 
-        # fallback — some shows only resolve without filters
         if not results:
-            if type_ == "movie":
-                results = await search.movies(query=title)
-            else:
-                results = await search.tv(query=title)
+             return None
 
-        return results[0] if results else None
+        # Filter: If we provided a year, and got results, prefer the one close to that year
+        # because fallback might return a show from 2025 when we wanted 2023.
+        if year:
+            target_year = int(year)
+            for res in results:
+                # Check release date
+                res_year = 0
+                if type_ == "movie":
+                    res_year = getattr(res.release_date, "year", 0)
+                else:
+                    res_year = getattr(res.first_air_date, "year", 0)
+
+                # Allow +/- 1 year tolerance or exact match
+                if res_year and abs(res_year - target_year) <= 1:
+                    return res
+
+        # If no result matched strictly within tolerance, or no year provided, return first
+        return results[0]
+
     except Exception as e:
         LOGGER.error(f"TMDb search failed for '{title}' [{type_}]: {e}")
         return None
@@ -211,7 +237,7 @@ async def fetch_tv_metadata(title, season, episode, encoded_string, year=None, q
     # IMDb failed → fallback to TMDb
     if not tv_details and not ep_details:
         use_tmdb = True
-        tmdb_result = await safe_tmdb_search(title, "tv")
+        tmdb_result = await safe_tmdb_search(title, "tv", year)
         if not tmdb_result:
             LOGGER.warning(f"No TMDb result for '{title}'")
             return None
