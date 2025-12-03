@@ -43,7 +43,6 @@
         <div class="grid grid-cols-2 md:grid-cols-4 gap-2 xl:flex">
             <select id="sort-by" class="px-3 py-2 rounded-lg border bg-card text-sm focus:ring-2 focus:ring-primary/50 w-full xl:w-auto">
                 <option value="updated_on">Last Updated</option>
-                <option value="created_at">Date Added</option>
                 <option value="title">Title</option>
                 <option value="rating">Rating</option>
             </select>
@@ -190,13 +189,16 @@ function renderMobileCards(items) {
         return;
     }
 
-    // Only show on small screens via CSS class on parent, but generate HTML anyway
     container.innerHTML = items.map(item => {
         const title = item.title || 'Untitled';
+        const poster = item.poster || 'https://via.placeholder.com/40';
         const filesCount = mediaType === 'movie' ? (item.telegram?.length || 0) : (item.seasons?.reduce((acc, s) => acc + s.episodes.length, 0) || 0);
 
         return `
         <div class="p-4 flex items-center gap-4">
+            <div class="w-12 h-16 bg-gray-200 rounded overflow-hidden shadow-sm border flex-shrink-0">
+                <img src="${poster}" class="w-full h-full object-cover" onerror="this.src='https://via.placeholder.com/40'">
+            </div>
             <div class="flex-1 min-w-0">
                 <div class="font-bold text-sm text-primary mb-1 truncate">${title}</div>
                 <div class="flex items-center gap-2 text-xs theme-text-secondary mb-2">
