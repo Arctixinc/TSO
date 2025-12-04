@@ -4,6 +4,7 @@ from fastapi.templating import Jinja2Templates
 from Backend.fastapi.security.credentials import verify_credentials, require_auth, require_admin, is_authenticated, get_current_user, get_current_user_role
 from Backend.fastapi.themes import get_theme, get_all_themes
 from Backend import db
+from Backend.config import Telegram
 from Backend.pyrofork.bot import work_loads, multi_clients, StreamBot
 from Backend.helper.pyro import get_readable_time
 from Backend import StartTime, __version__
@@ -294,5 +295,6 @@ async def stremio_guide_page(request: Request):
         "current_theme": theme_name,
         "is_authenticated": is_authenticated(request),
         "current_user": current_user,
-        "user_role": user_role
+        "user_role": user_role,
+        "base_url": Telegram.BASE_URL
     })
