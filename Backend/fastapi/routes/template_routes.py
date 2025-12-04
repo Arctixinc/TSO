@@ -168,7 +168,8 @@ async def dashboard_page(request: Request, _: bool = Depends(require_admin)):
         "current_theme": theme_name,
         "current_user": current_user,
         "user_role": user_role,
-        "system_stats": system_stats
+        "system_stats": system_stats,
+        "base_url": Telegram.BASE_URL
     })
     
 
