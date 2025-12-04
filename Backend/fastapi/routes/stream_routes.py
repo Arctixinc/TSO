@@ -35,16 +35,6 @@ def parse_range_header(range_header: str, file_size: int) -> Tuple[int, int]:
     return start, end
 
 
-@router.get("/stream/{id}")
-@router.head("/stream/{id}")
-async def simple_stream_handler(request: Request, id: str):
-    """
-    Handles streaming requests where ID is just the encoded string.
-    Maps to the same logic as /dl/{id}/{name} but without requiring a name param.
-    """
-    return await stream_handler(request, id, "video")
-
-
 @router.get("/dl/{id}/{name}")
 @router.head("/dl/{id}/{name}")
 async def stream_handler(request: Request, id: str, name: str):
