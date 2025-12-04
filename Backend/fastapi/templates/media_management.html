@@ -1,176 +1,163 @@
 {% extends "base.html" %}
 
-{% block title %}
-    {% if user_role == 'admin' %}Media Management{% else %}Media Library{% endif %} - Telegram Stremio
-{% endblock %}
+{% block title %}Media Management - Telegram Stremio{% endblock %}
 
 {% block content %}
-<div class="max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
-
-    <!-- Hero / Header Section -->
-    <div class="flex flex-col md:flex-row justify-between items-end gap-6 mb-8 pb-6 border-b border-gray-200/10">
-        <div class="flex-1">
-            <h1 class="text-4xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-primary via-accent to-secondary">
-                Discover
-            </h1>
-            <p class="theme-text-secondary mt-2 text-lg font-medium opacity-80">
-                Explore your personal streaming universe.
-            </p>
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <!-- Header -->
+    <div class="mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+            {% if user_role == 'admin' %}
+            <h1 class="text-3xl font-bold">Media Management</h1>
+            <p class="theme-text-secondary mt-2">Manage your movie and TV show collections</p>
+            {% else %}
+            <h1 class="text-3xl font-bold">Media Library</h1>
+            <p class="theme-text-secondary mt-2">Explore movies and TV shows</p>
+            {% endif %}
         </div>
         
-        <!-- Modern Segmented Control -->
-        <div class="bg-gray-100 dark:bg-gray-800 p-1.5 rounded-xl inline-flex shadow-inner">
+        <div class="flex space-x-2">
             <a href="?media_type=movie"
-               class="px-6 py-2.5 rounded-lg text-sm font-bold transition-all duration-300 flex items-center gap-2 {% if media_type == 'movie' %}bg-primary text-white shadow-lg scale-100{% else %}text-gray-500 dark:text-gray-400 hover:text-primary hover:bg-white/50 dark:hover:bg-black/20{% endif %}">
-                <i class="fas fa-film"></i> Movies
+               class="px-4 py-2 rounded-md transition-colors text-sm font-medium {% if media_type == 'movie' %}theme-primary text-white{% else %}theme-card border hover:bg-gray-50{% endif %}">
+                Movies
             </a>
             <a href="?media_type=tv"
-               class="px-6 py-2.5 rounded-lg text-sm font-bold transition-all duration-300 flex items-center gap-2 {% if media_type == 'tv' %}bg-primary text-white shadow-lg scale-100{% else %}text-gray-500 dark:text-gray-400 hover:text-primary hover:bg-white/50 dark:hover:bg-black/20{% endif %}">
-                <i class="fas fa-tv"></i> TV Shows
+               class="px-4 py-2 rounded-md transition-colors text-sm font-medium {% if media_type == 'tv' %}theme-primary text-white{% else %}theme-card border hover:bg-gray-50{% endif %}">
+                TV Shows
             </a>
         </div>
     </div>
     
-    <!-- Floating Search & Filter Bar -->
-    <div class="mb-10 sticky top-20 z-30 transition-all duration-300">
-        <div class="theme-card rounded-2xl shadow-xl border border-gray-200/50 dark:border-white/5 backdrop-blur-xl bg-opacity-90 dark:bg-opacity-80 p-2 flex flex-col md:flex-row gap-2">
-
-            <!-- Search Input -->
-            <div class="relative flex-1 group">
-                <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none transition-colors group-focus-within:text-primary text-gray-400">
-                    <i class="fas fa-search text-lg"></i>
+    <!-- Search and Filters -->
+    <div class="theme-card p-6 rounded-lg shadow mb-8">
+        <div class="flex flex-col gap-4">
+            <!-- Search Bar -->
+            <div class="flex flex-col md:flex-row gap-4 relative">
+                <div class="flex-1 relative">
+                    <input type="text" id="search-input" placeholder="Search {{ media_type }}s by title..."
+                           class="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
+                           autocomplete="off">
+                    <!-- Suggestions Dropdown -->
+                    <div id="search-suggestions" class="absolute w-full bg-white border border-gray-300 rounded-md shadow-lg mt-1 z-50 hidden max-h-60 overflow-y-auto"></div>
                 </div>
-                <input type="text" id="search-input"
-                       placeholder="Find movies, TV shows, and more..."
-                       class="w-full pl-12 pr-4 py-3.5 rounded-xl bg-transparent focus:ring-0 text-base font-medium placeholder-gray-400 border-none outline-none"
-                       autocomplete="off">
-
-                <!-- Suggestions -->
-                <div id="search-suggestions" class="absolute top-full left-0 right-0 mt-3 bg-card/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-gray-100 dark:border-white/10 overflow-hidden z-50 hidden max-h-[70vh] overflow-y-auto custom-scrollbar"></div>
+                <div class="flex gap-2">
+                    <button onclick="searchMedia()"
+                            class="theme-primary text-on-primary px-6 py-2 rounded-md hover:opacity-90 transition-opacity text-sm font-medium">
+                        Search
+                    </button>
+                    <button onclick="toggleFilters()"
+                            class="border border-gray-300 px-4 py-2 rounded-md hover:bg-gray-50 transition-colors text-sm font-medium flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path>
+                        </svg>
+                        Filters & Sort
+                    </button>
+                    <button onclick="clearSearch()"
+                            class="border border-gray-300 px-6 py-2 rounded-md hover:bg-gray-50 transition-colors text-sm font-medium">
+                        Clear
+                    </button>
+                </div>
             </div>
 
-            <!-- Action Buttons -->
-            <div class="flex gap-2 p-1">
-                <button onclick="toggleFilters()"
-                        class="px-5 py-2 rounded-xl bg-gray-50 dark:bg-white/5 hover:bg-gray-100 dark:hover:bg-white/10 transition-colors text-sm font-semibold flex items-center gap-2 theme-text-secondary border border-transparent hover:border-gray-200 dark:hover:border-white/10">
-                    <i class="fas fa-sliders-h"></i> <span class="hidden sm:inline">Filters</span>
-                </button>
-                <button onclick="clearSearch()"
-                        class="w-10 h-10 flex items-center justify-center rounded-xl bg-gray-50 dark:bg-white/5 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-500/10 dark:hover:text-red-400 transition-colors" title="Clear Search">
-                    <i class="fas fa-times"></i>
-                </button>
-                <button onclick="searchMedia()"
-                        class="bg-gradient-to-r from-primary to-accent text-white px-8 py-2 rounded-xl hover:shadow-lg hover:shadow-primary/25 hover:-translate-y-0.5 transition-all text-sm font-bold flex items-center gap-2">
-                    Search
-                </button>
-            </div>
-        </div>
-
-        <!-- Collapsible Advanced Filters -->
-        <div id="advanced-filters" class="hidden mt-4 theme-card rounded-2xl shadow-2xl p-6 border border-gray-200/50 dark:border-white/5 relative overflow-hidden">
-            <div class="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
-                <i class="fas fa-filter text-9xl"></i>
-            </div>
-
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-6 relative z-10">
-                <div class="space-y-2">
-                    <label class="text-xs font-bold uppercase tracking-wider theme-text-secondary opacity-70">Sort By</label>
-                    <div class="relative">
-                        <select id="sort-by" class="w-full pl-4 pr-10 py-3 rounded-xl bg-gray-50 dark:bg-black/20 border-none focus:ring-2 focus:ring-primary font-medium appearance-none cursor-pointer hover:bg-gray-100 dark:hover:bg-black/30 transition-colors">
-                            <option value="updated_on">Recently Added</option>
-                            <option value="title">Title (A-Z)</option>
+            <!-- Advanced Filters (Hidden by default) -->
+            <div id="advanced-filters" class="hidden border-t pt-4 mt-2">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-xs font-medium theme-text-secondary mb-1">Sort By</label>
+                        <select id="sort-by" class="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-1 focus:ring-primary text-sm">
+                            <option value="updated_on">Date Added</option>
+                            <option value="title">Title</option>
                             <option value="release_year">Release Year</option>
-                            <option value="rating">Rating Score</option>
+                            <option value="rating">Rating</option>
                         </select>
-                        <div class="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none theme-text-secondary">
-                            <i class="fas fa-chevron-down text-xs"></i>
-                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium theme-text-secondary mb-1">Order</label>
+                        <select id="sort-order" class="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-1 focus:ring-primary text-sm">
+                            <option value="desc">Descending</option>
+                            <option value="asc">Ascending</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium theme-text-secondary mb-1">Genre</label>
+                        <input type="text" id="genre-filter" placeholder="e.g. Action"
+                               class="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-1 focus:ring-primary text-sm">
                     </div>
                 </div>
-                <div class="space-y-2">
-                    <label class="text-xs font-bold uppercase tracking-wider theme-text-secondary opacity-70">Order</label>
-                    <div class="relative">
-                        <select id="sort-order" class="w-full pl-4 pr-10 py-3 rounded-xl bg-gray-50 dark:bg-black/20 border-none focus:ring-2 focus:ring-primary font-medium appearance-none cursor-pointer hover:bg-gray-100 dark:hover:bg-black/30 transition-colors">
-                            <option value="desc">Descending (High to Low)</option>
-                            <option value="asc">Ascending (Low to High)</option>
-                        </select>
-                        <div class="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none theme-text-secondary">
-                            <i class="fas fa-chevron-down text-xs"></i>
-                        </div>
-                    </div>
+                <div class="mt-4 flex justify-end">
+                    <button onclick="applyFilters()"
+                            class="theme-primary text-on-primary px-4 py-2 rounded-md hover:opacity-90 transition-opacity text-sm font-medium">
+                        Apply Filters
+                    </button>
                 </div>
-                <div class="space-y-2">
-                    <label class="text-xs font-bold uppercase tracking-wider theme-text-secondary opacity-70">Genre</label>
-                    <input type="text" id="genre-filter" placeholder="e.g. Action, Sci-Fi"
-                           class="w-full px-4 py-3 rounded-xl bg-gray-50 dark:bg-black/20 border-none focus:ring-2 focus:ring-primary font-medium placeholder-gray-400">
-                </div>
-            </div>
-            <div class="mt-6 flex justify-end relative z-10">
-                <button onclick="applyFilters()"
-                        class="bg-secondary text-white px-8 py-3 rounded-xl hover:shadow-lg hover:-translate-y-0.5 transition-all text-sm font-bold flex items-center gap-2">
-                    <i class="fas fa-check"></i> Apply Filters
-                </button>
             </div>
         </div>
     </div>
     
-    <!-- Status Messages -->
-    <div id="loading" class="text-center py-32 hidden">
-        <div class="inline-flex flex-col items-center">
-            <div class="relative">
-                <div class="w-16 h-16 border-4 border-gray-200 dark:border-white/10 rounded-full"></div>
-                <div class="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin absolute top-0 left-0"></div>
-            </div>
-            <p class="mt-4 text-lg font-medium theme-text-secondary animate-pulse">Fetching library...</p>
-        </div>
+    <!-- Loading Indicator -->
+    <div id="loading" class="text-center py-12 hidden">
+        <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary mb-4"></div>
+        <p class="theme-text-secondary">Loading {{ media_type }}s...</p>
     </div>
     
-    <div id="error-display" class="hidden mb-8 max-w-2xl mx-auto">
-        <div class="bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800/30 rounded-2xl p-6 flex items-start gap-5 shadow-lg">
-            <div class="bg-red-100 dark:bg-red-500/20 rounded-xl p-3 text-red-600 dark:text-red-400">
-                <i class="fas fa-exclamation-triangle text-xl"></i>
+    <!-- Error Display -->
+    <div id="error-display" class="hidden mb-8">
+        <div class="theme-card p-6 rounded-lg shadow border-l-4 border-red-500">
+            <div class="flex items-center mb-4">
+                <svg class="h-6 w-6 text-red-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.996-.833-2.764 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+                <h3 class="text-lg font-semibold text-red-700">Error Loading Media</h3>
             </div>
-            <div class="flex-1">
-                <h3 class="text-lg font-bold text-red-900 dark:text-red-200 mb-1">Unable to load media</h3>
-                <p id="error-message" class="text-red-700 dark:text-red-300/80 text-sm mb-4 leading-relaxed"></p>
-                <button onclick="retryLoad()" class="px-4 py-2 bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-300 rounded-lg text-sm font-bold hover:bg-red-200 dark:hover:bg-red-500/30 transition-colors">
-                    Try Again
-                </button>
-            </div>
+            <p id="error-message" class="text-red-600 mb-4"></p>
+            <button onclick="retryLoad()"
+                    class="theme-primary text-white px-4 py-2 rounded-md hover:opacity-90 transition-opacity text-sm">
+                Try Again
+            </button>
         </div>
     </div>
     
     <!-- Media Grid -->
-    <div id="media-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6 mb-12">
-        <!-- JS Injection Point -->
+    <div id="media-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8 gap-4 mb-8">
+        <!-- Media items will be loaded here via JavaScript -->
     </div>
     
-    <!-- Empty State -->
-    <div id="no-results" class="text-center py-32 hidden">
-        <div class="inline-block p-8 rounded-3xl bg-gray-50 dark:bg-white/5 mb-6">
-            <i class="fas fa-search-minus text-5xl text-gray-300 dark:text-gray-600"></i>
+    <!-- No Results Message -->
+    <div id="no-results" class="text-center py-12 hidden">
+        <div class="theme-card p-8 rounded-lg shadow">
+            <svg class="mx-auto h-16 w-16 text-gray-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2h4a1 1 0 110 2h-1v12a2 2 0 01-2 2H6a2 2 0 01-2-2V6H3a1 1 0 110-2h4zM9 6v10h6V6H9z"/>
+            </svg>
+            <h3 class="text-lg font-semibold theme-text-secondary mb-2">No {{ media_type }}s found</h3>
+            <p class="theme-text-secondary text-sm mb-4">
+                {% if media_type == 'movie' %}
+                No movies match your search criteria
+                {% else %}
+                No TV shows match your search criteria
+                {% endif %}
+            </p>
+            <button onclick="clearSearch()"
+                    class="theme-primary text-white px-4 py-2 rounded-md hover:opacity-90 transition-opacity text-sm">
+                Show All {{ media_type|title }}s
+            </button>
         </div>
-        <h3 class="text-2xl font-bold theme-text-secondary mb-2">No results found</h3>
-        <p class="theme-text-secondary opacity-60 mb-8 max-w-md mx-auto">We couldn't find any {{ media_type }}s matching your search criteria. Try removing filters or searching for something else.</p>
-        <button onclick="clearSearch()"
-                class="px-8 py-3 rounded-xl bg-primary/10 text-primary font-bold hover:bg-primary hover:text-white transition-all">
-            Clear All Filters
-        </button>
     </div>
     
     <!-- Pagination -->
-    <div id="pagination" class="flex flex-wrap justify-center items-center gap-3 mt-12 mb-16 hidden">
-        <!-- JS Injection Point -->
+    <div id="pagination" class="flex justify-center items-center space-x-2 mt-8 hidden">
+        <!-- Pagination will be loaded here via JavaScript -->
     </div>
     
-    <!-- Info Footer -->
-    <div id="media-info" class="text-center text-xs font-medium theme-text-secondary opacity-40 pb-8 hidden">
-        <span id="results-info"></span> • <span id="db-info"></span>
+    <!-- Media Info -->
+    <div id="media-info" class="theme-card p-4 rounded-lg shadow mt-6 hidden">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-sm theme-text-secondary">
+            <span id="results-info"></span>
+            <span id="db-info"></span>
+        </div>
     </div>
 </div>
 
 <script>
-// State Management
 let currentPage = 1;
 let currentSearch = '';
 let currentSortBy = 'updated_on';
@@ -180,10 +167,8 @@ let isLoading = false;
 const mediaType = '{{ media_type }}';
 const userRole = '{{ user_role }}';
 
-// UI Helpers
 function toggleFilters() {
-    const filters = document.getElementById('advanced-filters');
-    filters.classList.toggle('hidden');
+    document.getElementById('advanced-filters').classList.toggle('hidden');
 }
 
 function applyFilters() {
@@ -191,12 +176,9 @@ function applyFilters() {
     currentSortOrder = document.getElementById('sort-order').value;
     currentGenre = document.getElementById('genre-filter').value.trim();
     loadMedia(1, currentSearch);
-
-    if (window.innerWidth < 768) {
-        toggleFilters();
-    }
 }
 
+// Show loading state
 function showLoading() {
     isLoading = true;
     document.getElementById('loading').classList.remove('hidden');
@@ -207,22 +189,25 @@ function showLoading() {
     document.getElementById('error-display').classList.add('hidden');
 }
 
+// Hide loading state
 function hideLoading() {
     isLoading = false;
     document.getElementById('loading').classList.add('hidden');
     document.getElementById('media-grid').classList.remove('hidden');
 }
 
+// Show error state
 function showError(message) {
     document.getElementById('error-message').textContent = message;
     document.getElementById('error-display').classList.remove('hidden');
     document.getElementById('loading').classList.add('hidden');
     document.getElementById('media-grid').classList.add('hidden');
+    document.getElementById('no-results').classList.add('hidden');
 }
 
-// Core Data Loading
+// Load media with proper error handling
 async function loadMedia(page = 1, search = '') {
-    if (isLoading) return;
+    if (isLoading) return; // Prevent multiple simultaneous requests
     
     showLoading();
     currentPage = page;
@@ -230,21 +215,36 @@ async function loadMedia(page = 1, search = '') {
     
     try {
         let url = `/api/media/list?media_type=${mediaType}&page=${page}&page_size=24&search=${encodeURIComponent(search)}`;
+
+        // Add sort and filter params
         if (currentSortBy) url += `&sort_by=${currentSortBy}`;
         if (currentSortOrder) url += `&sort_order=${currentSortOrder}`;
         if (currentGenre) url += `&genre=${encodeURIComponent(currentGenre)}`;
 
+        console.log('Fetching:', url);
+
         const response = await fetch(url, {
             method: 'GET',
-            headers: { 'Accept': 'application/json' }
+            credentials: 'same-origin',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            }
         });
         
+        console.log('Response status:', response.status);
+
         if (!response.ok) {
-            if (response.status === 401) return window.location.href = '/login';
-            throw new Error(`Server Error: ${response.statusText}`);
+            if (response.status === 401) {
+                window.location.href = '/login';
+                return;
+            }
+            throw new Error(`Server responded with ${response.status}: ${response.statusText}`);
         }
         
         const data = await response.json();
+        console.log('Response data:', data);
+
         hideLoading();
         
         const grid = document.getElementById('media-grid');
@@ -254,218 +254,412 @@ async function loadMedia(page = 1, search = '') {
         if (mediaItems.length === 0) {
             grid.innerHTML = '';
             document.getElementById('no-results').classList.remove('hidden');
+            document.getElementById('pagination').classList.add('hidden');
+            document.getElementById('media-info').classList.add('hidden');
             return;
         }
         
         document.getElementById('no-results').classList.add('hidden');
+
+        // Render media items
         grid.innerHTML = mediaItems.map(item => createMediaCard(item)).join('');
+
+        // Update pagination
         updatePagination(data.current_page || page, data.total_pages || 1);
+
+        // Update info
         updateMediaInfo(data);
         
     } catch (error) {
-        console.error(error);
+        console.error('Error loading media:', error);
         hideLoading();
-        showError(error.message);
+        showError(`Failed to load ${mediaType}s: ${error.message}`);
     }
 }
 
-// Card Renderer
+// Create media card HTML
 function createMediaCard(item) {
-    const title = item.title || item.name || 'Unknown';
-    const year = item.release_year || 'N/A';
-    const rating = item.rating ? parseFloat(item.rating).toFixed(1) : null;
-    const poster = item.poster || 'https://via.placeholder.com/300x450/1a1a1a/ffffff?text=No+Poster';
+    const title = item.title || item.name || 'Unknown Title';
+    const year = item.release_year || 'Unknown Year';
+    const rating = item.rating ? `⭐ ${parseFloat(item.rating).toFixed(1)}` : '';
+    const poster = item.poster || 'https://via.placeholder.com/300x450/e5e7eb/9ca3af?text=No+Image';
     
-    const viewUrl = `/media/view?tmdb_id=${item.tmdb_id}&db_index=${item.db_index}&media_type=${mediaType}`;
+    let actionButtons = '';
+    let cardLink = '';
 
-    // Play Overlay
-    const playOverlay = `
-        <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-500 bg-black/60 backdrop-blur-[2px] z-10">
-            <div class="transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 bg-white/20 hover:bg-primary backdrop-blur-md border border-white/30 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-2xl">
-                <i class="fas fa-play ml-1 text-xl"></i>
+    if (userRole === 'admin') {
+        actionButtons = `
+            <div class="flex justify-between items-center mt-2">
+                <a href="/media/edit?tmdb_id=${item.tmdb_id}&db_index=${item.db_index}&media_type=${mediaType}"
+                   class="text-primary hover:underline text-xs font-medium px-2 py-1 rounded transition-colors hover:bg-blue-50">
+                    Edit
+                </a>
+                <button onclick="deleteMedia(${item.tmdb_id}, ${item.db_index}, '${title.replace(/'/g, "\\'")}')"
+                        class="text-red-600 hover:underline text-xs font-medium px-2 py-1 rounded transition-colors hover:bg-red-50">
+                    Delete
+                </button>
             </div>
+        `;
+    } else {
+        // For users, make the whole card clickable or add a view link
+        // We'll wrap the image in a link
+        cardLink = `/media/view?tmdb_id=${item.tmdb_id}&db_index=${item.db_index}&media_type=${mediaType}`;
+    }
+
+    const imageHtml = `
+        <div class="aspect-w-2 aspect-h-3">
+            <img src="${poster}"
+                 alt="${title}"
+                 class="w-full h-64 object-cover"
+                 onerror="this.src='https://via.placeholder.com/300x450/e5e7eb/9ca3af?text=No+Image'"
+                 loading="lazy">
         </div>
     `;
 
-    // Rating Badge
-    const ratingBadge = rating ? `
-        <div class="absolute top-3 left-3 bg-black/70 backdrop-blur-md text-yellow-400 text-[10px] font-bold px-2.5 py-1 rounded-lg z-20 flex items-center gap-1.5 border border-white/10 shadow-lg">
-            <i class="fas fa-star text-[10px]"></i> ${rating}
-        </div>
-    ` : '';
+    const linkedImage = cardLink ? `<a href="${cardLink}">${imageHtml}</a>` : imageHtml;
 
     return `
-        <div onclick="window.location.href='${viewUrl}'"
-             class="group relative theme-card rounded-2xl overflow-hidden shadow-sm hover:shadow-2xl hover:-translate-y-2 transition-all duration-500 cursor-pointer ring-1 ring-black/5 dark:ring-white/5">
-
-            <!-- Poster -->
-            <div class="aspect-[2/3] relative overflow-hidden bg-gray-100 dark:bg-gray-800">
-                <img src="${poster}"
-                     alt="${title}"
-                     class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 will-change-transform"
-                     loading="lazy"
-                     onerror="this.src='https://via.placeholder.com/300x450/1a1a1a/ffffff?text=No+Poster'">
-
-                ${ratingBadge}
-                ${playOverlay}
-
-                <!-- Bottom Gradient -->
-                <div class="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-60 group-hover:opacity-80 transition-opacity duration-300"></div>
+        <div class="theme-card rounded-lg shadow hover:shadow-lg transition-all duration-300 group overflow-hidden">
+            <div class="relative">
+                ${linkedImage}
+                <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-all duration-300 pointer-events-none"></div>
             </div>
-
-            <!-- Content -->
-            <div class="p-4 relative">
-                <h3 class="font-bold text-sm leading-tight mb-1 line-clamp-1 group-hover:text-primary transition-colors" title="${title}">
+            <div class="p-3">
+                <h3 class="font-semibold text-sm mb-1 line-clamp-2 min-h-[2.5rem]" title="${title}">
                     ${title}
                 </h3>
-                <div class="flex items-center justify-between text-xs theme-text-secondary opacity-70 font-medium">
+                <div class="flex items-center justify-between text-xs theme-text-secondary mb-3">
                     <span>${year}</span>
-                    <span class="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-white/10 text-[10px] uppercase tracking-wide">${mediaType === 'tv' ? 'Series' : 'Movie'}</span>
+                    ${rating ? `<span>${rating}</span>` : ''}
                 </div>
+                ${actionButtons}
             </div>
         </div>
     `;
 }
 
-// Pagination
-function updatePagination(curr, total) {
-    const container = document.getElementById('pagination');
-    if (total <= 1) {
-        container.classList.add('hidden');
+// Update pagination
+function updatePagination(currentPage, totalPages) {
+    const pagination = document.getElementById('pagination');
+
+    if (totalPages <= 1) {
+        pagination.classList.add('hidden');
         return;
     }
-    container.classList.remove('hidden');
     
-    let html = '';
-    const btnBase = "min-w-[2.5rem] h-10 flex items-center justify-center rounded-xl text-sm font-bold transition-all shadow-sm";
-    const activeClass = "bg-primary text-white shadow-primary/30 transform scale-105";
-    const inactiveClass = "bg-card border border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-white/5 hover:text-primary";
+    pagination.classList.remove('hidden');
+    let paginationHTML = '';
 
-    // Prev
-    if (curr > 1) {
-        html += `<button onclick="loadMedia(${curr - 1}, '${currentSearch}')" class="${btnBase} ${inactiveClass} mr-2"><i class="fas fa-chevron-left"></i></button>`;
+    // Previous button
+    if (currentPage > 1) {
+        paginationHTML += `
+            <button onclick="loadMedia(${currentPage - 1}, '${currentSearch}')"
+                    class="px-3 py-2 border rounded-md hover:bg-gray-50 transition-colors text-sm">
+                Previous
+            </button>
+        `;
     }
 
-    // Smart Pages
-    let pages = [];
-    if (total <= 7) {
-        pages = Array.from({length: total}, (_, i) => i + 1);
-    } else {
-        if (curr <= 4) pages = [1, 2, 3, 4, 5, '...', total];
-        else if (curr >= total - 3) pages = [1, '...', total - 4, total - 3, total - 2, total - 1, total];
-        else pages = [1, '...', curr - 1, curr, curr + 1, '...', total];
-    }
+    // Page numbers
+    const startPage = Math.max(1, currentPage - 2);
+    const endPage = Math.min(totalPages, currentPage + 2);
 
-    pages.forEach(p => {
-        if (p === '...') {
-            html += `<span class="w-10 h-10 flex items-center justify-center text-gray-300 font-bold">...</span>`;
-        } else {
-            html += `<button onclick="loadMedia(${p}, '${currentSearch}')" class="${btnBase} ${p === curr ? activeClass : inactiveClass}">${p}</button>`;
+    // First page
+    if (startPage > 1) {
+        paginationHTML += `
+            <button onclick="loadMedia(1, '${currentSearch}')"
+                    class="px-3 py-2 border rounded-md hover:bg-gray-50 transition-colors text-sm">
+                1
+            </button>
+        `;
+        if (startPage > 2) {
+            paginationHTML += `<span class="px-3 py-2 text-sm">...</span>`;
         }
-    });
+    }
 
-    // Next
-    if (curr < total) {
-        html += `<button onclick="loadMedia(${curr + 1}, '${currentSearch}')" class="${btnBase} ${inactiveClass} ml-2"><i class="fas fa-chevron-right"></i></button>`;
+    // Page range
+    for (let i = startPage; i <= endPage; i++) {
+        const isActive = i === currentPage;
+        paginationHTML += `
+            <button onclick="loadMedia(${i}, '${currentSearch}')"
+                    class="px-3 py-2 border rounded-md transition-colors text-sm ${
+                        isActive ? 'theme-primary text-white border-primary' : 'hover:bg-gray-50'
+                    }">
+                ${i}
+            </button>
+        `;
+    }
+
+    // Last page
+    if (endPage < totalPages) {
+        if (endPage < totalPages - 1) {
+            paginationHTML += `<span class="px-3 py-2 text-sm">...</span>`;
+        }
+        paginationHTML += `
+            <button onclick="loadMedia(${totalPages}, '${currentSearch}')"
+                    class="px-3 py-2 border rounded-md hover:bg-gray-50 transition-colors text-sm">
+                ${totalPages}
+            </button>
+        `;
     }
     
-    container.innerHTML = html;
+    // Next button
+    if (currentPage < totalPages) {
+        paginationHTML += `
+            <button onclick="loadMedia(${currentPage + 1}, '${currentSearch}')"
+                    class="px-3 py-2 border rounded-md hover:bg-gray-50 transition-colors text-sm">
+                Next
+            </button>
+        `;
+    }
+
+    pagination.innerHTML = paginationHTML;
 }
 
+// Update media info display
 function updateMediaInfo(data) {
-    const el = document.getElementById('media-info');
-    const start = ((data.current_page - 1) * 24) + 1;
-    const end = Math.min(data.current_page * 24, data.total_count);
+    const mediaInfo = document.getElementById('media-info');
+    const resultsInfo = document.getElementById('results-info');
+    const dbInfo = document.getElementById('db-info');
+
+    const startItem = ((data.current_page - 1) * 24) + 1;
+    const endItem = Math.min(data.current_page * 24, data.total_count);
     
-    document.getElementById('results-info').textContent = `Showing ${start}-${end} of ${data.total_count} titles`;
+    resultsInfo.textContent = `Showing ${startItem}-${endItem} of ${data.total_count} ${mediaType}s`;
     
-    if (data.databases_checked?.length) {
-        document.getElementById('db-info').textContent = `DB Source: ${data.databases_checked.length} node(s)`;
+    if (data.databases_checked && data.databases_checked.length > 0) {
+        dbInfo.textContent = `Database${data.databases_checked.length > 1 ? 's' : ''}: ${data.databases_checked.join(', ')}`;
     }
-    el.classList.remove('hidden');
+
+    mediaInfo.classList.remove('hidden');
 }
 
-// Search Suggestions
-let abortCtrl;
-async function fetchSuggestions(q) {
-    if (abortCtrl) abortCtrl.abort();
-    abortCtrl = new AbortController();
-
-    try {
-        const res = await fetch(`/api/media/suggestions?media_type=${mediaType}&query=${encodeURIComponent(q)}`, { signal: abortCtrl.signal });
-        if (res.ok) renderSuggestions(await res.json());
-    } catch(e) {}
-}
-
-function renderSuggestions(items) {
-    const box = document.getElementById('search-suggestions');
-    if (!items.length) return box.classList.add('hidden');
-
-    box.innerHTML = items.map(i => `
-        <div onclick="window.location.href='/media/view?tmdb_id=${i.tmdb_id}&db_index=${i.db_index}&media_type=${mediaType}'"
-             class="p-4 hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer flex gap-4 border-b border-gray-100 dark:border-white/5 last:border-0 items-center transition-colors">
-            <img src="${i.poster || i.logo || ''}" class="w-12 h-16 object-cover rounded-lg shadow-sm bg-gray-200" onerror="this.src='https://via.placeholder.com/48'">
-            <div class="min-w-0 flex-1">
-                <div class="font-bold text-sm text-gray-900 dark:text-gray-100 truncate">${i.title}</div>
-                <div class="text-xs text-gray-500 font-medium mt-0.5">${i.release_year || 'Unknown Year'}</div>
-            </div>
-            <i class="fas fa-chevron-right text-gray-300 text-xs"></i>
-        </div>
-    `).join('');
-    box.classList.remove('hidden');
-}
-
-// Init
-document.addEventListener('DOMContentLoaded', () => {
-    loadMedia();
-    
-    const searchInput = document.getElementById('search-input');
-    let timeout;
-
-    searchInput.addEventListener('input', (e) => {
-        clearTimeout(timeout);
-        const val = e.target.value.trim();
-        if (!val) {
-            document.getElementById('search-suggestions').classList.add('hidden');
-            timeout = setTimeout(() => loadMedia(1, ''), 300);
-        } else {
-            timeout = setTimeout(() => fetchSuggestions(val), 200);
-        }
-    });
-    
-    searchInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            searchMedia();
-            document.getElementById('search-suggestions').classList.add('hidden');
-        }
-    });
-
-    document.addEventListener('click', (e) => {
-        if (!document.getElementById('search-suggestions').contains(e.target) && e.target !== searchInput) {
-            document.getElementById('search-suggestions').classList.add('hidden');
-        }
-    });
-});
-
+// Search functionality
 function searchMedia() {
-    const val = document.getElementById('search-input').value.trim();
-    loadMedia(1, val);
+    const searchInput = document.getElementById('search-input');
+    const search = searchInput.value.trim();
+    loadMedia(1, search);
 }
 
+// Clear search
 function clearSearch() {
     document.getElementById('search-input').value = '';
+    // Reset filters
     document.getElementById('sort-by').value = 'updated_on';
     document.getElementById('sort-order').value = 'desc';
     document.getElementById('genre-filter').value = '';
+
     currentSortBy = 'updated_on';
     currentSortOrder = 'desc';
     currentGenre = '';
+
     loadMedia(1, '');
 }
 
+// Retry load function
 function retryLoad() {
     loadMedia(currentPage, currentSearch);
 }
+
+// Fetch search suggestions
+let suggestionAbortController = null;
+
+async function fetchSuggestions(query) {
+    if (!query) return;
+
+    // Abort previous request
+    if (suggestionAbortController) {
+        suggestionAbortController.abort();
+    }
+    suggestionAbortController = new AbortController();
+
+    try {
+        // Use specialized lightweight endpoint
+        const url = `/api/media/suggestions?media_type=${mediaType}&query=${encodeURIComponent(query)}`;
+        const response = await fetch(url, {
+            credentials: 'same-origin',
+            signal: suggestionAbortController.signal
+        });
+
+        if (response.ok) {
+            const suggestions = await response.json();
+            showSuggestions(suggestions);
+        }
+    } catch (error) {
+        if (error.name === 'AbortError') return;
+        console.error('Error fetching suggestions:', error);
+    }
+}
+
+// Show suggestions dropdown
+function showSuggestions(suggestions) {
+    const container = document.getElementById('search-suggestions');
+    if (suggestions.length === 0) {
+        container.classList.add('hidden');
+        return;
+    }
+
+    container.innerHTML = suggestions.map(item => {
+        const title = item.title || item.name;
+        const year = item.release_year || '';
+        const image = item.poster || item.logo || 'https://via.placeholder.com/45x68/e5e7eb/9ca3af?text=No+Img';
+        const displayTitle = title.replace(/'/g, "\\'");
+
+        return `
+        <div onclick="selectSuggestion('${displayTitle}', ${item.tmdb_id}, ${item.db_index})"
+             class="px-4 py-3 hover:bg-gray-50 cursor-pointer flex items-center gap-3 border-b border-gray-100 last:border-0 transition-colors">
+            <div class="flex-shrink-0 w-10 h-14 bg-gray-200 rounded overflow-hidden shadow-sm">
+                <img src="${image}" alt="${title}" class="w-full h-full object-cover"
+                     onerror="this.src='https://via.placeholder.com/40x60/e5e7eb/9ca3af?text=No+Img'">
+            </div>
+            <div class="flex-1 min-w-0">
+                <p class="font-medium text-gray-800 text-sm truncate">${title}</p>
+                <p class="text-xs text-gray-500">${year}</p>
+            </div>
+        </div>
+        `;
+    }).join('');
+
+    container.classList.remove('hidden');
+}
+
+// Select a suggestion
+function selectSuggestion(title, tmdbId, dbIndex) {
+    document.getElementById('search-suggestions').classList.add('hidden');
+
+    // Check if we should navigate directly
+    if (typeof userRole !== 'undefined' && userRole === 'user') {
+        window.location.href = `/media/view?tmdb_id=${tmdbId}&db_index=${dbIndex}&media_type=${mediaType}`;
+    } else {
+        document.getElementById('search-input').value = title;
+        searchMedia();
+    }
+}
+
+// Delete media with confirmation
+async function deleteMedia(tmdbId, dbIndex, title) {
+    if (!confirm(`Are you sure you want to delete "${title}"?\n\nThis action cannot be undone.`)) return;
+
+    try {
+        const response = await fetch(`/api/media/delete?tmdb_id=${tmdbId}&db_index=${dbIndex}&media_type=${mediaType}`, {
+            method: 'DELETE',
+            credentials: 'same-origin',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (response.ok) {
+            // Show success message briefly
+            const successMsg = document.createElement('div');
+            successMsg.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-md shadow-lg z-50';
+            successMsg.textContent = `"${title}" deleted successfully`;
+            document.body.appendChild(successMsg);
+
+            setTimeout(() => {
+                document.body.removeChild(successMsg);
+            }, 3000);
+
+            // Reload current page
+            loadMedia(currentPage, currentSearch);
+        } else {
+            const error = await response.json();
+            alert(`Error deleting "${title}": ${error.detail || 'Unknown error'}`);
+        }
+    } catch (error) {
+        console.error('Error deleting media:', error);
+        alert(`Error deleting "${title}": ${error.message}`);
+    }
+}
+
+// Initialize page
+document.addEventListener('DOMContentLoaded', () => {
+    // Load media on page load
+    loadMedia();
+    
+    // Add enter key listener to search input
+    document.getElementById('search-input').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            searchMedia();
+        }
+    });
+
+    // Add input event for real-time search (with debouncing)
+    let searchTimeout;
+    document.getElementById('search-input').addEventListener('input', (e) => {
+        clearTimeout(searchTimeout);
+        const searchValue = e.target.value.trim();
+
+        if (searchValue.length === 0) {
+            document.getElementById('search-suggestions').classList.add('hidden');
+            searchTimeout = setTimeout(() => {
+                loadMedia(1, '');
+            }, 300);
+        } else {
+             searchTimeout = setTimeout(() => {
+                fetchSuggestions(searchValue);
+            }, 150);
+        }
+    });
+
+    // Close suggestions when clicking outside
+    document.addEventListener('click', (e) => {
+        const container = document.getElementById('search-suggestions');
+        const input = document.getElementById('search-input');
+        if (!container.contains(e.target) && e.target !== input) {
+            container.classList.add('hidden');
+        }
+    });
+});
 </script>
+
+<style>
+.line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.aspect-w-2 {
+    position: relative;
+    padding-bottom: 150%; /* 2:3 aspect ratio */
+}
+
+.aspect-w-2 > img {
+    position: absolute;
+    height: 100%;
+    width: 100%;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+}
+
+@media (max-width: 640px) {
+    .grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.75rem;
+    }
+}
+
+@media (min-width: 1536px) {
+    .grid {
+        grid-template-columns: repeat(8, minmax(0, 1fr));
+    }
+}
+
+/* Loading animation */
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.animate-spin {
+    animation: spin 1s linear infinite;
+}
+</style>
 {% endblock %}

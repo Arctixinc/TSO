@@ -177,12 +177,11 @@ async def media_management_page(request: Request, media_type: str = "movie", _: 
     current_user = get_current_user(request)
     user_role = get_current_user_role(request)
     
-    # Conditional Rendering based on Role
-    template_file = "media_management.html" # Default User View
-    if user_role == "admin":
-        template_file = "admin_media_dashboard.html" # Admin View
+    # Conditional Rendering based on Role removed to revert to single template
+    # if user_role == "admin":
+    #     template_file = "admin_media_dashboard.html" # Admin View
 
-    return templates.TemplateResponse(template_file, {
+    return templates.TemplateResponse("media_management.html", {
         "request": request,
         "theme": theme,
         "themes": get_all_themes(),

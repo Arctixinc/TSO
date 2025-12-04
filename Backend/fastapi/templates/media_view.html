@@ -3,272 +3,212 @@
 {% block title %}{{ media_details.title }} - Telegram Stremio{% endblock %}
 
 {% block content %}
-<div class="relative min-h-screen pb-20">
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="theme-card rounded-lg shadow-lg overflow-hidden">
+        <!-- Backdrop/Header -->
+        <div class="relative h-64 sm:h-96 bg-gray-900">
+            <img src="{{ media_details.backdrop }}"
+                 class="w-full h-full object-cover opacity-50"
+                 alt="{{ media_details.title }}"
+                 onerror="this.src='{{ media_details.poster }}'">
+            <div class="absolute inset-0 bg-gradient-to-t from-black/90 to-transparent"></div>
 
-    <!-- Hero Backdrop -->
-    <div class="absolute inset-0 h-[70vh] w-full overflow-hidden">
-        <div class="absolute inset-0 bg-gradient-to-b from-transparent via-background/80 to-background z-10"></div>
-        <div class="absolute inset-0 bg-gradient-to-r from-background/90 via-background/40 to-transparent z-10"></div>
-        <img src="{{ media_details.backdrop }}"
-             class="w-full h-full object-cover object-top opacity-60 transition-opacity duration-1000"
-             onerror="this.src='{{ media_details.poster }}'">
-    </div>
+            <div class="absolute bottom-0 left-0 p-6 sm:p-8 flex items-end space-x-6">
+                <img src="{{ media_details.poster }}"
+                     class="w-32 sm:w-48 rounded-lg shadow-2xl border-4 border-white/10 hidden sm:block"
+                     alt="{{ media_details.title }}"
+                     onerror="this.src='https://via.placeholder.com/300x450'">
 
-    <!-- Content Container -->
-    <div class="relative z-20 max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 pt-24 lg:pt-32">
-        <div class="flex flex-col lg:flex-row gap-10">
+                <div class="text-white mb-2">
+                    <h1 class="text-3xl sm:text-4xl font-bold mb-2">{{ media_details.title }}</h1>
+                    <div class="flex flex-wrap items-center gap-4 text-sm sm:text-base text-gray-300">
+                        {% if media_details.release_year %}
+                        <span class="bg-white/10 backdrop-blur-md border border-white/10 px-3 py-1 rounded-full text-white/90">{{ media_details.release_year }}</span>
+                        {% endif %}
 
-            <!-- Poster Column -->
-            <div class="flex-shrink-0 mx-auto lg:mx-0 w-64 md:w-72 lg:w-80 perspective-1000">
-                <div class="relative rounded-2xl overflow-hidden shadow-2xl shadow-primary/20 transform transition-transform hover:scale-105 duration-500 group border border-white/10">
-                    <img src="{{ media_details.poster }}"
-                         alt="{{ media_details.title }}"
-                         class="w-full h-auto object-cover aspect-[2/3]"
-                         onerror="this.src='https://via.placeholder.com/500x750/1a1a1a/ffffff?text=No+Poster'">
+                        {% if media_details.runtime %}
+                        <span class="bg-white/10 backdrop-blur-md border border-white/10 px-3 py-1 rounded-full text-white/90 flex items-center gap-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            {{ media_details.runtime }}
+                        </span>
+                        {% endif %}
 
-                    {% if media_details.logo %}
-                    <div class="absolute bottom-4 left-0 right-0 px-4 flex justify-center">
-                        <img src="{{ media_details.logo }}" class="max-h-16 w-auto drop-shadow-lg" alt="Logo">
+                        {% if media_details.rating %}
+                        <span class="flex items-center bg-black/40 backdrop-blur-md border border-yellow-500/30 px-3 py-1 rounded-full text-yellow-400">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1.5" viewBox="0 0 20 20" fill="currentColor">
+                                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                            </svg>
+                            {{ media_details.rating }}
+                        </span>
+                        {% endif %}
+
+                        {% if media_details.imdb_id %}
+                        <a href="https://www.imdb.com/title/{{ media_details.imdb_id }}" target="_blank"
+                           class="hover:text-yellow-400 transition-colors">IMDb</a>
+                        {% endif %}
+
+                        {% if media_details.tmdb_id %}
+                        <a href="https://www.themoviedb.org/{{ media_type }}/{{ media_details.tmdb_id }}" target="_blank"
+                           class="hover:text-blue-400 transition-colors">TMDb</a>
+                        {% endif %}
+
+                        {% if user_role == 'admin' %}
+                        <a href="/media/edit?tmdb_id={{ tmdb_id }}&db_index={{ db_index }}&media_type={{ media_type }}"
+                           class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider transition-colors">
+                           Edit
+                        </a>
+                        {% endif %}
                     </div>
-                    {% endif %}
-                </div>
 
-                <!-- Quick Stats (Mobile only mostly) -->
-                <div class="mt-6 flex justify-center gap-4 lg:hidden">
-                    <a href="#content-list" class="bg-primary text-white px-8 py-3 rounded-xl font-bold shadow-lg hover:bg-primary/90 transition-all w-full text-center">
-                        <i class="fas fa-play mr-2"></i> Watch Now
-                    </a>
-                </div>
-            </div>
-
-            <!-- Details Column -->
-            <div class="flex-1 text-center lg:text-left">
-                <!-- Metadata Badges -->
-                <div class="flex flex-wrap items-center justify-center lg:justify-start gap-3 mb-4 text-sm font-medium">
-                    {% if media_details.release_year %}
-                    <span class="px-3 py-1 rounded-lg bg-white/10 backdrop-blur-md border border-white/5">{{ media_details.release_year }}</span>
-                    {% endif %}
-
-                    <span class="px-3 py-1 rounded-lg bg-white/10 backdrop-blur-md border border-white/5 uppercase">{{ media_type }}</span>
-
-                    {% if media_details.rating %}
-                    <span class="px-3 py-1 rounded-lg bg-yellow-500/20 text-yellow-300 border border-yellow-500/20 flex items-center gap-1.5">
-                        <i class="fas fa-star text-xs"></i> {{ media_details.rating }}
-                    </span>
-                    {% endif %}
-
-                    {% if media_details.runtime %}
-                    <span class="px-3 py-1 rounded-lg bg-white/10 backdrop-blur-md border border-white/5 flex items-center gap-1.5">
-                        <i class="far fa-clock text-xs"></i> {{ media_details.runtime }}
-                    </span>
-                    {% endif %}
-                </div>
-
-                <!-- Title -->
-                <h1 class="text-4xl md:text-5xl lg:text-6xl font-black tracking-tight leading-tight mb-4 text-white drop-shadow-xl">
-                    {{ media_details.title }}
-                </h1>
-
-                <!-- Genres -->
-                {% if media_details.genres %}
-                <div class="flex flex-wrap justify-center lg:justify-start gap-2 mb-6 opacity-90">
-                    {% for genre in media_details.genres %}
-                    <span class="text-sm font-medium hover:text-primary transition-colors cursor-default">{{ genre }}</span>
-                    {% if not loop.last %}<span class="text-white/30">•</span>{% endif %}
-                    {% endfor %}
-                </div>
-                {% endif %}
-
-                <!-- Description -->
-                <div class="max-w-3xl mb-8">
-                    <p class="text-lg leading-relaxed text-gray-200 font-light drop-shadow-md line-clamp-4 lg:line-clamp-none">
-                        {{ media_details.description }}
-                    </p>
-                </div>
-
-                <!-- Cast -->
-                {% if media_details.cast %}
-                <div class="mb-10">
-                    <h3 class="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Starring</h3>
-                    <div class="flex flex-wrap justify-center lg:justify-start gap-3">
-                        {% for actor in media_details.cast[:5] %}
-                        <span class="px-4 py-2 rounded-full bg-white/5 hover:bg-white/10 border border-white/5 transition-colors text-sm font-medium cursor-default">
-                            {{ actor }}
+                    {% if media_details.genres %}
+                    <div class="mt-4 flex flex-wrap gap-2">
+                        {% for genre in media_details.genres %}
+                        <span class="text-xs font-medium px-2.5 py-0.5 rounded bg-white/20 text-white backdrop-blur-sm">
+                            {{ genre }}
                         </span>
                         {% endfor %}
                     </div>
-                </div>
-                {% endif %}
-
-                <!-- Desktop CTA -->
-                <div class="hidden lg:flex gap-4">
-                    <a href="#content-list" class="bg-primary hover:bg-accent text-white px-8 py-4 rounded-xl font-bold shadow-xl shadow-primary/20 hover:shadow-primary/40 transform hover:-translate-y-1 transition-all flex items-center gap-3">
-                        <i class="fas fa-play"></i> Start Watching
-                    </a>
-                    {% if user_role == 'admin' %}
-                    <a href="/media/edit?tmdb_id={{ tmdb_id }}&db_index={{ db_index }}&media_type={{ media_type }}"
-                       class="bg-white/10 hover:bg-white/20 text-white px-6 py-4 rounded-xl font-semibold backdrop-blur-md transition-all flex items-center gap-2">
-                        <i class="fas fa-pen"></i> Edit Metadata
-                    </a>
                     {% endif %}
                 </div>
             </div>
         </div>
-    </div>
 
-    <!-- Content List Section (Seasons/Episodes or Files) -->
-    <div id="content-list" class="relative z-20 max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 mt-20">
+        <!-- Content -->
+        <div class="p-6 sm:p-8">
+            <!-- Overview -->
+            <div class="mb-8">
+                <h2 class="text-xl font-semibold mb-3">Overview</h2>
+                <p class="theme-text-secondary leading-relaxed">
+                    {{ media_details.description or "No description available." }}
+                </p>
+                {% if media_details.cast %}
+                <div class="mt-4 text-sm theme-text-secondary">
+                    <span class="font-bold text-primary">Starring:</span> {{ media_details.cast|join(', ') }}
+                </div>
+                {% endif %}
+            </div>
 
-        <div class="flex items-center gap-4 mb-8">
-            <h2 class="text-2xl font-bold border-l-4 border-primary pl-4">
-                {% if media_type == 'tv' %}Episodes{% else %}Files{% endif %}
-            </h2>
-            <div class="h-px bg-gray-200/20 flex-1"></div>
-        </div>
-
-        {% if media_type == 'tv' %}
-            {% if media_details.seasons %}
-            <div class="flex flex-col lg:flex-row gap-8">
-                <!-- Season Sidebar -->
-                <div class="lg:w-64 flex-shrink-0">
-                    <div class="sticky top-24 space-y-2 max-h-[60vh] overflow-y-auto custom-scrollbar pr-2">
-                        {% for season in media_details.seasons %}
-                        <button onclick="showSeason({{ season.season_number }})"
-                                id="season-btn-{{ season.season_number }}"
-                                class="season-btn w-full text-left px-5 py-3 rounded-xl transition-all duration-200 font-medium flex items-center justify-between group {% if loop.first %}bg-primary text-white shadow-lg{% else %}bg-card hover:bg-gray-100 dark:hover:bg-white/5{% endif %}">
-                            <span>Season {{ season.season_number }}</span>
-                            <span class="text-xs opacity-70 bg-black/10 dark:bg-white/10 px-2 py-0.5 rounded-md">{{ season.episodes|length }} Eps</span>
-                        </button>
-                        {% endfor %}
+            <!-- Media Content -->
+            <div>
+                {% if media_type == 'movie' %}
+                <h2 class="text-xl font-semibold mb-4">Watch Movie</h2>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {% for file in media_details.telegram %}
+                    <div class="border rounded-lg p-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors flex items-center justify-between group">
+                        <div>
+                            <div class="font-medium">{{ file.quality }}</div>
+                            <div class="text-sm theme-text-secondary">{{ file.size }}</div>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="playVideo('{{ file.id }}', '{{ media_details.title|replace("'", "\\'") }}')"
+                                    class="theme-primary text-white px-4 py-2 rounded-md text-sm font-medium hover:opacity-90 transition-opacity flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
+                                </svg>
+                                Play
+                            </button>
+                            <button onclick="copyLink('{{ request.base_url }}stream/{{ file.id }}')"
+                                    class="p-2 text-gray-400 hover:text-primary transition-colors" title="Copy Link">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 01-2-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                </svg>
+                            </button>
+                        </div>
                     </div>
+                    {% else %}
+                    <p class="theme-text-secondary">No files available.</p>
+                    {% endfor %}
                 </div>
 
-                <!-- Episodes Grid -->
-                <div class="flex-1">
+                {% else %}
+                <!-- TV Show Seasons -->
+                <div class="space-y-6">
                     {% for season in media_details.seasons %}
-                    <div id="season-{{ season.season_number }}" class="season-content {% if not loop.first %}hidden{% endif %} space-y-4">
-                        {% for episode in season.episodes %}
-                        <div class="theme-card rounded-xl p-4 sm:p-5 border border-gray-100 dark:border-white/5 shadow-sm hover:shadow-md transition-all group">
-                            <div class="flex flex-col sm:flex-row gap-5">
-                                <!-- Episode Thumb -->
-                                <div class="w-full sm:w-48 md:w-56 aspect-video rounded-lg overflow-hidden relative bg-gray-200 flex-shrink-0">
-                                    <img src="{{ episode.episode_backdrop or media_details.backdrop }}"
-                                         class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 opacity-90 group-hover:opacity-100"
-                                         onerror="this.src='https://via.placeholder.com/300x169/1a1a1a/ffffff?text=No+Preview'">
-                                    <div class="absolute inset-0 bg-black/30 group-hover:bg-transparent transition-colors"></div>
-                                    <div class="absolute bottom-2 right-2 bg-black/70 backdrop-blur-sm text-white text-xs px-2 py-1 rounded">
-                                        E{{ episode.episode_number }}
-                                    </div>
-                                </div>
+                    <div class="border rounded-lg overflow-hidden">
+                        <button onclick="toggleSeason('season-{{ season.season_number }}')"
+                                class="w-full px-6 py-4 bg-gray-50 dark:bg-gray-800 flex items-center justify-between hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                            <h3 class="text-lg font-semibold">Season {{ season.season_number }}</h3>
+                            <span class="text-sm theme-text-secondary">{{ season.episodes|length }} Episodes</span>
+                        </button>
 
-                                <!-- Info -->
-                                <div class="flex-1 min-w-0">
-                                    <div class="flex justify-between items-start gap-4">
-                                        <div>
-                                            <h4 class="font-bold text-lg text-primary mb-1 group-hover:underline decoration-2 underline-offset-2">
-                                                {{ episode.title }}
-                                            </h4>
-                                            {% if episode.released %}
-                                            <div class="text-xs theme-text-secondary mb-2 flex items-center gap-2">
-                                                <i class="far fa-calendar"></i> {{ episode.released | date_ist }}
-                                            </div>
-                                            {% endif %}
+                        <div id="season-{{ season.season_number }}" class="hidden divide-y">
+                            {% for episode in season.episodes %}
+                            <div class="p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                                <div class="flex flex-col sm:flex-row gap-4">
+                                    <!-- Episode Thumbnail -->
+                                    <div class="sm:w-48 flex-shrink-0">
+                                        <div class="aspect-w-16 aspect-h-9 rounded bg-gray-200 overflow-hidden relative">
+                                            <img src="{{ episode.episode_backdrop or media_details.backdrop }}"
+                                                 class="object-cover w-full h-full"
+                                                 onerror="this.src='https://via.placeholder.com/300x169?text=No+Image'">
+                                            <div class="absolute bottom-1 right-1 bg-black/70 text-white text-xs px-1 rounded">E{{ episode.episode_number }}</div>
                                         </div>
                                     </div>
 
-                                    {% if episode.overview %}
-                                    <p class="text-sm theme-text-secondary opacity-80 line-clamp-2 mb-4 leading-relaxed">
-                                        {{ episode.overview }}
-                                    </p>
-                                    {% endif %}
+                                    <div class="flex-1">
+                                        <div class="flex justify-between items-start mb-2">
+                                            <div>
+                                                <h4 class="font-medium text-primary">
+                                                    {{ episode.episode_number }}. {{ episode.title }}
+                                                </h4>
+                                                {% if episode.released or episode.overview %}
+                                                <div class="mt-1 text-xs theme-text-secondary">
+                                                    {% if episode.released %}
+                                                    <span class="mr-2">{{ episode.released | date_ist }}</span>
+                                                    {% endif %}
+                                                </div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
 
-                                    <!-- Quality Buttons -->
-                                    <div class="flex flex-wrap gap-2 mt-auto pt-2 border-t border-gray-100 dark:border-white/5">
-                                        {% for file in episode.telegram %}
-                                        <button onclick="playVideo('{{ file.id }}', '{{ file.name | replace("'", "\\'") }}')"
-                                                class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-white/5 hover:bg-primary hover:text-white transition-colors text-xs font-semibold group/btn">
-                                            <i class="fas fa-play text-[10px] group-hover/btn:scale-125 transition-transform"></i>
-                                            {{ file.quality }}
-                                            <span class="opacity-50 text-[10px] ml-1 font-normal">{{ file.size }}</span>
-                                        </button>
-                                        {% endfor %}
+                                        {% if episode.overview %}
+                                        <p class="text-sm theme-text-secondary mb-3 line-clamp-2">{{ episode.overview }}</p>
+                                        {% endif %}
+
+                                        <div class="flex flex-wrap gap-2">
+                                            {% for file in episode.telegram %}
+                                            <button onclick="playVideo('{{ file.id }}', '{{ episode.title|replace("'", "\\'") }}')"
+                                                    class="inline-flex items-center px-3 py-1 rounded border text-xs font-medium hover:bg-primary hover:text-white hover:border-primary transition-colors">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
+                                                </svg>
+                                                {{ file.quality }}
+                                            </button>
+                                            {% endfor %}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
+                            {% endfor %}
                         </div>
-                        {% endfor %}
                     </div>
                     {% endfor %}
                 </div>
+                {% endif %}
             </div>
-            {% else %}
-            <div class="text-center py-16 bg-card rounded-2xl border border-dashed border-gray-300 dark:border-gray-700">
-                <i class="fas fa-tv text-4xl text-gray-300 mb-4"></i>
-                <p class="theme-text-secondary font-medium">No seasons found for this show.</p>
-            </div>
-            {% endif %}
-
-        {% else %}
-            <!-- Movie Files List -->
-            <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {% for file in media_details.telegram %}
-                <div onclick="playVideo('{{ file.id }}', '{{ file.name | replace("'", "\\'") }}')"
-                     class="theme-card p-4 rounded-xl border border-gray-100 dark:border-white/5 shadow-sm hover:shadow-lg hover:border-primary/30 cursor-pointer transition-all group flex items-center gap-4">
-
-                    <div class="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-colors shrink-0">
-                        <i class="fas fa-play text-lg pl-1"></i>
-                    </div>
-
-                    <div class="flex-1 min-w-0">
-                        <div class="font-bold text-base mb-0.5">{{ file.quality }}</div>
-                        <div class="text-xs theme-text-secondary truncate">{{ file.name }}</div>
-                    </div>
-
-                    <div class="text-xs font-mono bg-gray-100 dark:bg-white/10 px-2 py-1 rounded">
-                        {{ file.size }}
-                    </div>
-                </div>
-                {% else %}
-                <div class="col-span-full text-center py-12 theme-text-secondary">
-                    No files available for this movie.
-                </div>
-                {% endfor %}
-            </div>
-        {% endif %}
+        </div>
     </div>
 </div>
 
 <!-- Video Player Modal -->
-<div id="video-modal" class="fixed inset-0 z-50 hidden bg-black/95 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="w-full max-w-6xl aspect-video bg-black rounded-2xl shadow-2xl relative overflow-hidden flex flex-col">
-        <!-- Header -->
-        <div class="absolute top-0 left-0 right-0 p-4 bg-gradient-to-b from-black/80 to-transparent flex justify-between items-center z-10 opacity-0 hover:opacity-100 transition-opacity">
-            <h3 id="player-title" class="text-white font-medium truncate max-w-2xl px-2"></h3>
-            <button onclick="closePlayer()" class="text-white/80 hover:text-white bg-black/20 hover:bg-red-600/80 p-2 rounded-full backdrop-blur transition-all">
-                <i class="fas fa-times text-xl"></i>
-            </button>
-        </div>
-
-        <iframe id="video-frame" class="w-full h-full" allowfullscreen></iframe>
+<div id="video-modal" class="fixed inset-0 z-50 hidden bg-black/90 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="w-full max-w-6xl aspect-video bg-black rounded-lg shadow-2xl relative">
+        <button onclick="closePlayer()" class="absolute -top-10 right-0 text-white hover:text-gray-300 transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+        </button>
+        <h3 id="player-title" class="absolute -top-8 left-0 text-white font-medium truncate max-w-[80%]"></h3>
+        <iframe id="video-frame" class="w-full h-full rounded-lg" allowfullscreen></iframe>
     </div>
 </div>
 
 <script>
-function showSeason(seasonNum) {
-    // Hide all contents
-    document.querySelectorAll('.season-content').forEach(el => el.classList.add('hidden'));
-    document.getElementById(`season-${seasonNum}`).classList.remove('hidden');
-
-    // Reset buttons
-    document.querySelectorAll('.season-btn').forEach(btn => {
-        btn.classList.remove('bg-primary', 'text-white', 'shadow-lg');
-        btn.classList.add('bg-card', 'hover:bg-gray-100', 'dark:hover:bg-white/5');
-    });
-
-    // Highlight active
-    const activeBtn = document.getElementById(`season-btn-${seasonNum}`);
-    activeBtn.classList.remove('bg-card', 'hover:bg-gray-100', 'dark:hover:bg-white/5');
-    activeBtn.classList.add('bg-primary', 'text-white', 'shadow-lg');
+function toggleSeason(id) {
+    const el = document.getElementById(id);
+    el.classList.toggle('hidden');
 }
 
 function playVideo(fileId, title) {
@@ -279,7 +219,7 @@ function playVideo(fileId, title) {
     titleEl.textContent = title;
     frame.src = `/stream/${fileId}`;
     modal.classList.remove('hidden');
-    document.body.style.overflow = 'hidden'; // Prevent scrolling
+    document.body.style.overflow = 'hidden';
 }
 
 function closePlayer() {
@@ -291,6 +231,15 @@ function closePlayer() {
     document.body.style.overflow = '';
 }
 
+async function copyLink(url) {
+    try {
+        await navigator.clipboard.writeText(url);
+        alert('Link copied to clipboard!');
+    } catch (err) {
+        console.error('Failed to copy:', err);
+    }
+}
+
 // Close modal on escape key
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !document.getElementById('video-modal').classList.contains('hidden')) {
@@ -298,20 +247,4 @@ document.addEventListener('keydown', (e) => {
     }
 });
 </script>
-
-<style>
-.perspective-1000 {
-    perspective: 1000px;
-}
-.custom-scrollbar::-webkit-scrollbar {
-    width: 6px;
-}
-.custom-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb {
-    background: rgba(156, 163, 175, 0.5);
-    border-radius: 3px;
-}
-</style>
 {% endblock %}
