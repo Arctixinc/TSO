@@ -3,6 +3,7 @@ fastapi
 httpx
 motor
 parsett
+parse-torrent-title
 pyrofork
 python-dotenv
 pytz
