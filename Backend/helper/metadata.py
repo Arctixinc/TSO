@@ -1,6 +1,6 @@
 import asyncio
 import traceback
-import PTN
+from PTT import parse_title
 import re
 from re import compile, IGNORECASE
 from Backend.helper.imdb import get_detail, get_season, search_title
@@ -91,132 +91,116 @@ async def safe_tmdb_search(title: str, type_: str, year=None):
         return None
 
 
-import re
-import traceback
-from re import compile, IGNORECASE
-
 async def metadata(filename: str, channel: int, msg_id: int) -> dict | None:
-    """Parses filename and fetches metadata for TV or Movie content."""
+    """Parse filename using PTT and fetch metadata for movie/TV content."""
 
     try:
-        parsed = PTN.parse(filename)
+        parsed = parse_title(filename)
     except Exception as e:
-        LOGGER.error(f"PTN parsing failed for {filename}: {e}\n{traceback.format_exc()}")
+        LOGGER.error(f"PTT parsing failed for {filename}: {e}\n{traceback.format_exc()}")
         return None
 
-    # 🧠 Extract fields
+    # --------------------------
+    # 🔍 Extract basic fields
+    # --------------------------
     title = parsed.get("title")
-    season = parsed.get("season")
-    episode = parsed.get("episode")
+    seasons = parsed.get("seasons", [])
+    episodes = parsed.get("episodes", [])
     year = parsed.get("year")
-    quality = parsed.get("resolution")
-    excess = parsed.get("excess", [])
+    quality = parsed.get("resolution")  # same as old: resolution
+    complete = parsed.get("complete", False)
 
-    # 🧩 Combined presence indicator
-    if excess and any("combined" in item.lower() for item in excess):
-        LOGGER.info(f"Detected combined release keyword in parsed excess: {filename}")
+    # Standardize values
+    season = seasons[0] if seasons else None
+    episode = episodes[0] if episodes else None   # first episode if multi
 
-    # 🧹 Skip split/multipart files (CD1, part2, etc.)
+    # ----------------------------------------
+    # ❌ Skip multipart files (CD1, part2, etc.)
+    # ----------------------------------------
     multipart_pattern = compile(r"(?:part|cd|disc|disk)[s._-]*\d+(?=\.\w+$)", IGNORECASE)
     if multipart_pattern.search(filename):
-        LOGGER.info(f"Skipping {filename}: seems to be a split/multipart file")
+        LOGGER.info(f"Skipping {filename}: multipart file detected")
         return None
 
+    # ----------------------------------------------------
+    # 🧠 Episode-range detection (PTT gives list directly)
+    # ----------------------------------------------------
     combined_note = None
 
-    # --- 🔍 Detect combined episode ranges like E01-09, EP02 to 10, etc. ---
-    range_match = re.search(r"(?:E|EP)[\s_]*0*(\d{1,5})\s*(?:[-–~to]+)\s*0*(\d{1,5})", filename, re.IGNORECASE)
-    if range_match:
-        start_ep, end_ep = map(int, range_match.groups())
-        combined_note = f"Episodes {start_ep}-{end_ep}"
+    if len(episodes) > 1:
+        combined_note = f"Episodes {episodes[0]}-{episodes[-1]}"
+        episode = episodes[0]
+        LOGGER.info(f"📦 PTT Combined Range: {title} S{season}E{episodes[0]}-{episodes[-1]}")
 
-        if not season:
-            s_match = re.search(r"S(\d{1,2})", filename, re.IGNORECASE)
-            if s_match:
-                season = int(s_match.group(1))
-
-        episode = start_ep
-        LOGGER.info(f"📦 Combined Range Detected: {title or filename} S{season or 'X'}E{start_ep}-{end_ep}")
-
-    # --- 🎞 Detect combined by natural language / keywords ---
-    # Handles names like “S02 09-16 COMBINED” or “Season 03 COMPLETE”
-    if not episode and any(word in filename.upper() for word in ["COMBINED", "COMPLETE", "FULL SEASON", "ALL EPISODES"]):
-        if not season:
-            s_match = re.search(r"S(?:EASON)?[\s_]*(\d{1,2})", filename, re.IGNORECASE)
-            if s_match:
-                season = int(s_match.group(1))
-
+    # ----------------------------------------------------
+    # 🎬 Full season detection (PTT gives complete=True)
+    # ----------------------------------------------------
+    if complete:
+        combined_note = combined_note or "Full Season"
         episode = 1
-        combined_note = combined_note or "Full Season Combined"
-        LOGGER.info(f"📦 Full Season Combined Detected: {title or filename} S{season or 'X'}")
+        LOGGER.info(f"📦 Full Season Detected via PTT: {title} S{season}")
 
-    # --- 🧩 Handle cases like “S02 09-16” without explicit E keywords ---
-    if not combined_note and not episode:
-        range_only = re.search(r"S(\d{1,2})[\s_.-]+0*(\d{1,2})\s*[-–~to]+\s*0*(\d{1,2})", filename, re.IGNORECASE)
-        if range_only:
-            season = season or int(range_only.group(1))
-            start_ep, end_ep = int(range_only.group(2)), int(range_only.group(3))
-            episode = start_ep
-            combined_note = f"Episodes {start_ep}-{end_ep}"
-            LOGGER.info(f"📦 Hybrid Combined Range: {title or filename} S{season}E{start_ep}-{end_ep}")
-
-    # --- ⚠️ Validation ---
+    # ----------------------------------------------------
+    # ⚠️ Skip files with no resolution (bad candidate)
+    # ----------------------------------------------------
     if not quality:
         LOGGER.warning(f"Skipping {filename}: No resolution (parsed={parsed})")
         return None
-        
-    # 🧩 Accept PTN multi-episode lists and treat as single episode
-    if isinstance(episode, list):
-        if episode:
-            episode = episode[0]  # take first episode only
-            combined_note = combined_note or f"Combined ({parsed['episode'][0]}-{parsed['episode'][-1]})"
-            LOGGER.info(f"📦 Combined Episode Range Detected — assuming single episode: S{season}E{episode}")
-        else:
-            LOGGER.warning(f"Empty episode list for {filename}: {parsed}")
-            return None
 
-    if isinstance(season, list):
-        season = season[0] if season else None
-    
-
-    if season and not episode:
-        combined_note = combined_note or "Full Season"
-        episode = 1
-        LOGGER.info(f"📦 Season-only file assumed as full season: {title or filename} S{season} ({combined_note})")
-
+    # ----------------------------------------------------
+    # ⚠️ If no title → cannot proceed
+    # ----------------------------------------------------
     if not title:
         LOGGER.info(f"No title parsed from: {filename} (parsed={parsed})")
         return None
 
-    # --- 🔗 Extract TMDb/IMDb ID ---
+    # ----------------------------------------------------
+    # 🔗 Extract TMDb/IMDb ID from filename or default
+    # ----------------------------------------------------
     default_id = None
     try:
         default_id = extract_tmdb_id(Backend.USE_DEFAULT_ID)
-    except Exception:
+    except:
         pass
 
     if not default_id:
         try:
             default_id = extract_tmdb_id(filename)
-        except Exception:
+        except:
             pass
 
-    # --- 🔗 Encode job data ---
+    # ----------------------------------------------------
+    # 🔗 Encode job data
+    # ----------------------------------------------------
     data = {"chat_id": channel, "msg_id": msg_id}
     encoded_string = await encode_string(data)
 
-    # --- 🎬 Fetch metadata ---
-    try:
-        if season and episode:
-            LOGGER.info(f"Fetching TV metadata: {title} S{season}E{episode} [{quality}] {combined_note or ''}")
-            return await fetch_tv_metadata(title, season, episode, encoded_string, year, quality, default_id)
-        else:
-            LOGGER.info(f"Fetching Movie metadata: {title} ({year}) [{quality}]")
-            return await fetch_movie_metadata(title, encoded_string, year, quality, default_id)
+    # ----------------------------------------------------
+    # 🎬 Determine if it's TV or Movie
+    # ----------------------------------------------------
+    is_tv = season is not None
 
-    except Exception as e:
-        LOGGER.error(f"Error while fetching metadata for {filename}: {e}\n{traceback.format_exc()}")
-        return None
+    if is_tv:
+        LOGGER.info(f"Fetching TV metadata: {title} S{season}E{episode} [{quality}] {combined_note or ''}")
+        return await fetch_tv_metadata(
+            title=title,
+            season=season,
+            episode=episode,
+            encoded_string=encoded_string,
+            year=year,
+            quality=quality,
+            default_id=default_id
+        )
+
+    else:
+        LOGGER.info(f"Fetching Movie metadata: {title} ({year}) [{quality}]")
+        return await fetch_movie_metadata(
+            title=title,
+            encoded_string=encoded_string,
+            year=year,
+            quality=quality,
+            default_id=default_id
+        )
 
         
 # ----------------- TV Metadata -----------------

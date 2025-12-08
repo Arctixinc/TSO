@@ -2,7 +2,7 @@ aiofiles
 fastapi
 httpx
 motor
-parse-torrent-title
+parsett
 pyrofork
 python-dotenv
 pytz
