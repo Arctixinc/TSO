@@ -27,12 +27,29 @@ class PluginReloader:
         """Pulls the latest code from git."""
         try:
             reload_logger.info("Starting git pull...")
-            result = subprocess.run(
-                ["git", "pull"],
+
+            # Determine current branch
+            proc = subprocess.run(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
                 capture_output=True,
                 text=True,
                 check=False
             )
+            if proc.returncode == 0:
+                branch = proc.stdout.strip()
+            else:
+                branch = "master" # Fallback
+
+            reload_logger.info(f"Detected branch: {branch}. Pulling from origin...")
+
+            # Explicitly pull from origin/<branch>
+            result = subprocess.run(
+                ["git", "pull", "origin", branch],
+                capture_output=True,
+                text=True,
+                check=False
+            )
+
             if result.returncode == 0:
                 reload_logger.info(f"Git pull successful: {result.stdout}")
                 return True, result.stdout
