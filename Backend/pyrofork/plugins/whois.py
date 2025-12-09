@@ -1,11 +1,14 @@
 from pyrogram import Client, filters
 from pyrogram.types import Message, User
+from pyrogram.errors import PeerIdInvalid, UsernameInvalid, UserNotParticipant
 from Backend.helper.custom_filter import CustomFilters
 from datetime import datetime
 
 @Client.on_message(filters.command("whois") & CustomFilters.owner)
 async def whois_command(client: Client, message: Message):
     cmd = message.command
+    get_user = None
+
     if not message.reply_to_message and len(cmd) == 1:
         get_user = message.from_user.id
     elif len(cmd) == 1:
@@ -19,8 +22,9 @@ async def whois_command(client: Client, message: Message):
 
     try:
         user = await client.get_users(get_user)
-    except Exception as e:
-        await message.reply_text(f"❌ User not found: {e}")
+    except (PeerIdInvalid, UsernameInvalid, Exception) as e:
+        # If user is not found, print what we know (the ID or input)
+        await message.reply_text(f"❌ **User not found.**\n\nInput: `{get_user}`\n\nThe bot has likely not interacted with this user yet, or the ID is invalid.")
         return
 
     text = (

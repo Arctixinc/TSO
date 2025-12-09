@@ -220,6 +220,9 @@ async def restart_notification():
 # Bot commands
 commands = [
     BotCommand("start",      "🚀 Start the bot"),
+    BotCommand("reload",     "🔄 Hot reload plugins"),
+    BotCommand("servertime", "🕰️ Check server time"),
+    BotCommand("whois",      "👤 Check user info"),
     BotCommand("health",     "❤️ Check bot health"),
     BotCommand("set",        "🎬 Add IMDb metadata"),
     BotCommand("log",        "📄 Get log file"),
@@ -251,4 +254,3 @@ async def setup_bot_commands(bot: Client):
         LOGGER.info("Bot commands updated successfully.")
     except Exception as e:
         LOGGER.error(f"Error setting up bot commands: {e}")
-
