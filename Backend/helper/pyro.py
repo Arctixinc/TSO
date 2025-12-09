@@ -217,12 +217,9 @@ async def restart_notification():
         LOGGER.error(f"Error in restart_notification: {e}")
 
 
-# Bot commands
-commands = [
+# Static Bot commands (Legacy)
+STATIC_COMMANDS = [
     BotCommand("start",      "🚀 Start the bot"),
-    BotCommand("reload",     "🔄 Hot reload plugins"),
-    BotCommand("servertime", "🕰️ Check server time"),
-    BotCommand("whois",      "👤 Check user info"),
     BotCommand("health",     "❤️ Check bot health"),
     BotCommand("set",        "🎬 Add IMDb metadata"),
     BotCommand("log",        "📄 Get log file"),
@@ -245,12 +242,31 @@ commands = [
 
 async def setup_bot_commands(bot: Client):
     try:
+        final_commands = STATIC_COMMANDS.copy()
+
+        # Merge dynamic commands from Loader if available
+        # Access loader via StreamBot.reloader (attached in __main__.py)
+        if hasattr(bot, "reloader") and bot.reloader:
+            loader = bot.reloader.loader
+            if loader:
+                for module_name, commands in loader.module_commands.items():
+                    final_commands.extend(commands)
+
+        # De-duplicate by command string (prefer dynamic over static if same name)
+        command_dict = {cmd.command: cmd for cmd in final_commands}
+        unique_commands = list(command_dict.values())
+
+        # Sort for neatness
+        unique_commands.sort(key=lambda x: x.command)
+
         current_commands = await bot.get_bot_commands()
-        if current_commands:
-            LOGGER.info(f"Found {len(current_commands)} existing commands. Deleting them...")
-            await bot.set_bot_commands([])
+        # We don't always need to delete, set_bot_commands replaces them.
+        # But for cleanness logs:
+        # if current_commands:
+        #    LOGGER.info(f"Found {len(current_commands)} existing commands. Deleting them...")
+        #    await bot.set_bot_commands([])
         
-        await bot.set_bot_commands(commands)
-        LOGGER.info("Bot commands updated successfully.")
+        await bot.set_bot_commands(unique_commands)
+        LOGGER.info(f"Bot commands updated successfully. Total: {len(unique_commands)}")
     except Exception as e:
         LOGGER.error(f"Error setting up bot commands: {e}")

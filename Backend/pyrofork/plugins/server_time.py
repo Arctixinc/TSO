@@ -1,8 +1,13 @@
 from pyrogram import Client, filters
-from pyrogram.types import Message
+from pyrogram.types import Message, BotCommand
 from datetime import datetime
 import pytz
 from Backend.helper.custom_filter import CustomFilters
+
+# Define Commands for dynamic registration
+COMMANDS = [
+    BotCommand("servertime", "🕰️ Check server time")
+]
 
 @Client.on_message(filters.command("servertime") & CustomFilters.owner)
 async def server_time_command(client: Client, message: Message):

@@ -1,18 +1,16 @@
 from pyrogram import filters, Client
-from pyrogram.types import Message
+from pyrogram.types import Message, BotCommand
 from Backend.reloader import PluginReloader
 from Backend.loader import Loader
 from Backend.helper.custom_filter import CustomFilters
+from Backend.helper.pyro import setup_bot_commands
 from Backend import db
 import sys
 
-# We need access to the global reloader instance.
-# We can attach it to the Client or import it from main (if we structure it that way).
-# A cleaner way is to instantiate it here or use a singleton pattern,
-# but `Loader` needs to track state.
-# So `Backend.__main__` should probably expose the reloader or we store it in a shared place.
-
-# For now, we will assume `StreamBot.reloader` is set in `__main__.py`.
+# Define Commands for dynamic registration
+COMMANDS = [
+    BotCommand("reload", "🔄 Hot reload plugins")
+]
 
 @Client.on_message(filters.command("reload") & CustomFilters.owner)
 async def reload_bot(client: Client, message: Message):
@@ -41,7 +39,13 @@ async def reload_bot(client: Client, message: Message):
         await status_msg.edit(f"❌ **Critical Error during reload:**\n`{e}`")
         return
 
-    # 3. Report Results
+    # 3. Refresh Bot Commands (Dynamic Update)
+    try:
+        await setup_bot_commands(client)
+    except Exception as e:
+        errors.append(f"Command update failed: {e}")
+
+    # 4. Report Results
     result_text = f"✅ **Reload Complete**\n\n"
 
     if reloaded:

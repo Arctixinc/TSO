@@ -1,8 +1,13 @@
 from pyrogram import Client, filters
-from pyrogram.types import Message, User
+from pyrogram.types import Message, User, BotCommand
 from pyrogram.errors import PeerIdInvalid, UsernameInvalid, UserNotParticipant
 from Backend.helper.custom_filter import CustomFilters
 from datetime import datetime
+
+# Define Commands for dynamic registration
+COMMANDS = [
+    BotCommand("whois", "👤 Check user info")
+]
 
 @Client.on_message(filters.command("whois") & CustomFilters.owner)
 async def whois_command(client: Client, message: Message):

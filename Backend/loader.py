@@ -6,6 +6,7 @@ import glob
 from pathlib import Path
 from pyrogram import Client
 from pyrogram.handlers.handler import Handler
+from pyrogram.types import BotCommand
 from Backend.pyrofork.bot import StreamBot, Helper
 
 # Logger
@@ -16,6 +17,8 @@ class Loader:
         self.plugin_dir = plugin_dir
         # Store handlers to allow unloading: module_name -> [(client, handler_obj, group)]
         self.module_handlers = {}
+        # Store commands: module_name -> [BotCommand]
+        self.module_commands = {}
 
     def scan_plugin_files(self):
         """Recursively find all .py files in the plugin directory."""
@@ -85,6 +88,13 @@ class Loader:
                         StreamBot.add_handler(handler_instance, group)
                         captured_handlers.append((StreamBot, handler_instance, group))
 
+        # Check for COMMANDS variable (Dynamic Command Registration)
+        if hasattr(module, "COMMANDS"):
+            cmds = getattr(module, "COMMANDS")
+            if isinstance(cmds, list) and all(isinstance(c, BotCommand) for c in cmds):
+                self.module_commands[module_name] = cmds
+                reload_logger.info(f"Registered {len(cmds)} commands from {module_name}")
+
         # Save captured handlers for this module
         self.module_handlers[module_name] = captured_handlers
         reload_logger.info(f"Loaded {module_name} with {len(captured_handlers)} handlers")
@@ -95,6 +105,7 @@ class Loader:
 
     def unload_module(self, module_name):
         """Remove handlers associated with this module."""
+        # Unload handlers
         if module_name in self.module_handlers:
             handlers = self.module_handlers[module_name]
             for client, handler, group in handlers:
@@ -105,3 +116,8 @@ class Loader:
                     pass
             del self.module_handlers[module_name]
             reload_logger.info(f"Unloaded handlers for {module_name}")
+
+        # Unload commands
+        if module_name in self.module_commands:
+            del self.module_commands[module_name]
+            reload_logger.info(f"Unloaded commands for {module_name}")
