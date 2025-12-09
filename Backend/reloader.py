@@ -28,19 +28,21 @@ class PluginReloader:
         try:
             reload_logger.info("Starting git pull...")
 
-            # Determine current branch
-            proc = subprocess.run(
-                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-                capture_output=True,
-                text=True,
-                check=False
-            )
-            if proc.returncode == 0:
-                branch = proc.stdout.strip()
-            else:
-                branch = "master" # Fallback
+            # Determine branch from ENV first, then git fallback
+            branch = os.environ.get("UPSTREAM_BRANCH")
+            if not branch:
+                proc = subprocess.run(
+                    ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                    capture_output=True,
+                    text=True,
+                    check=False
+                )
+                if proc.returncode == 0:
+                    branch = proc.stdout.strip()
+                else:
+                    branch = "master" # Fallback
 
-            reload_logger.info(f"Detected branch: {branch}. Pulling from origin...")
+            reload_logger.info(f"Target branch: {branch}. Pulling from origin...")
 
             # Explicitly pull from origin/<branch>
             result = subprocess.run(
