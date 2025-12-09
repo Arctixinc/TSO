@@ -6,7 +6,6 @@ import glob
 from pathlib import Path
 from pyrogram import Client
 from pyrogram.handlers.handler import Handler
-from pyrogram.client import Decorator
 from Backend.pyrofork.bot import StreamBot, Helper
 
 # Logger
@@ -74,15 +73,17 @@ class Loader:
             Helper.add_handler = original_add_handler_helper
 
         # Now look for Unbound Decorators (@Client.on_message) that rely on "Smart Plugin" discovery
+        # Pyrogram attaches a 'handlers' attribute to the decorated function.
         for name, value in vars(module).items():
-            if isinstance(value, Decorator):
+            if hasattr(value, "handlers") and isinstance(value.handlers, list):
                 # These are NOT registered yet. We register them to StreamBot by default.
-                # NOTE: If a plugin is meant for Helper, it should probably use @Helper.on_message.
-                # If it uses generic @Client.on_message, we assume StreamBot.
+                # NOTE: If a plugin is meant for Helper, it should probably use @Helper.on_message (Bound).
+                # If it uses generic @Client.on_message (Unbound), we assume StreamBot.
 
                 for handler_instance, group in value.handlers:
-                    StreamBot.add_handler(handler_instance, group)
-                    captured_handlers.append((StreamBot, handler_instance, group))
+                    if isinstance(handler_instance, Handler):
+                        StreamBot.add_handler(handler_instance, group)
+                        captured_handlers.append((StreamBot, handler_instance, group))
 
         # Save captured handlers for this module
         self.module_handlers[module_name] = captured_handlers
