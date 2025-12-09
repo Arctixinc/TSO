@@ -11,11 +11,30 @@ from Backend.helper.pyro import restart_notification, setup_bot_commands
 from Backend.pyrofork.bot import Helper, StreamBot
 from Backend.pyrofork.clients import initialize_clients
 
+# Import new loader components
+from Backend.loader import Loader
+from Backend.reloader import PluginReloader
+
 loop = get_event_loop()
+
+# Initialize Loader and Reloader
+plugin_loader = Loader(plugin_dir="Backend/pyrofork/plugins")
+reloader = PluginReloader(plugin_loader)
+
+# Attach reloader to clients so the /reload command can access it
+StreamBot.reloader = reloader
+Helper.reloader = reloader
 
 async def start_services():
     try:
         LOGGER.info(f"Initializing Telegram-Stremio v-{__version__}")
+
+        # Load Plugins Manually
+        LOGGER.info("Loading Plugins...")
+        plugin_loader.load_all()
+        reloader.initial_scan() # Initialize mtimes
+        LOGGER.info("Plugins Loaded Successfully.")
+
         await asleep(1.2)
         
         await db.connect()
