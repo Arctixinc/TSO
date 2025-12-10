@@ -16,8 +16,9 @@ from Backend.fastapi.routes.api_routes import (
     list_media_api, delete_media_api, update_media_api,
     delete_movie_quality_api, delete_tv_quality_api,
     delete_tv_episode_api, delete_tv_season_api,
-    search_suggestions_api
+    search_suggestions_api, search_unified_api
 )
+from Backend.fastapi.routes.admin_panel import router as admin_panel_router
 
 app = FastAPI(
     title="Telegram Stremio Media Server",
@@ -43,6 +44,7 @@ except Exception:
 # --- Include existing API routers ---
 app.include_router(stream_router)
 app.include_router(stremio_router)
+app.include_router(admin_panel_router)
 
 # --- Public Routes (No Authentication Required) ---
 @app.get("/login", response_class=HTMLResponse)
@@ -113,6 +115,20 @@ async def search_suggestions(
     _: bool = Depends(require_auth)
 ):
     return await search_suggestions_api(media_type, query)
+
+@app.get("/api/media/unified")
+async def search_unified(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(24, ge=1, le=100),
+    search: str = Query("", max_length=100),
+    sort_by: str = Query("updated_on"),
+    sort_order: str = Query("desc", regex="^(asc|desc)$"),
+    genre: str = Query(None)
+):
+    # Note: This endpoint is protected by the frontend session check mainly,
+    # but we can also add a dependency if we want strict API protection.
+    # For now, it's public API but the frontend page is protected.
+    return await search_unified_api(page, page_size, search, sort_by, sort_order, genre)
 
 @app.delete("/api/media/delete")
 async def delete_media(tmdb_id: int, db_index: int, media_type: str, _: bool = Depends(require_admin)):

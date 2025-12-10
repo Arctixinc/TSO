@@ -1,0 +1,349 @@
+{% extends "base.html" %}
+
+{% block title %}Unified Search - Admin{% endblock %}
+
+{% block content %}
+<!-- Use a unique ID to prevent conflicts with other page scripts if necessary, though base.html isolates blocks -->
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="flex justify-between items-center mb-8">
+        <div>
+            <h1 class="text-3xl font-bold">Unified Media Search</h1>
+            <p class="theme-text-secondary mt-2">Manage Movies and TV Shows in one place</p>
+        </div>
+        <div>
+            <a href="/admin/unified/logout" class="text-red-500 hover:text-red-700 font-medium">Logout</a>
+        </div>
+    </div>
+
+    <!-- Search & Filters -->
+    <div class="theme-card p-6 rounded-lg shadow mb-8">
+        <div class="flex flex-col gap-4">
+            <!-- Search Bar -->
+            <div class="flex flex-col md:flex-row gap-4">
+                <div class="flex-1">
+                    <input type="text" id="unified-search-input" placeholder="Search by title..."
+                           class="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm">
+                </div>
+                <button onclick="runUnifiedSearch()"
+                        class="theme-primary text-white px-6 py-2 rounded-md hover:opacity-90 transition-opacity text-sm font-medium">
+                    Search
+                </button>
+                <button onclick="toggleUnifiedFilters()"
+                        class="border border-gray-300 px-4 py-2 rounded-md hover:bg-gray-50 transition-colors text-sm font-medium flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path>
+                    </svg>
+                    Filters
+                </button>
+            </div>
+
+            <!-- Filters -->
+            <div id="unified-filters" class="hidden border-t pt-4 mt-2">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-xs font-medium theme-text-secondary mb-1">Sort By</label>
+                        <select id="sort-by" class="w-full px-3 py-2 border rounded-md text-sm">
+                            <option value="updated_on">Date Updated</option>
+                            <option value="title">Title</option>
+                            <option value="release_year">Release Year</option>
+                            <option value="rating">Rating</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium theme-text-secondary mb-1">Order</label>
+                        <select id="sort-order" class="w-full px-3 py-2 border rounded-md text-sm">
+                            <option value="desc">Descending</option>
+                            <option value="asc">Ascending</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium theme-text-secondary mb-1">Genre</label>
+                        <input type="text" id="genre-filter" placeholder="e.g. Action"
+                               class="w-full px-3 py-2 border rounded-md text-sm">
+                    </div>
+                </div>
+                <div class="mt-4 flex justify-end">
+                    <button onclick="runUnifiedSearch()"
+                            class="theme-primary text-white px-4 py-2 rounded-md hover:opacity-90 transition-opacity text-sm font-medium">
+                        Apply
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results Grid -->
+    <div id="unified-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 mb-8">
+        <!-- JS Content -->
+    </div>
+
+    <!-- Pagination -->
+    <div id="unified-pagination" class="flex justify-center items-center space-x-2 mt-8 hidden">
+        <!-- JS Content -->
+    </div>
+
+</div>
+
+<!-- Edit Modal -->
+<div id="edit-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden overflow-y-auto">
+    <div class="min-h-screen px-4 text-center">
+        <span class="inline-block h-screen align-middle" aria-hidden="true">&#8203;</span>
+
+        <div class="inline-block w-full max-w-2xl p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-2xl">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-medium leading-6 text-gray-900" id="modal-title">Edit Media</h3>
+                <button onclick="closeEditModal()" class="text-gray-400 hover:text-gray-500">
+                    <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            <form id="edit-form" class="space-y-4">
+                <input type="hidden" id="edit-tmdb-id">
+                <input type="hidden" id="edit-db-index">
+                <input type="hidden" id="edit-media-type">
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="col-span-2">
+                        <label class="block text-sm font-medium text-gray-700">Title</label>
+                        <input type="text" id="edit-title" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2 text-sm">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Year</label>
+                        <input type="number" id="edit-year" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2 text-sm">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Rating</label>
+                        <input type="number" step="0.1" id="edit-rating" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2 text-sm">
+                    </div>
+
+                    <div class="col-span-2">
+                        <label class="block text-sm font-medium text-gray-700">Description</label>
+                        <textarea id="edit-description" rows="3" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2 text-sm"></textarea>
+                    </div>
+
+                    <div class="col-span-2">
+                         <label class="block text-sm font-medium text-gray-700">Poster URL</label>
+                         <input type="text" id="edit-poster" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2 text-sm">
+                    </div>
+
+                    <div class="col-span-2">
+                         <label class="block text-sm font-medium text-gray-700">Backdrop URL</label>
+                         <input type="text" id="edit-backdrop" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2 text-sm">
+                    </div>
+                </div>
+
+                <div class="mt-6 flex justify-end space-x-3">
+                    <button type="button" onclick="closeEditModal()" class="px-4 py-2 border rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">Cancel</button>
+                    <button type="submit" class="px-4 py-2 bg-blue-600 border border-transparent rounded-md text-sm font-medium text-white hover:bg-blue-700">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentPage = 1;
+
+function toggleUnifiedFilters() {
+    document.getElementById('unified-filters').classList.toggle('hidden');
+}
+
+async function runUnifiedSearch(page = 1) {
+    const search = document.getElementById('unified-search-input').value.trim();
+    const sortBy = document.getElementById('sort-by').value;
+    const sortOrder = document.getElementById('sort-order').value;
+    const genre = document.getElementById('genre-filter').value.trim();
+
+    currentPage = page;
+
+    const url = new URL('/api/media/unified', window.location.origin);
+    url.searchParams.append('page', page);
+    url.searchParams.append('page_size', 24);
+    url.searchParams.append('search', search);
+    url.searchParams.append('sort_by', sortBy);
+    url.searchParams.append('sort_order', sortOrder);
+    if(genre) url.searchParams.append('genre', genre);
+
+    try {
+        const response = await fetch(url);
+        if (response.status === 401) {
+            window.location.reload(); // Reload to hit auth check
+            return;
+        }
+        const data = await response.json();
+        renderGrid(data.results);
+        renderPagination(data.total_count, page);
+    } catch(e) {
+        console.error("Search failed", e);
+        // alert("Search failed: " + e.message);
+    }
+}
+
+function renderGrid(items) {
+    const grid = document.getElementById('unified-grid');
+    grid.innerHTML = '';
+
+    if(!items || items.length === 0) {
+        grid.innerHTML = '<p class="col-span-full text-center text-gray-500 py-8">No results found.</p>';
+        return;
+    }
+
+    items.forEach(item => {
+        const title = (item.title || item.name || 'Unknown').replace(/'/g, "\\'");
+        const year = item.release_year || '';
+        const rating = item.rating ? parseFloat(item.rating).toFixed(1) : 'N/A';
+        const poster = item.poster || 'https://via.placeholder.com/300x450?text=No+Img';
+        const type = item.media_type === 'movie' ? 'Movie' : 'TV';
+        const badgeColor = type === 'Movie' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800';
+
+        const card = `
+        <div class="theme-card rounded-lg shadow hover:shadow-lg transition-all overflow-hidden group">
+            <div class="relative aspect-w-2 aspect-h-3">
+                <img src="${poster}" class="w-full h-64 object-cover" loading="lazy" onerror="this.src='https://via.placeholder.com/300x450?text=Error'">
+                <span class="absolute top-2 right-2 ${badgeColor} text-xs font-bold px-2 py-1 rounded shadow">${type}</span>
+            </div>
+            <div class="p-3">
+                <h3 class="font-semibold text-sm mb-1 truncate" title="${title}">${item.title || item.name}</h3>
+                <div class="flex justify-between text-xs text-gray-500 mb-2">
+                    <span>${year}</span>
+                    <span>⭐ ${rating}</span>
+                </div>
+                <div class="flex justify-between gap-2 mt-2">
+                    <button onclick="openEditModal(${item.tmdb_id}, ${item.db_index}, '${item.media_type}')"
+                            class="flex-1 bg-blue-50 text-blue-600 hover:bg-blue-100 py-1 rounded text-xs font-medium">
+                        Edit
+                    </button>
+                    <button onclick="deleteMedia(${item.tmdb_id}, ${item.db_index}, '${item.media_type}', '${title}')"
+                            class="flex-1 bg-red-50 text-red-600 hover:bg-red-100 py-1 rounded text-xs font-medium">
+                        Delete
+                    </button>
+                </div>
+            </div>
+        </div>
+        `;
+        grid.innerHTML += card;
+    });
+}
+
+function renderPagination(totalCount, page) {
+    const totalPages = Math.ceil(totalCount / 24);
+    const container = document.getElementById('unified-pagination');
+
+    if(totalPages <= 1) {
+        container.classList.add('hidden');
+        return;
+    }
+
+    container.classList.remove('hidden');
+    let html = '';
+
+    if(page > 1) {
+        html += `<button onclick="runUnifiedSearch(${page - 1})" class="px-3 py-1 border rounded hover:bg-gray-100">Prev</button>`;
+    }
+
+    html += `<span class="px-3 py-1">Page ${page} of ${totalPages}</span>`;
+
+    if(page < totalPages) {
+        html += `<button onclick="runUnifiedSearch(${page + 1})" class="px-3 py-1 border rounded hover:bg-gray-100">Next</button>`;
+    }
+
+    container.innerHTML = html;
+}
+
+// Actions
+async function deleteMedia(tmdbId, dbIndex, type, title) {
+    if(!confirm(`Are you sure you want to delete "${title}"? This cannot be undone.`)) return;
+
+    try {
+        const url = `/api/media/delete?tmdb_id=${tmdbId}&db_index=${dbIndex}&media_type=${type}`;
+        const res = await fetch(url, { method: 'DELETE' });
+        if(res.ok) {
+            runUnifiedSearch(currentPage);
+        } else {
+            const err = await res.json();
+            alert("Error: " + (err.detail || "Delete failed"));
+        }
+    } catch(e) {
+        alert("Error: " + e.message);
+    }
+}
+
+// Edit Modal Logic
+async function openEditModal(tmdbId, dbIndex, type) {
+    try {
+        const res = await fetch(`/api/media/details?tmdb_id=${tmdbId}&db_index=${dbIndex}&media_type=${type}`);
+        if(!res.ok) throw new Error("Failed to fetch details");
+        const data = await res.json();
+
+        document.getElementById('edit-tmdb-id').value = tmdbId;
+        document.getElementById('edit-db-index').value = dbIndex;
+        document.getElementById('edit-media-type').value = type;
+
+        document.getElementById('edit-title').value = data.title || '';
+        document.getElementById('edit-year').value = data.release_year || '';
+        document.getElementById('edit-rating').value = data.rating || '';
+        document.getElementById('edit-description').value = data.description || '';
+        document.getElementById('edit-poster').value = data.poster || '';
+        document.getElementById('edit-backdrop').value = data.backdrop || '';
+
+        document.getElementById('edit-modal').classList.remove('hidden');
+    } catch(e) {
+        console.error(e);
+        alert("Could not load details for editing.");
+    }
+}
+
+function closeEditModal() {
+    document.getElementById('edit-modal').classList.add('hidden');
+}
+
+document.getElementById('edit-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const tmdbId = document.getElementById('edit-tmdb-id').value;
+    const dbIndex = document.getElementById('edit-db-index').value;
+    const type = document.getElementById('edit-media-type').value;
+
+    const payload = {
+        title: document.getElementById('edit-title').value,
+        release_year: document.getElementById('edit-year').value,
+        rating: document.getElementById('edit-rating').value,
+        description: document.getElementById('edit-description').value,
+        poster: document.getElementById('edit-poster').value,
+        backdrop: document.getElementById('edit-backdrop').value
+    };
+
+    try {
+        const res = await fetch(`/api/media/update?tmdb_id=${tmdbId}&db_index=${dbIndex}&media_type=${type}`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+
+        if(res.ok) {
+            closeEditModal();
+            runUnifiedSearch(currentPage);
+            // Show toast?
+        } else {
+            const err = await res.json();
+            alert("Update failed: " + err.detail);
+        }
+    } catch(e) {
+        alert("Update error: " + e.message);
+    }
+});
+
+// Init
+document.addEventListener('DOMContentLoaded', () => {
+    runUnifiedSearch();
+
+    document.getElementById('unified-search-input').addEventListener('keypress', (e) => {
+        if(e.key === 'Enter') runUnifiedSearch();
+    });
+});
+</script>
+{% endblock %}

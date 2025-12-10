@@ -559,89 +559,94 @@ class Database:
             self, 
             query: str, 
             page: int, 
-            page_size: int
+            page_size: int,
+            sort_by: str = "updated_on",
+            sort_order: str = "desc",
+            genre: str = None
         ) -> dict:
 
-            skip = (page - 1) * page_size
-            
-            words = query.split()
+        words = query.split()
+        if not words:
+            regex_query = None
+        else:
             regex_query = {
-                '$regex': '.*' + '.*'.join(words) + '.*', 
+                '$regex': '.*' + '.*'.join([re.escape(w) for w in words]) + '.*',
                 '$options': 'i'
             }
-            
-            tv_pipeline = [
-                {"$match": {"$or": [
-                    {"title": regex_query},
-                    {"seasons.episodes.telegram.name": regex_query}
-                ]}},
-                {"$project": {
-                    "_id": 1, "tmdb_id": 1, "title": 1, "genres": 1, "rating": 1, "imdb_id": 1,
-                    "release_year": 1, "poster": 1, "backdrop": 1, "description": 1, "logo": 1,
-                    "media_type": 1, "db_index": 1
-                }}
+
+        # Build Match Conditions
+        tv_match = {}
+        movie_match = {}
+
+        if regex_query:
+            tv_match["$or"] = [
+                {"title": regex_query},
+                {"seasons.episodes.telegram.name": regex_query}
+            ]
+            movie_match["$or"] = [
+                {"title": regex_query},
+                {"telegram.name": regex_query}
             ]
             
-            movie_pipeline = [
-                {"$match": {"$or": [
-                    {"title": regex_query},
-                    {"telegram.name": regex_query}
-                ]}},
-                {"$project": {
-                    "_id": 1, "tmdb_id": 1, "title": 1, "genres": 1, "rating": 1,
-                    "release_year": 1, "poster": 1, "backdrop": 1, "description": 1,
-                    "media_type": 1, "db_index": 1, "imdb_id": 1, "logo": 1
-                }}
-            ]
-            
-            results = []
-            dbs_checked = []
-            
-            active_db_key = f"storage_{self.current_db_index}"
-            active_db = self.dbs[active_db_key]
-            dbs_checked.append(self.current_db_index)
-            
-            tv_results = await active_db["tv"].aggregate(tv_pipeline).to_list(None)
-            movie_results = await active_db["movie"].aggregate(movie_pipeline).to_list(None)
-            combined = tv_results + movie_results
-            results.extend(combined)
-            
-            if len(results) < page_size:
-                previous_db_index = self.current_db_index - 1
-                while previous_db_index > 0 and len(results) < page_size:
-                    prev_db_key = f"storage_{previous_db_index}"
-                    prev_db = self.dbs[prev_db_key]
-                    tv_results_prev = await prev_db["tv"].aggregate(tv_pipeline).to_list(None)
-                    movie_results_prev = await prev_db["movie"].aggregate(movie_pipeline).to_list(None)
-                    combined_prev = tv_results_prev + movie_results_prev
-                    results.extend(combined_prev)
-                    dbs_checked.append(previous_db_index)
-                    previous_db_index -= 1
+        if genre:
+            tv_match["genres"] = {"$in": [genre]}
+            movie_match["genres"] = {"$in": [genre]}
 
-            total_count = 0
-            for db_index in dbs_checked:
-                key = f"storage_{db_index}"
-                db = self.dbs[key]
-                tv_count = await db["tv"].count_documents({
-                    "$or": [
-                        {"title": regex_query},
-                        {"seasons.episodes.telegram.name": regex_query}
-                    ]
-                })
-                movie_count = await db["movie"].count_documents({
-                    "$or": [
-                        {"title": regex_query},
-                        {"telegram.name": regex_query}
-                    ]
-                })
-                total_count += (tv_count + movie_count)
-            
-            paged_results = results[skip:skip + page_size]
+        tv_pipeline = [{"$project": {
+            "_id": 1, "tmdb_id": 1, "title": 1, "genres": 1, "rating": 1, "imdb_id": 1,
+            "release_year": 1, "poster": 1, "backdrop": 1, "description": 1, "logo": 1,
+            "media_type": 1, "db_index": 1, "updated_on": 1
+        }}]
 
-            return {
-                "total_count": total_count,
-                "results": [convert_objectid_to_str(doc) for doc in paged_results]
-            }
+        movie_pipeline = [{"$project": {
+            "_id": 1, "tmdb_id": 1, "title": 1, "genres": 1, "rating": 1,
+            "release_year": 1, "poster": 1, "backdrop": 1, "description": 1,
+            "media_type": 1, "db_index": 1, "imdb_id": 1, "logo": 1, "updated_on": 1
+        }}]
+
+        if tv_match:
+            tv_pipeline.insert(0, {"$match": tv_match})
+        if movie_match:
+            movie_pipeline.insert(0, {"$match": movie_match})
+
+        all_results = []
+
+        # Search ALL databases to ensure correct global sorting
+        for i in range(1, self.current_db_index + 1):
+            db_key = f"storage_{i}"
+            try:
+                tv_docs = await self.dbs[db_key]["tv"].aggregate(tv_pipeline).to_list(None)
+                movie_docs = await self.dbs[db_key]["movie"].aggregate(movie_pipeline).to_list(None)
+                all_results.extend(tv_docs)
+                all_results.extend(movie_docs)
+            except Exception as e:
+                LOGGER.error(f"Error searching {db_key}: {e}")
+
+        # Python-side Sorting
+        reverse_sort = (sort_order.lower() == "desc")
+
+        def get_sort_key(item):
+            val = item.get(sort_by)
+            if val is None:
+                return 0 if sort_by in ["rating", "release_year"] else ""
+            return val
+
+        try:
+            all_results.sort(key=get_sort_key, reverse=reverse_sort)
+        except Exception as e:
+            LOGGER.error(f"Sorting error: {e}")
+
+        total_count = len(all_results)
+
+        # Pagination
+        start = (page - 1) * page_size
+        end = start + page_size
+        paged_results = all_results[start:end]
+
+        return {
+            "total_count": total_count,
+            "results": [convert_objectid_to_str(doc) for doc in paged_results]
+        }
 
 
     async def get_media_details(
