@@ -118,6 +118,26 @@ async def search_suggestions_api(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+async def search_unified_api(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(24, ge=1, le=100),
+    search: str = Query("", max_length=100),
+    sort_by: str = Query("updated_on"),
+    sort_order: str = Query("desc", regex="^(asc|desc)$"),
+    genre: str = Query(None)
+):
+    try:
+        return await db.search_documents(
+            query=search,
+            page=page,
+            page_size=page_size,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            genre=genre
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 async def delete_movie_quality_api(tmdb_id: int, db_index: int, quality: str):
     try:
         result = await db.delete_movie_quality(tmdb_id, db_index, quality)
