@@ -5,7 +5,7 @@ from typing import Optional
 from datetime import datetime, timedelta
 import secrets
 
-from Backend.fastapi.security.credentials import templates
+from Backend.fastapi.routes.template_routes import templates
 from Backend.config import Telegram
 
 router = APIRouter()
