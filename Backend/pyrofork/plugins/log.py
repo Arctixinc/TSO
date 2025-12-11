@@ -14,6 +14,7 @@ from pyrogram.types import (
 from pyrogram.errors import MessageNotModified
 from Backend.helper.custom_filter import CustomFilters
 from Backend.logger import LOGGER
+from Backend.config import Telegram
 
 # -------------------------------
 # CONFIGURABLE CONSTANTS
@@ -133,6 +134,16 @@ async def safe_answer(query: CallbackQuery, text: str = None, show_alert: bool =
 # -------------------------------
 # MARKUPS
 # -------------------------------
+def build_minimal_markup(paste_url: str):
+    buttons = [
+        [InlineKeyboardButton("🔁 Refresh", callback_data="log_refresh")],
+        [InlineKeyboardButton("🌍 URL", url=paste_url)]
+    ]
+    if Telegram.BASE_URL:
+        buttons.append([InlineKeyboardButton("🔴 Live Logs", url=f"{Telegram.BASE_URL}/live-logs")])
+    return InlineKeyboardMarkup(buttons)
+
+
 def build_main_markup(index: int, total: int, url: str, view_mode: str):
     buttons = []
 
@@ -164,7 +175,10 @@ def build_main_markup(index: int, total: int, url: str, view_mode: str):
     ]
     buttons.append(actions_row)
 
-    footer_row = [InlineKeyboardButton("🌍 URL", url=url), InlineKeyboardButton("🚫 Close", callback_data="log_close")]
+    footer_row = [InlineKeyboardButton("🌍 URL", url=url)]
+    if Telegram.BASE_URL:
+        footer_row.append(InlineKeyboardButton("🔴 Live Logs", url=f"{Telegram.BASE_URL}/live-logs"))
+    footer_row.append(InlineKeyboardButton("🚫 Close", callback_data="log_close"))
     buttons.append(footer_row)
 
     return InlineKeyboardMarkup(buttons)
@@ -266,9 +280,7 @@ async def log_command(client: Client, message: Message):
                       "index": index, "selector_start": 0, "view_mode": view_mode}
 
         if total_pages == 1:
-            minimal_markup = InlineKeyboardMarkup(
-                [[InlineKeyboardButton("🔁 Refresh", callback_data="log_refresh")],
-                 [InlineKeyboardButton("🌍 URL", url=paste_url)]])
+            minimal_markup = build_minimal_markup(paste_url)
             sent_msg = await message.reply_text(f"<pre>{await get_page(file_path, 0)}</pre>", reply_markup=minimal_markup)
             LOG_CACHE[sent_msg.id] = temp_cache
             return
@@ -429,12 +441,7 @@ async def unified_log_refresh_handler(client, query: CallbackQuery):
 
         # --- Use minimal markup for single-page logs ---
         if total_pages == 1:
-            minimal_markup = InlineKeyboardMarkup(
-                [
-                    [InlineKeyboardButton("🔁 Refresh", callback_data="log_refresh")],
-                    [InlineKeyboardButton("🌍 URL", url=paste_url)]
-                ]
-            )
+            minimal_markup = build_minimal_markup(paste_url)
             page_content = await get_page(file_path, 0)
             await query.message.edit_text(f"<pre>{page_content}</pre>", reply_markup=minimal_markup)
             return await safe_answer(query, "Log refreshed successfully")
@@ -505,12 +512,7 @@ async def regenerate_expired_log(query: CallbackQuery):
 
     # --- Single-page minimal UI ---
     if total_pages == 1:
-        minimal_markup = InlineKeyboardMarkup(
-            [
-                [InlineKeyboardButton("🔁 Refresh", callback_data="log_refresh")],
-                [InlineKeyboardButton("🌍 URL", url=paste_url)]
-            ]
-        )
+        minimal_markup = build_minimal_markup(paste_url)
         sent_msg = await query.message.reply_text(f"<pre>{pages[0]}</pre>", reply_markup=minimal_markup, quote=True)
 
     # --- Multi-page full UI ---
