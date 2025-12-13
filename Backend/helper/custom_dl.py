@@ -40,7 +40,7 @@ class ByteStreamer:
     ) -> Union[str, None]: 
         """Yields chunks of a file in order, handling partial slicing for first/last chunk."""
         client = self.client
-        work_loads[index] += 1
+        # work_loads[index] += 1  # Removed to handle update in stream_routes.py
         LOGGER.debug(f"Starting to yield file {file_id.unique_id} with client {index}.")
 
         media_session = await self.generate_media_session(client, file_id)
