@@ -5,6 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from Backend import __version__
 
+from Backend.logger import LOGGER
 from Backend.fastapi.security.credentials import require_auth, require_admin, get_current_user_role
 from Backend.fastapi.routes.stream_routes import router as stream_router
 from Backend.fastapi.routes.stremio_routes import router as stremio_router
@@ -35,6 +36,25 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    client_ip = request.client.host if request.client else "Unknown"
+    user_agent = request.headers.get("user-agent", "Unknown")
+
+    # Try to get user from session if available
+    user = "Guest"
+    try:
+        if hasattr(request, "session"):
+             user = request.session.get("username") or "Guest"
+    except Exception:
+        pass
+
+    response = await call_next(request)
+
+    LOGGER.info(f"Request: {client_ip} | User: {user} | {request.method} {request.url.path} | Status: {response.status_code} | User-Agent: {user_agent}")
+
+    return response
 
 try:
     app.mount("/static", StaticFiles(directory="Backend/fastapi/static"), name="static")
