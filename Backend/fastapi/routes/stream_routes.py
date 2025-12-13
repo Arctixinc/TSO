@@ -83,86 +83,92 @@ async def media_streamer(
 
     # Choose least loaded Telegram client
     index = min(work_loads, key=work_loads.get)
+    work_loads[index] += 1
     client = multi_clients[index]
     LOGGER.info(f"Selected client {index} for ChatID: {chat_id}, MsgID: {message_id}")
 
-    # Use cached ByteStreamer instance
-    streamer = class_cache.get(client)
-    if not streamer:
-        streamer = ByteStreamer(client)
-        class_cache[client] = streamer
-        LOGGER.info(f"Created new ByteStreamer for client {index}")
-
-    # Retrieve file metadata
     try:
-        file_id = await streamer.get_file_properties(chat_id, message_id)
-    except Exception as e:
-        LOGGER.error(f"Failed to get file properties: {e}")
-        raise HTTPException(status_code=502, detail="Unable to fetch file properties")
+        # Use cached ByteStreamer instance
+        streamer = class_cache.get(client)
+        if not streamer:
+            streamer = ByteStreamer(client)
+            class_cache[client] = streamer
+            LOGGER.info(f"Created new ByteStreamer for client {index}")
 
-    if file_id.unique_id[:6] != secure_hash:
-        LOGGER.warning(f"Invalid hash for ChatID: {chat_id}, MsgID: {message_id}")
-        raise InvalidHash
+        # Retrieve file metadata
+        try:
+            file_id = await streamer.get_file_properties(chat_id, message_id)
+        except Exception as e:
+            LOGGER.error(f"Failed to get file properties: {e}")
+            raise HTTPException(status_code=502, detail="Unable to fetch file properties")
 
-    file_size = file_id.file_size
-    start, end = parse_range_header(range_header, file_size)
+        if file_id.unique_id[:6] != secure_hash:
+            LOGGER.warning(f"Invalid hash for ChatID: {chat_id}, MsgID: {message_id}")
+            raise InvalidHash
 
-    # Chunk setup
-    chunk_size = 1024 * 1024  # 1 MB
-    offset = start - (start % chunk_size)
-    first_part_cut = start - offset
-    last_part_cut = (end - offset) % chunk_size + 1
-    part_count = ((end - offset) // chunk_size) + 1
+        file_size = file_id.file_size
+        start, end = parse_range_header(range_header, file_size)
 
-    # Sanitize filename
-    file_name = file_id.file_name or f"{secrets.token_hex(2)}.unknown"
-    file_name = re.sub(r'[^A-Za-z0-9._-]', '_', file_name)
+        # Chunk setup
+        chunk_size = 1024 * 1024  # 1 MB
+        offset = start - (start % chunk_size)
+        first_part_cut = start - offset
+        last_part_cut = (end - offset) % chunk_size + 1
+        part_count = ((end - offset) // chunk_size) + 1
 
-    # MIME detection
-    mime_type = file_id.mime_type or mimetypes.guess_type(file_name)[0] or "application/octet-stream"
-    if not file_id.file_name and "/" in mime_type:
-        file_name = f"{secrets.token_hex(2)}.{mime_type.split('/')[1]}"
+        # Sanitize filename
+        file_name = file_id.file_name or f"{secrets.token_hex(2)}.unknown"
+        file_name = re.sub(r'[^A-Za-z0-9._-]', '_', file_name)
 
-    LOGGER.info(
-        f"Streaming {file_name} | ChatID: {chat_id} | MsgID: {message_id} | "
-        f"Range: {start}-{end}/{file_size} | Client: {index}"
+        # MIME detection
+        mime_type = file_id.mime_type or mimetypes.guess_type(file_name)[0] or "application/octet-stream"
+        if not file_id.file_name and "/" in mime_type:
+            file_name = f"{secrets.token_hex(2)}.{mime_type.split('/')[1]}"
+
+        LOGGER.info(
+            f"Streaming {file_name} | ChatID: {chat_id} | MsgID: {message_id} | "
+            f"Range: {start}-{end}/{file_size} | Client: {index}"
     )
 
-    headers = {
-        "Content-Type": mime_type,
-        "Content-Length": str(end - start + 1),
-        "Content-Disposition": f'inline; filename="{file_name}"',
-        "Accept-Ranges": "bytes",
-        "Cache-Control": "public, max-age=3600, immutable",
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges",
-        "ETag": f'"{file_id.unique_id}"',
-    }
+        headers = {
+            "Content-Type": mime_type,
+            "Content-Length": str(end - start + 1),
+            "Content-Disposition": f'inline; filename="{file_name}"',
+            "Accept-Ranges": "bytes",
+            "Cache-Control": "public, max-age=3600, immutable",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges",
+            "ETag": f'"{file_id.unique_id}"',
+        }
 
-    if range_header:
-        headers["Content-Range"] = f"bytes {start}-{end}/{file_size}"
-        status_code = 206
-    else:
-        status_code = 200
+        if range_header:
+            headers["Content-Range"] = f"bytes {start}-{end}/{file_size}"
+            status_code = 206
+        else:
+            status_code = 200
 
-    # For HEAD requests, send headers only
-    if request.method == "HEAD":
-        return Response(status_code=status_code, headers=headers, media_type=mime_type)
+        # For HEAD requests, send headers only
+        if request.method == "HEAD":
+            work_loads[index] -= 1
+            return Response(status_code=status_code, headers=headers, media_type=mime_type)
 
-    # Stream file for GET
-    body = streamer.yield_file(
-        file_id=file_id,
-        index=index,
-        offset=offset,
-        first_part_cut=first_part_cut,
-        last_part_cut=last_part_cut,
-        part_count=part_count,
-        chunk_size=chunk_size,
-    )
+        # Stream file for GET
+        body = streamer.yield_file(
+            file_id=file_id,
+            index=index,
+            offset=offset,
+            first_part_cut=first_part_cut,
+            last_part_cut=last_part_cut,
+            part_count=part_count,
+            chunk_size=chunk_size,
+        )
 
-    return StreamingResponse(
-        status_code=status_code,
-        content=body,
-        headers=headers,
-        media_type=mime_type,
-    )
+        return StreamingResponse(
+            status_code=status_code,
+            content=body,
+            headers=headers,
+            media_type=mime_type,
+        )
+    except Exception:
+        work_loads[index] -= 1
+        raise
