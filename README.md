@@ -12,4 +12,10 @@
   <a href="https://colab.research.google.com/github/weebzone/Colab-Tools/blob/main/telegram%20stremio.ipynb" target="_blank">
     <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open in Colab"/>
   </a>
+</p>
+
+### ⚙️ Configuration:
  
+```env
+REPLACE_MODE=true  # Replace old files of same quality (false = allow duplicates)
+```

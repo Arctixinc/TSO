@@ -118,9 +118,9 @@ async def search_suggestions_api(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-async def delete_movie_quality_api(tmdb_id: int, db_index: int, quality: str):
+async def delete_movie_quality_api(tmdb_id: int, db_index: int, quality_id: str):
     try:
-        result = await db.delete_movie_quality(tmdb_id, db_index, quality)
+        result = await db.delete_movie_quality(tmdb_id, db_index, quality_id)
         if result:
             return {"message": "Quality deleted successfully"}
         else:
@@ -129,10 +129,10 @@ async def delete_movie_quality_api(tmdb_id: int, db_index: int, quality: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 async def delete_tv_quality_api(
-    tmdb_id: int, db_index: int, season: int, episode: int, quality: str
+    tmdb_id: int, db_index: int, season: int, episode: int, quality_id: str
 ):
     try:
-        result = await db.delete_tv_quality(tmdb_id, db_index, season, episode, quality)
+        result = await db.delete_tv_quality(tmdb_id, db_index, season, episode, quality_id)
         if result:
             return {"message": "Quality deleted successfully"}
         else:

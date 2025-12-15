@@ -145,12 +145,12 @@ async def update_media(request: Request, tmdb_id: int, db_index: int, media_type
     return await update_media_api(request, tmdb_id, db_index, media_type)
 
 @app.delete("/api/media/delete-quality")
-async def delete_movie_quality(tmdb_id: int, db_index: int, quality: str, _: bool = Depends(require_admin)):
-    return await delete_movie_quality_api(tmdb_id, db_index, quality)
+async def delete_movie_quality(tmdb_id: int, db_index: int, quality_id: str, _: bool = Depends(require_admin)):
+    return await delete_movie_quality_api(tmdb_id, db_index, quality_id)
 
 @app.delete("/api/media/delete-tv-quality")
-async def delete_tv_quality(tmdb_id: int, db_index: int, season: int, episode: int, quality: str, _: bool = Depends(require_admin)):
-    return await delete_tv_quality_api(tmdb_id, db_index, season, episode, quality)
+async def delete_tv_quality(tmdb_id: int, db_index: int, season: int, episode: int, quality_id: str, _: bool = Depends(require_admin)):
+    return await delete_tv_quality_api(tmdb_id, db_index, season, episode, quality_id)
 
 @app.delete("/api/media/delete-tv-episode")
 async def delete_tv_episode(tmdb_id: int, db_index: int, season: int, episode: int, _: bool = Depends(require_admin)):
