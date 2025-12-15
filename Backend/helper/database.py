@@ -76,6 +76,30 @@ class Database:
             upsert=True
         )
 
+    # -------------------------------
+    # Configuration Management
+    # -------------------------------
+    async def get_config(self, key: str, default: Any = None) -> Any:
+        doc = await self.dbs["tracking"]["settings"].find_one({"_id": key})
+        return doc["value"] if doc else default
+
+    async def set_config(self, key: str, value: Any):
+        await self.dbs["tracking"]["settings"].update_one(
+            {"_id": key},
+            {"$set": {"value": value}},
+            upsert=True
+        )
+
+    async def load_configurations(self):
+        """Load settings from DB and override Telegram config."""
+        cursor = self.dbs["tracking"]["settings"].find({})
+        async for doc in cursor:
+            key = doc["_id"]
+            value = doc["value"]
+            if hasattr(Telegram, key):
+                setattr(Telegram, key, value)
+                LOGGER.info(f"Config '{key}' updated from DB: {value}")
+
 
     # =====================================================
     # 🔹 Helper: Sort telegram qualities numerically
