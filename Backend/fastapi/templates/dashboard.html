@@ -114,11 +114,11 @@
                                 <span class="text-primary font-semibold">{{ "{:,}".format(db_stat.tv_count) }}</span>
                             </div>
                             <div class="mt-4">
+                                {% set storage_percent = (db_stat.storageSize / (500 * 1024 * 1024) * 100) | round %}
                                 <div class="flex justify-between text-sm mb-1">
                                     <span class="theme-text-secondary">Storage Used</span>
-                                    <span class="text-xs">{{ "%.1f"|format(db_stat.storageSize / 1024 / 1024) }} MB</span>
+                                    <span class="text-xs">{{ "%.1f"|format(db_stat.storageSize / 1024 / 1024) }} MB ({{ storage_percent|int }}%)</span>
                                 </div>
-                                {% set storage_percent = (db_stat.storageSize / (500 * 1024 * 1024) * 100) | round %}
                                 <div class="w-full bg-gray-200 rounded-full h-2">
                                     <div class="theme-primary h-2 rounded-full" style="width: {{ storage_percent }}%"></div>
                                 </div>
