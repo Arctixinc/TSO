@@ -219,26 +219,26 @@ async def restart_notification():
 
 # Bot commands
 commands = [
-    BotCommand("start",      "🚀 Start the bot"),
-    BotCommand("health",     "❤️ Check bot health"),
-    BotCommand("set",        "🎬 Add IMDb metadata"),
-    BotCommand("log",        "📄 Get log file"),
-    BotCommand("info",       "ℹ️ Get media info"),
-    BotCommand("find",       "🔎 Search media in database"),
-    BotCommand("latest",     "🆕 Show latest media"),
-    BotCommand("random",     "🎲 Get random media"),
-    BotCommand("smartclean", "🧹 Smart scanning ultra speed"),
-    BotCommand("scan",       "🔍 Scan channels for videos"),
-    BotCommand("stats",      "📊 View database stats"),
-    BotCommand("cleanup",    "🧹 Remove broken links"),
-    BotCommand("dbcleanup",  "🗑️ Delete duplicate entries"),
+    BotCommand("start",       "🚀 Start the bot"),
+    BotCommand("health",      "❤️ Check bot health"),
+    BotCommand("mode",        "⚙️ Manage configuration"),
+    BotCommand("set",         "🎬 Add IMDb metadata"),
+    BotCommand("log",         "📄 Get log file"),
+    BotCommand("info",        "ℹ️ Get media info"),
+    BotCommand("find",        "🔎 Search media in database"),
+    BotCommand("latest",      "🆕 Show latest media"),
+    BotCommand("random",      "🎲 Get random media"),
+    BotCommand("smartclean",  "🧹 Smart scanning ultra speed"),
+    BotCommand("scan",        "🔍 Scan channels for videos"),
+    BotCommand("stats",       "📊 View database stats"),
+    BotCommand("cleanup",     "🧹 Remove broken links"),
+    BotCommand("dbcleanup",   "🗑️ Delete duplicate entries"),
     BotCommand("fixmetadata", "🔧 Fix metadata"),
-    BotCommand("users",      "👥 Manage users"),
-    BotCommand("eval",       "🧠 Run Python code"),
-    BotCommand("shell",      "💻 Run shell commands"),
-    BotCommand("restart",    "♻️ Restart the bot"),
+    BotCommand("users",       "👥 Manage users"),
+    BotCommand("eval",        "🧠 Run Python code"),
+    BotCommand("shell",       "💻 Run shell commands"),
+    BotCommand("restart",     "♻️ Restart the bot"),
 ]
-
 
 async def setup_bot_commands(bot: Client):
     try:
