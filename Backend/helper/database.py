@@ -297,8 +297,8 @@ class Database:
         existing_qualities = existing_movie.get("telegram", [])
         matching_quality = next((q for q in existing_qualities if q["quality"] == target_quality), None)
     
-        # 🎯 If same quality exists, replace and delete old file
-        if matching_quality:
+        # 🎯 If same quality exists, replace and delete old file (if REPLACE_MODE is True)
+        if matching_quality and Telegram.REPLACE_MODE:
             try:
                 old_id = matching_quality.get("id")
                 if old_id:
@@ -395,7 +395,7 @@ class Database:
                                  if q.get("quality") == quality.get("quality")),
                                 None
                             )
-                            if existing_quality:
+                            if existing_quality and Telegram.REPLACE_MODE:
                                 try:
                                     old_id = existing_quality.get("id")
                                     if old_id:
@@ -818,7 +818,7 @@ class Database:
 
 
     # Delete a specific quality from movie
-    async def delete_movie_quality(self, tmdb_id: int, db_index: int, quality: str) -> bool:
+    async def delete_movie_quality(self, tmdb_id: int, db_index: int, quality_id: str) -> bool:
         db_key = f"storage_{db_index}"
         movie = await self.dbs[db_key]["movie"].find_one({"tmdb_id": tmdb_id})
         
@@ -826,7 +826,7 @@ class Database:
             return False
 
         for q in movie["telegram"]:
-            if q.get("quality") == quality:
+            if q.get("id") == quality_id:
                 try:
                     old_id = q.get("id")
                     if old_id:
@@ -839,7 +839,7 @@ class Database:
                 break
         
         original_len = len(movie["telegram"])
-        movie["telegram"] = [q for q in movie["telegram"] if q.get("quality") != quality]
+        movie["telegram"] = [q for q in movie["telegram"] if q.get("id") != quality_id]
         
         if len(movie["telegram"]) == original_len:
             return False
@@ -919,7 +919,7 @@ class Database:
         return result.modified_count > 0
 
     # Delete a specific quality from a given TV episode
-    async def delete_tv_quality(self, tmdb_id: int, db_index: int, season_number: int, episode_number: int, quality: str) -> bool:
+    async def delete_tv_quality(self, tmdb_id: int, db_index: int, season_number: int, episode_number: int, quality_id: str) -> bool:
         db_key = f"storage_{db_index}"
         tv = await self.dbs[db_key]["tv"].find_one({"tmdb_id": tmdb_id})
         
@@ -932,7 +932,7 @@ class Database:
                 for episode in season["episodes"]:
                     if episode.get("episode_number") == episode_number and "telegram" in episode:
                         for q in episode["telegram"]:
-                            if q.get("quality") == quality:
+                            if q.get("id") == quality_id:
                                 try:
                                     old_id = q.get("id")
                                     if old_id:
@@ -945,7 +945,7 @@ class Database:
                                 break
                         
                         original_len = len(episode["telegram"])
-                        episode["telegram"] = [q for q in episode["telegram"] if q.get("quality") != quality]
+                        episode["telegram"] = [q for q in episode["telegram"] if q.get("id") != quality_id]
                         found = original_len > len(episode["telegram"])
                         break
         

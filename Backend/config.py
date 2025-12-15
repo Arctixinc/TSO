@@ -24,4 +24,6 @@ class Telegram:
 
     ADMIN_USERNAME = getenv("ADMIN_USERNAME", "fyvio")
     ADMIN_PASSWORD = getenv("ADMIN_PASSWORD", "fyvio")
+
+    REPLACE_MODE = getenv("REPLACE_MODE", "true").lower() == "true"
     
