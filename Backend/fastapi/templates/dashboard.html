@@ -182,6 +182,35 @@
             </div>
         </div>
 
+        <!-- Live Logs Section -->
+        <div class="mb-12">
+            <h2 class="text-2xl font-bold mb-6">System Logs</h2>
+            <div class="theme-card rounded-xl p-8 shadow-xl">
+                 <div class="flex items-center justify-between mb-6">
+                    <div class="flex items-center">
+                        <div class="w-12 h-12 theme-primary rounded-lg flex items-center justify-center mr-4 bg-opacity-20 text-primary">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                            </svg>
+                        </div>
+                        <h3 class="text-2xl font-semibold">Live Logs</h3>
+                    </div>
+                    <div class="flex space-x-3">
+                        <button id="toggle-logs-btn" onclick="toggleLogs()" class="theme-primary text-on-primary px-4 py-2 rounded-lg font-semibold hover:opacity-90 transition-colors">
+                            Connect
+                        </button>
+                        <button onclick="clearLogs()" class="bg-gray-600 text-white px-4 py-2 rounded-lg font-semibold hover:opacity-90 transition-colors">
+                            Clear
+                        </button>
+                    </div>
+                </div>
+
+                <div id="log-terminal" class="bg-gray-900 text-green-400 font-mono text-sm p-4 rounded-lg h-[500px] overflow-y-auto whitespace-pre-wrap leading-tight shadow-inner">
+                    <div class="text-gray-500 italic">Click 'Connect' to stream live logs...</div>
+                </div>
+            </div>
+        </div>
+
         <!-- Stremio Addon Section -->
         <div class="theme-card rounded-xl p-8 shadow-xl">
             <div class="text-center mb-8">
@@ -237,6 +266,95 @@
 </div>
 
 <script>
+let logReader = null;
+let abortController = null;
+let isConnecting = false;
+
+async function toggleLogs() {
+    const btn = document.getElementById('toggle-logs-btn');
+    const terminal = document.getElementById('log-terminal');
+
+    if (isConnecting) return;
+
+    if (logReader) {
+        // Stop
+        abortController.abort();
+        logReader = null;
+        btn.textContent = 'Connect';
+        btn.classList.remove('bg-red-600');
+        btn.classList.add('theme-primary');
+        const msg = document.createElement('div');
+        msg.textContent = '\n[Connection closed]';
+        msg.className = 'text-yellow-500';
+        terminal.appendChild(msg);
+    } else {
+        // Start
+        isConnecting = true;
+
+        if (terminal.textContent.includes("Click 'Connect'")) {
+             terminal.innerHTML = '';
+        }
+
+        const originalText = btn.textContent;
+        btn.textContent = 'Connecting...';
+
+        abortController = new AbortController();
+
+        try {
+            const response = await fetch('/live-logs', { signal: abortController.signal });
+
+            btn.textContent = 'Disconnect';
+            btn.classList.remove('theme-primary');
+            btn.classList.add('bg-red-600');
+
+            const reader = response.body.getReader();
+            logReader = reader;
+            const decoder = new TextDecoder();
+
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+
+                const text = decoder.decode(value, { stream: true });
+                const span = document.createElement('span');
+                span.textContent = text;
+                terminal.appendChild(span);
+
+                // Auto scroll if near bottom
+                if (terminal.scrollHeight - terminal.scrollTop - terminal.clientHeight < 100) {
+                    terminal.scrollTop = terminal.scrollHeight;
+                }
+            }
+        } catch (err) {
+            if (err.name !== 'AbortError') {
+                console.error('Log stream error:', err);
+                const msg = document.createElement('div');
+                msg.textContent = `\n[Error: ${err.message}]`;
+                msg.className = 'text-red-500';
+                terminal.appendChild(msg);
+
+                // Reset UI on error if not aborted
+                btn.textContent = 'Connect';
+                btn.classList.remove('bg-red-600');
+                btn.classList.add('theme-primary');
+            }
+        } finally {
+             isConnecting = false;
+             // If loop broke naturally (end of stream)
+             if (logReader) {
+                 logReader = null;
+                 btn.textContent = 'Connect';
+                 btn.classList.remove('bg-red-600');
+                 btn.classList.add('theme-primary');
+             }
+        }
+    }
+}
+
+function clearLogs() {
+    document.getElementById('log-terminal').innerHTML = '';
+}
+
 function copyToClipboard() {
     const manifestUrl = document.getElementById('manifest-url').value;
     navigator.clipboard.writeText(manifestUrl).then(function() {
