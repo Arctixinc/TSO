@@ -205,7 +205,7 @@
                     </div>
                 </div>
 
-                <div id="log-terminal" class="bg-gray-900 text-green-400 font-mono text-sm p-4 rounded-lg h-[500px] overflow-y-auto whitespace-pre-wrap leading-tight shadow-inner">
+                <div id="log-terminal" class="bg-gray-900 text-green-400 font-mono text-xs md:text-sm p-4 rounded-lg h-96 md:h-[500px] overflow-y-auto whitespace-pre-wrap break-all leading-snug shadow-inner">
                     <div class="text-gray-500 italic">Click 'Connect' to stream live logs...</div>
                 </div>
             </div>
@@ -274,7 +274,21 @@ async function toggleLogs() {
     const btn = document.getElementById('toggle-logs-btn');
     const terminal = document.getElementById('log-terminal');
 
-    if (isConnecting) return;
+    // Allow cancelling connection attempt
+    if (isConnecting) {
+        if (abortController) {
+            abortController.abort();
+        }
+        isConnecting = false;
+        btn.textContent = 'Connect';
+        btn.classList.remove('bg-red-600');
+        btn.classList.add('theme-primary');
+        const msg = document.createElement('div');
+        msg.textContent = '\n[Connection cancelled]';
+        msg.className = 'text-yellow-500';
+        terminal.appendChild(msg);
+        return;
+    }
 
     if (logReader) {
         // Stop
@@ -303,6 +317,10 @@ async function toggleLogs() {
         try {
             const response = await fetch('/live-logs', { signal: abortController.signal });
 
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
             btn.textContent = 'Disconnect';
             btn.classList.remove('theme-primary');
             btn.classList.add('bg-red-600');
@@ -310,6 +328,9 @@ async function toggleLogs() {
             const reader = response.body.getReader();
             logReader = reader;
             const decoder = new TextDecoder();
+
+            // Connection established, allow disconnecting now
+            isConnecting = false;
 
             while (true) {
                 const { value, done } = await reader.read();
@@ -326,6 +347,7 @@ async function toggleLogs() {
                 }
             }
         } catch (err) {
+            isConnecting = false; // Ensure flag is reset on error
             if (err.name !== 'AbortError') {
                 console.error('Log stream error:', err);
                 const msg = document.createElement('div');
@@ -337,15 +359,19 @@ async function toggleLogs() {
                 btn.textContent = 'Connect';
                 btn.classList.remove('bg-red-600');
                 btn.classList.add('theme-primary');
+                logReader = null;
             }
         } finally {
-             isConnecting = false;
-             // If loop broke naturally (end of stream)
-             if (logReader) {
+             // If loop broke naturally (end of stream), logic is handled inside catch or loop end
+             if (logReader && !abortController.signal.aborted) {
                  logReader = null;
                  btn.textContent = 'Connect';
                  btn.classList.remove('bg-red-600');
                  btn.classList.add('theme-primary');
+                 const msg = document.createElement('div');
+                 msg.textContent = '\n[Stream ended]';
+                 msg.className = 'text-yellow-500';
+                 terminal.appendChild(msg);
              }
         }
     }
