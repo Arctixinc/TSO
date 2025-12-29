@@ -85,7 +85,7 @@
 
                             <td class="px-4 py-3 text-right">
                                 {% if not item.is_dir %}
-                                <a href="/explorer?path={{ item.path }}"
+                                <a href="/explorer?path={{ item.path }}&download=1"
                                    class="text-green-500 hover:text-green-400"
                                    title="Download">
                                     <i class="fas fa-download"></i>
@@ -111,10 +111,10 @@
                 {% endif %}
 
                 {% for item in items %}
-                <a href="/explorer?path={{ item.path }}"
-                   class="flex items-center justify-between p-3 rounded-lg bg-gray-900 hover:bg-gray-800 transition">
+                <div class="flex items-center justify-between p-3 rounded-lg bg-gray-900 hover:bg-gray-800 transition">
 
-                    <div class="flex items-center gap-3 min-w-0">
+                    <a href="/explorer?path={{ item.path }}"
+                       class="flex items-center gap-3 min-w-0 flex-1">
                         {% if item.is_dir %}
                             <i class="fas fa-folder text-yellow-500 text-lg"></i>
                         {% else %}
@@ -129,12 +129,15 @@
                                 {{ "Folder" if item.is_dir else item.size }}
                             </p>
                         </div>
-                    </div>
+                    </a>
 
                     {% if not item.is_dir %}
-                    <i class="fas fa-download text-green-500"></i>
+                    <a href="/explorer?path={{ item.path }}&download=1"
+                       class="text-green-500 ml-3">
+                        <i class="fas fa-download"></i>
+                    </a>
                     {% endif %}
-                </a>
+                </div>
                 {% endfor %}
 
                 {% if not items %}
