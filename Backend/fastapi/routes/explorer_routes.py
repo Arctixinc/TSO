@@ -22,14 +22,14 @@ PROJECT_ROOT = os.path.abspath(
 )
 
 # ============================================================
-# UTIL
+# UTILS
 # ============================================================
-def get_readable_size(size_in_bytes: int) -> str:
+def get_readable_size(size: int) -> str:
     for unit in ["B", "KB", "MB", "GB", "TB"]:
-        if size_in_bytes < 1024.0:
-            return f"{size_in_bytes:.2f} {unit}"
-        size_in_bytes /= 1024.0
-    return f"{size_in_bytes:.2f} PB"
+        if size < 1024:
+            return f"{size:.2f} {unit}"
+        size /= 1024
+    return f"{size:.2f} PB"
 
 
 # ============================================================
@@ -62,15 +62,35 @@ async def explorer(
         raise HTTPException(status_code=404, detail="Path not found")
 
     # --------------------------------------------------------
-    # FILE DOWNLOAD (FIXED FILENAME ISSUE)
+    # FILE HANDLING (INLINE vs DOWNLOAD)
     # --------------------------------------------------------
     if os.path.isfile(full_path):
         mime_type, _ = mimetypes.guess_type(full_path)
+        filename = os.path.basename(full_path)
 
+        force_download = request.query_params.get("download") == "1"
+
+        FORCE_DOWNLOAD_EXTS = {
+            ".env", ".session", ".key", ".pem", ".db"
+        }
+
+        ext = os.path.splitext(filename)[1].lower()
+
+        # ---- FORCE DOWNLOAD ----
+        if force_download or ext in FORCE_DOWNLOAD_EXTS:
+            return FileResponse(
+                path=full_path,
+                filename=filename,
+                media_type="application/octet-stream",
+            )
+
+        # ---- INLINE PREVIEW ----
         return FileResponse(
             path=full_path,
-            filename=os.path.basename(full_path),  # ✅ FIX
             media_type=mime_type or "application/octet-stream",
+            headers={
+                "Content-Disposition": f'inline; filename="{filename}"'
+            },
         )
 
     # --------------------------------------------------------
@@ -103,9 +123,6 @@ async def explorer(
     except PermissionError:
         raise HTTPException(status_code=403, detail="Permission denied")
 
-    # --------------------------------------------------------
-    # SORT: DIRS FIRST
-    # --------------------------------------------------------
     items.sort(key=lambda x: (not x["is_dir"], x["name"].lower()))
 
     # --------------------------------------------------------
@@ -132,7 +149,7 @@ async def explorer(
             path_parts.append({"name": part, "full_path": current})
 
     # --------------------------------------------------------
-    # THEME + USER CONTEXT
+    # THEME + USER
     # --------------------------------------------------------
     theme_name = request.session.get("theme", "purple_gradient")
     theme = get_theme(theme_name)
