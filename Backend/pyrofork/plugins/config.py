@@ -1,3 +1,4 @@
+import asyncio
 from pyrogram import Client, filters, enums
 from pyrogram.types import (
     Message,
@@ -17,125 +18,81 @@ from Backend.logger import LOGGER
 from Backend import db
 
 # ==================================================
-# UI TEXT TEMPLATES
+# INLINE EDIT STATE
 # ==================================================
-
-CONFIG_HEADER = (
-    "🧠 **Backend Configuration Panel**\n"
-    "━━━━━━━━━━━━━━━━━━━━━━\n"
-    "Manage system variables dynamically.\n\n"
-    "Select a setting below:"
-)
-
-EDIT_TEMPLATE = (
-    "✏️ **Edit Configuration**\n"
-    "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-    "🔧 **Variable:** `{key}`\n"
-    "📌 **Current Value:** `{current}`\n\n"
-    "📝 Send the **new value** below.\n"
-    "⏱ Timeout: 60 seconds"
-)
-
-SUCCESS_TEMPLATE = (
-    "✅ **Configuration Updated**\n"
-    "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-    "🔧 **Variable:** `{key}`\n"
-    "🆕 **New Value:** `{value}`\n\n"
-    "⚠️ Restart required to apply changes."
-)
-
-TIMEOUT_TEMPLATE = (
-    "⌛ **Timed Out**\n"
-    "━━━━━━━━━━━━━━━━━━━━━━\n\n"
-    "No input received.\n"
-    "Please try again."
-)
+CONFIG_EDIT_STATE: dict[int, dict] = {}
 
 # ==================================================
 # CONFIG HELPERS
 # ==================================================
-
 EXCLUDE_CONFIGS = {"API_ID", "API_HASH", "DATABASE"}
 
 def get_editable_configs():
     return sorted(
-        key for key in dir(Telegram)
-        if not key.startswith("_")
-        and key not in EXCLUDE_CONFIGS
-        and not callable(getattr(Telegram, key))
+        k for k in dir(Telegram)
+        if not k.startswith("_")
+        and k not in EXCLUDE_CONFIGS
+        and not callable(getattr(Telegram, k))
     )
 
+# ==================================================
+# UI BUILDERS
+# ==================================================
 
-def build_config_markup(page: int = 0, page_size: int = 6):
+def build_main_menu(page: int = 0, page_size: int = 6):
     configs = get_editable_configs()
     total_pages = (len(configs) + page_size - 1) // page_size
+    batch = configs[page * page_size:(page + 1) * page_size]
 
-    start = page * page_size
-    batch = configs[start:start + page_size]
+    buttons = [
+        [InlineKeyboardButton(f"⚙️ {k}", callback_data=f"cfg_var_{k}")]
+        for k in batch
+    ]
 
-    buttons = []
-
-    # Config buttons (2 per row)
-    row = []
-    for key in batch:
-        row.append(
-            InlineKeyboardButton(f"⚙️ {key}", callback_data=f"conf_edit_{key}")
-        )
-        if len(row) == 2:
-            buttons.append(row)
-            row = []
-    if row:
-        buttons.append(row)
-
-    # Navigation
     nav = []
     if page > 0:
-        nav.append(InlineKeyboardButton("⬅️ Previous", callback_data=f"conf_page_{page-1}"))
+        nav.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"cfg_page_{page-1}"))
     if page < total_pages - 1:
-        nav.append(InlineKeyboardButton("Next ➡️", callback_data=f"conf_page_{page+1}"))
+        nav.append(InlineKeyboardButton("Next ➡️", callback_data=f"cfg_page_{page+1}"))
     if nav:
         buttons.append(nav)
 
-    # Footer
     buttons.append([
-        InlineKeyboardButton("🔄 Restart Backend", callback_data="conf_restart"),
-        InlineKeyboardButton("❌ Close Panel", callback_data="conf_close")
+        InlineKeyboardButton("🔄 Restart", callback_data="cfg_restart"),
+        InlineKeyboardButton("❌ Close", callback_data="cfg_close")
     ])
-
     return InlineKeyboardMarkup(buttons)
 
+
+def build_variable_menu(key: str):
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("✏️ Edit Value", callback_data=f"cfg_edit_{key}")],
+        [InlineKeyboardButton("📌 Show Default", callback_data=f"cfg_default_{key}")],
+        [
+            InlineKeyboardButton("🔄 Restart", callback_data="cfg_restart"),
+            InlineKeyboardButton("🔙 Back", callback_data="cfg_back")
+        ]
+    ])
+
 # ==================================================
-# RESTART LOGIC
+# RESTART LOGIC (INLINE)
 # ==================================================
 
-async def perform_restart(client: Client, chat_id: int, message_id: int | None = None):
+async def perform_restart_inline(client: Client, chat_id: int, message_id: int):
     try:
-        text = (
-            "<blockquote>"
-            "⚙️ Restarting Backend API...\n\n"
-            "✨ Please wait as we bring everything back online! 🚀"
-            "</blockquote>"
+        await client.edit_message_text(
+            chat_id,
+            message_id,
+            "<blockquote>⚙️ Restarting Backend API...\n\n"
+            "✨ Please wait as we bring everything back online! 🚀</blockquote>",
+            parse_mode=enums.ParseMode.HTML
         )
-
-        if message_id:
-            restart_message = await client.edit_message_text(
-                chat_id,
-                message_id,
-                text,
-                parse_mode=enums.ParseMode.HTML
-            )
-        else:
-            restart_message = await client.send_message(
-                chat_id,
-                text,
-                parse_mode=enums.ParseMode.HTML
-            )
 
         proc = await create_subprocess_exec("uv", "run", "update.py")
         await gather(proc.wait())
 
         async with aiopen(".restartmsg", "w") as f:
-            await f.write(f"{restart_message.chat.id}\n{restart_message.id}\n")
+            await f.write(f"{chat_id}\n{message_id}\n")
 
         uv_path = shutil.which("uv")
         if not uv_path:
@@ -146,25 +103,22 @@ async def perform_restart(client: Client, chat_id: int, message_id: int | None =
 
     except Exception as e:
         LOGGER.error(f"Restart failed: {e}")
-        await client.send_message(chat_id, "❌ **Restart failed. Check logs.**")
+        await client.edit_message_text(
+            chat_id,
+            message_id,
+            "❌ **Restart failed. Check logs.**",
+            parse_mode=enums.ParseMode.MARKDOWN
+        )
 
 # ==================================================
-# /restart COMMAND
-# ==================================================
-
-@Client.on_message(filters.command("restart") & filters.private & CustomFilters.owner, group=10)
-async def restart_command(client: Client, message: Message):
-    await perform_restart(client, message.chat.id)
-
-# ==================================================
-# /config COMMAND
+# /config ENTRY
 # ==================================================
 
 @Client.on_message(filters.command("config") & filters.private & CustomFilters.owner)
-async def config_handler(client: Client, message: Message):
+async def config_entry(client: Client, message: Message):
     await message.reply_text(
-        CONFIG_HEADER,
-        reply_markup=build_config_markup(0),
+        "🧠 **Configuration Panel**\n\nSelect a variable:",
+        reply_markup=build_main_menu(),
         parse_mode=enums.ParseMode.MARKDOWN
     )
 
@@ -172,92 +126,150 @@ async def config_handler(client: Client, message: Message):
 # CALLBACK HANDLER
 # ==================================================
 
-@Client.on_callback_query(filters.regex("^conf_"))
+@Client.on_callback_query(filters.regex("^cfg_"))
 async def config_callback(client: Client, query: CallbackQuery):
+    await query.answer()
     data = query.data
+    msg = query.message
+    uid = query.from_user.id
 
     # Close
-    if data == "conf_close":
-        await query.message.delete()
-        await query.answer()
-        return
-
-    # Pagination
-    if data.startswith("conf_page_"):
-        page = int(data.split("_")[-1])
-        await query.message.edit_text(
-            CONFIG_HEADER,
-            reply_markup=build_config_markup(page),
-            parse_mode=enums.ParseMode.MARKDOWN
-        )
-        await query.answer()
+    if data == "cfg_close":
+        CONFIG_EDIT_STATE.pop(uid, None)
+        await msg.delete()
         return
 
     # Restart
-    if data == "conf_restart":
-        await query.answer()
-        await perform_restart(client, query.message.chat.id, query.message.id)
+    if data == "cfg_restart":
+        CONFIG_EDIT_STATE.pop(uid, None)
+        await perform_restart_inline(client, msg.chat.id, msg.id)
+        return
+
+    # Pagination
+    if data.startswith("cfg_page_"):
+        page = int(data.split("_")[-1])
+        await msg.edit_text(
+            "🧠 **Configuration Panel**\n\nSelect a variable:",
+            reply_markup=build_main_menu(page),
+            parse_mode=enums.ParseMode.MARKDOWN
+        )
+        return
+
+    # Back
+    if data == "cfg_back":
+        CONFIG_EDIT_STATE.pop(uid, None)
+        await msg.edit_text(
+            "🧠 **Configuration Panel**\n\nSelect a variable:",
+            reply_markup=build_main_menu(),
+            parse_mode=enums.ParseMode.MARKDOWN
+        )
+        return
+
+    # Variable select
+    if data.startswith("cfg_var_"):
+        key = data.replace("cfg_var_", "")
+        value = getattr(Telegram, key, "N/A")
+
+        await msg.edit_text(
+            f"⚙️ **{key}**\n\nCurrent Value:\n`{value}`",
+            reply_markup=build_variable_menu(key),
+            parse_mode=enums.ParseMode.MARKDOWN
+        )
+        return
+
+    # Show default
+    if data.startswith("cfg_default_"):
+        key = data.replace("cfg_default_", "")
+        default = getattr(Telegram.__class__, key, "Unknown")
+
+        await msg.edit_text(
+            f"📌 **Default Value**\n\n"
+            f"🔧 `{key}`\n"
+            f"`{default}`",
+            reply_markup=build_variable_menu(key),
+            parse_mode=enums.ParseMode.MARKDOWN
+        )
         return
 
     # Edit
-    if data.startswith("conf_edit_"):
-        key = data.replace("conf_edit_", "")
-        current = getattr(Telegram, key, "N/A")
+    if data.startswith("cfg_edit_"):
+        key = data.replace("cfg_edit_", "")
+        CONFIG_EDIT_STATE[uid] = {
+            "key": key,
+            "chat_id": msg.chat.id,
+            "message_id": msg.id
+        }
 
-        await query.answer()
-
-        try:
-            reply: Message = await client.ask(
-                chat_id=query.message.chat.id,
-                text=EDIT_TEMPLATE.format(key=key, current=current),
-                filters=filters.text,
-                timeout=60,
-                parse_mode=enums.ParseMode.MARKDOWN
-            )
-        except TimeoutError:
-            await query.message.edit_text(
-                TIMEOUT_TEMPLATE,
-                reply_markup=build_config_markup(0),
-                parse_mode=enums.ParseMode.MARKDOWN
-            )
-            return
-
-        raw = reply.text.strip()
-
-        # Cleanup
-        try:
-            await reply.delete()
-            if reply.reply_to_message:
-                await reply.reply_to_message.delete()
-        except:
-            pass
-
-        # Type inference
-        if raw.lower() == "true":
-            value = True
-        elif raw.lower() == "false":
-            value = False
-        elif raw.isdigit():
-            value = int(raw)
-        else:
-            value = raw
-
-        try:
-            await db.set_config(key, value)
-            setattr(Telegram, key, value)
-        except Exception as e:
-            LOGGER.error(f"Config update failed: {e}")
-            await query.message.edit_text(
-                "❌ **Failed to update configuration.**",
-                reply_markup=build_config_markup(0)
-            )
-            return
-
-        await query.message.edit_text(
-            SUCCESS_TEMPLATE.format(key=key, value=value),
+        await msg.edit_text(
+            f"✏️ **Editing `{key}`**\n\n"
+            "Send the **new value** now.\n"
+            "⏱ Timeout: 60 seconds",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔄 Restart Now", callback_data="conf_restart")],
-                [InlineKeyboardButton("🔙 Back to Settings", callback_data="conf_page_0")]
+                [InlineKeyboardButton("❌ Cancel", callback_data="cfg_back")]
             ]),
             parse_mode=enums.ParseMode.MARKDOWN
         )
+
+        asyncio.create_task(edit_timeout(client, uid))
+
+# ==================================================
+# TEXT INPUT HANDLER
+# ==================================================
+
+@Client.on_message(filters.private & filters.text & CustomFilters.owner)
+async def config_text_input(client: Client, message: Message):
+    uid = message.from_user.id
+    state = CONFIG_EDIT_STATE.get(uid)
+
+    if not state:
+        return
+
+    await message.delete()
+
+    key = state["key"]
+    raw = message.text.strip()
+
+    if raw.lower() == "true":
+        value = True
+    elif raw.lower() == "false":
+        value = False
+    elif raw.isdigit():
+        value = int(raw)
+    else:
+        value = raw
+
+    await db.set_config(key, value)
+    setattr(Telegram, key, value)
+
+    await client.edit_message_text(
+        state["chat_id"],
+        state["message_id"],
+        f"✅ **Updated Successfully**\n\n"
+        f"🔧 `{key}`\n"
+        f"🆕 `{value}`",
+        reply_markup=build_variable_menu(key),
+        parse_mode=enums.ParseMode.MARKDOWN
+    )
+
+    CONFIG_EDIT_STATE.pop(uid, None)
+
+# ==================================================
+# TIMEOUT HANDLER
+# ==================================================
+
+async def edit_timeout(client: Client, user_id: int):
+    await asyncio.sleep(60)
+
+    state = CONFIG_EDIT_STATE.get(user_id)
+    if not state:
+        return
+
+    await client.edit_message_text(
+        state["chat_id"],
+        state["message_id"],
+        "⌛ **Timed Out**\n\nReturning to configuration menu.",
+        reply_markup=build_main_menu(),
+        parse_mode=enums.ParseMode.MARKDOWN
+    )
+
+    CONFIG_EDIT_STATE.pop(user_id, None)
