@@ -97,6 +97,32 @@ class Database:
             key = doc["_id"]
             value = doc["value"]
             if hasattr(Telegram, key):
+                # Type casting based on existing attribute type
+                current_val = getattr(Telegram, key)
+                try:
+                    if isinstance(current_val, bool):
+                        if isinstance(value, str):
+                            value = value.lower() == "true"
+                        else:
+                            value = bool(value)
+                    elif isinstance(current_val, int):
+                        value = int(value)
+                    elif isinstance(current_val, list):
+                        if isinstance(value, str):
+                            # Assume comma separated if string
+                            if "," in value:
+                                value = [x.strip() for x in value.split(",") if x.strip()]
+                                # Convert items to int if original list had ints
+                                if current_val and isinstance(current_val[0], int):
+                                    value = [int(x) for x in value]
+                            else:
+                                value = [] # or [value] depending on logic
+                        elif isinstance(value, list):
+                            pass # already list
+                except Exception as e:
+                    LOGGER.error(f"Failed to cast config {key}: {e}")
+                    continue
+
                 setattr(Telegram, key, value)
                 LOGGER.info(f"Config '{key}' updated from DB: {value}")
 

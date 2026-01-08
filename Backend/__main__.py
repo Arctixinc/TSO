@@ -21,6 +21,10 @@ async def start_services():
         
         await db.connect()
         await asleep(1.2)
+
+        LOGGER.info("Loading dynamic configurations...")
+        await db.load_configurations()
+        await asleep(1.2)
         
         await StreamBot.start()
         StreamBot.username = StreamBot.me.username
