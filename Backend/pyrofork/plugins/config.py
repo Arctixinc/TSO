@@ -62,7 +62,7 @@ def build_config_markup(page: int = 0, page_size: int = 6):
     return InlineKeyboardMarkup(buttons)
 
 # ==================================================
-# SHARED RESTART LOGIC (SINGLE SOURCE)
+# SHARED RESTART LOGIC
 # ==================================================
 
 async def perform_restart(client: Client, chat_id: int, message_id: int | None = None):
@@ -88,11 +88,9 @@ async def perform_restart(client: Client, chat_id: int, message_id: int | None =
                 parse_mode=enums.ParseMode.HTML
             )
 
-        # Run updater
         proc = await create_subprocess_exec("uv", "run", "update.py")
         await gather(proc.wait())
 
-        # Save restart message reference
         async with aiopen(".restartmsg", "w") as f:
             await f.write(f"{restart_message.chat.id}\n{restart_message.id}\n")
 
@@ -139,7 +137,7 @@ async def config_handler(client: Client, message: Message):
 async def config_callback(client: Client, query: CallbackQuery):
     data = query.data
 
-    # Close
+    # Close panel
     if data == "conf_close":
         await query.message.delete()
         await query.answer()
@@ -156,7 +154,7 @@ async def config_callback(client: Client, query: CallbackQuery):
         await query.answer()
         return
 
-    # Restart from button
+    # Restart button
     if data == "conf_restart":
         await query.answer()
         await perform_restart(
@@ -166,7 +164,10 @@ async def config_callback(client: Client, query: CallbackQuery):
         )
         return
 
-    # Edit config
+    # ==================================================
+    # EDIT CONFIG (CLEAN ask UX)
+    # ==================================================
+
     if data.startswith("conf_edit_"):
         key = data.replace("conf_edit_", "")
         current = getattr(Telegram, key, "N/A")
@@ -174,7 +175,7 @@ async def config_callback(client: Client, query: CallbackQuery):
         await query.answer()
 
         try:
-            response: Message = await client.ask(
+            reply_msg: Message = await client.ask(
                 chat_id=query.message.chat.id,
                 text=(
                     f"✏️ **Edit Configuration**\n\n"
@@ -194,7 +195,15 @@ async def config_callback(client: Client, query: CallbackQuery):
             )
             return
 
-        raw = response.text.strip()
+        raw = reply_msg.text.strip()
+
+        # 🧹 CLEANUP (remove ask prompt + user reply)
+        try:
+            await reply_msg.delete()
+            if reply_msg.reply_to_message:
+                await reply_msg.reply_to_message.delete()
+        except Exception:
+            pass
 
         # Type inference
         if raw.lower() == "true":
@@ -217,6 +226,7 @@ async def config_callback(client: Client, query: CallbackQuery):
             )
             return
 
+        # Update SAME panel message
         await query.message.edit_text(
             f"✅ **Configuration Updated**\n\n"
             f"`{key}` → `{value}`\n\n"
