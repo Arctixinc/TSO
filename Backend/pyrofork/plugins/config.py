@@ -11,6 +11,8 @@ from aiofiles import open as aiopen
 from os import execl as osexecl
 import shutil
 
+from pyrogram.errors.pyromod.listener_timeout import ListenerTimeout
+
 from Backend.config import Telegram
 from Backend.helper.custom_filter import CustomFilters
 from Backend.logger import LOGGER
@@ -91,8 +93,7 @@ async def perform_restart_inline(client: Client, chat_id: int, message_id: int):
 # ==================================================
 
 @Client.on_message(
-    filters.command("config") & filters.private & CustomFilters.owner,
-    group=-10
+    filters.command("config") & filters.private & CustomFilters.owner
 )
 async def config_entry(client: Client, message: Message):
     await message.reply_text(
@@ -111,17 +112,21 @@ async def config_callback(client: Client, query: CallbackQuery):
     data = query.data
     msg = query.message
 
-    # ---------- CLOSE ----------
+    # -------- CLOSE --------
     if data == "cfg_close":
         await msg.delete()
         return
 
-    # ---------- RESTART ----------
+    # -------- RESTART --------
     if data == "cfg_restart":
-        await perform_restart_inline(client, msg.chat.id, msg.id)
+        await perform_restart_inline(
+            client,
+            msg.chat.id,
+            msg.id
+        )
         return
 
-    # ---------- BACK ----------
+    # -------- BACK --------
     if data == "cfg_back":
         await msg.edit_text(
             "🧠 **Configuration Manager**\n\nSelect a variable:",
@@ -130,7 +135,7 @@ async def config_callback(client: Client, query: CallbackQuery):
         )
         return
 
-    # ---------- VARIABLE SELECT ----------
+    # -------- VARIABLE SELECT --------
     if data.startswith("cfg_var_"):
         key = data.replace("cfg_var_", "")
         value = getattr(Telegram, key, "N/A")
@@ -143,7 +148,7 @@ async def config_callback(client: Client, query: CallbackQuery):
         )
         return
 
-    # ---------- EDIT VALUE ----------
+    # -------- EDIT VALUE --------
     if data.startswith("cfg_edit_"):
         key = data.replace("cfg_edit_", "")
         current = getattr(Telegram, key, "N/A")
@@ -161,20 +166,22 @@ async def config_callback(client: Client, query: CallbackQuery):
                 timeout=60,
                 parse_mode=enums.ParseMode.MARKDOWN
             )
-        except TimeoutError:
+
+        except ListenerTimeout:
             await msg.edit_text(
-                "⌛ **Timed out**\n\nReturning to menu.",
+                "⌛ **Timed out**\n\nReturning to configuration menu.",
                 reply_markup=build_main_menu(),
                 parse_mode=enums.ParseMode.MARKDOWN
             )
             return
 
-        # cleanup ask messages
+        # 🧹 CLEANUP: delete user reply + ask prompt
         try:
+            prompt = reply.reply_to_message
             await reply.delete()
-            if reply.reply_to_message:
-                await reply.reply_to_message.delete()
-        except:
+            if prompt:
+                await prompt.delete()
+        except Exception:
             pass
 
         raw = reply.text.strip()
