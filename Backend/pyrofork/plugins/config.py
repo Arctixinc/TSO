@@ -109,8 +109,10 @@ async def config_entry(client: Client, message: Message):
 @Client.on_callback_query(filters.regex("^cfg_"))
 async def config_callback(client: Client, query: CallbackQuery):
     await query.answer()
+
     data = query.data
     msg = query.message
+    user_id = query.from_user.id
 
     # -------- CLOSE --------
     if data == "cfg_close":
@@ -119,11 +121,7 @@ async def config_callback(client: Client, query: CallbackQuery):
 
     # -------- RESTART --------
     if data == "cfg_restart":
-        await perform_restart_inline(
-            client,
-            msg.chat.id,
-            msg.id
-        )
+        await perform_restart_inline(client, msg.chat.id, msg.id)
         return
 
     # -------- BACK --------
@@ -153,34 +151,34 @@ async def config_callback(client: Client, query: CallbackQuery):
         key = data.replace("cfg_edit_", "")
         current = getattr(Telegram, key, "N/A")
 
+        await msg.edit_text(
+            f"✏️ **Edit `{key}`**\n\n"
+            f"📌 Current: `{current}`\n\n"
+            "Send the **new value**.\n"
+            "⏱ Timeout: 60 seconds",
+            reply_markup=build_variable_menu(key),
+            parse_mode=enums.ParseMode.MARKDOWN
+        )
+
         try:
             reply: Message = await client.ask(
                 chat_id=msg.chat.id,
-                text=(
-                    f"✏️ **Edit `{key}`**\n\n"
-                    f"📌 Current: `{current}`\n\n"
-                    "Send the **new value**.\n"
-                    "⏱ Timeout: 60 seconds"
-                ),
+                text="",                  # ✅ silent
+                user_id=user_id,          # ✅ scoped
                 filters=filters.text,
-                timeout=60,
-                parse_mode=enums.ParseMode.MARKDOWN
+                timeout=60
             )
-
         except ListenerTimeout:
             await msg.edit_text(
-                "⌛ **Timed out**\n\nReturning to configuration menu.",
+                "⌛ **Timed out**\n\nSelect a variable:",
                 reply_markup=build_main_menu(),
                 parse_mode=enums.ParseMode.MARKDOWN
             )
             return
 
-        # 🧹 CLEANUP: delete user reply + ask prompt
+        # 🧹 DELETE USER INPUT
         try:
-            prompt = reply.reply_to_message
             await reply.delete()
-            if prompt:
-                await prompt.delete()
         except Exception:
             pass
 
@@ -206,3 +204,4 @@ async def config_callback(client: Client, query: CallbackQuery):
             reply_markup=build_variable_menu(key),
             parse_mode=enums.ParseMode.MARKDOWN
         )
+        return
