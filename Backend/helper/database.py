@@ -1113,3 +1113,45 @@ class Database:
                     {"$set": fields}
                 )
                 return result.modified_count > 0
+
+    # -------------------------------
+    # Scrapper State Management
+    # -------------------------------
+    async def update_scrapper_cursor(self, channel_id: int, msg_id: int):
+        """Updates the last processed message ID for a source channel."""
+        await self.dbs["tracking"]["scrapper_state"].update_one(
+            {"_id": channel_id},
+            {"$set": {"last_msg_id": msg_id}},
+            upsert=True
+        )
+
+    async def get_scrapper_cursor(self, channel_id: int) -> int:
+        """Gets the last processed message ID for a source channel. Returns 0 if not found."""
+        doc = await self.dbs["tracking"]["scrapper_state"].find_one({"_id": channel_id})
+        return doc["last_msg_id"] if doc else 0
+
+    async def add_source_channel(self, channel_id: int) -> bool:
+        """Adds a source channel to the list."""
+        try:
+            await self.dbs["tracking"]["source_channels"].update_one(
+                {"_id": channel_id},
+                {"$set": {"added_on": datetime.utcnow()}},
+                upsert=True
+            )
+            return True
+        except Exception as e:
+            LOGGER.error(f"Failed to add source channel: {e}")
+            return False
+
+    async def remove_source_channel(self, channel_id: int) -> bool:
+        """Removes a source channel from the list."""
+        result = await self.dbs["tracking"]["source_channels"].delete_one({"_id": channel_id})
+        return result.deleted_count > 0
+
+    async def get_source_channels(self) -> List[int]:
+        """Returns a list of all configured source channel IDs."""
+        cursor = self.dbs["tracking"]["source_channels"].find({})
+        channels = []
+        async for doc in cursor:
+            channels.append(doc["_id"])
+        return channels

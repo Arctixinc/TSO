@@ -26,4 +26,7 @@ class Telegram:
     ADMIN_PASSWORD = getenv("ADMIN_PASSWORD", "fyvio")
 
     REPLACE_MODE = getenv("REPLACE_MODE", "true").lower() == "true"
+
+    USER_SESSION_STRING = getenv("USER_SESSION_STRING", "")
+    SOURCE_CHANNELS = [int(channel.strip()) for channel in (getenv("SOURCE_CHANNELS") or "").split(",") if channel.strip()]
     

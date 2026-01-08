@@ -10,6 +10,7 @@ from Backend.fastapi import server
 from Backend.helper.pyro import restart_notification, setup_bot_commands
 from Backend.pyrofork.bot import Helper, StreamBot
 from Backend.pyrofork.clients import initialize_clients
+from Backend.scrapper import ScrapperService
 
 loop = get_event_loop()
 
@@ -33,6 +34,10 @@ async def start_services():
 
         LOGGER.info("Initializing Multi Clients...")
         await initialize_clients()
+        await asleep(2)
+
+        LOGGER.info("Initializing Scrapper User Client...")
+        await ScrapperService.start_user_client()
         await asleep(2)
 
         await setup_bot_commands(StreamBot)
