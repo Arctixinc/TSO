@@ -130,9 +130,23 @@ class ScrapperService:
         current_id = last_id
 
         batch_size = 200
-        while True:
+        # Determine strict limit first to prevent runaway cursor
+        top_id = 0
+        try:
+            async for m in cls.user_client.get_chat_history(channel_id, limit=1):
+                top_id = m.id
+                break
+        except Exception as e:
+            LOGGER.error(f"Failed to get top_id for {channel_id}: {e}")
+            return 0, 0
+
+        while current_id < top_id:
             start = current_id + 1
             end = start + batch_size
+
+            # Clamp to top_id
+            if end > top_id + 1:
+                end = top_id + 1
 
             ids = list(range(start, end))
             if not ids:
@@ -150,11 +164,13 @@ class ScrapperService:
 
             found_messages = [m for m in messages if m and not m.empty]
 
+            # Update cursor to the end of this batch regardless of emptiness
+            # because we know top_id > current_id, so these IDs are 'checked' (even if deleted)
+            current_id = ids[-1]
+
             for msg in messages:
                 if not msg or msg.empty:
                     continue
-
-                current_id = max(current_id, msg.id)
 
                 # Logic: Filter & Copy
                 if await cls.process_message(msg, channel_id, dest_chat_id):
@@ -175,22 +191,7 @@ class ScrapperService:
                 except Exception:
                     pass
 
-            current_id = ids[-1]
             await db.update_scrapper_cursor(channel_id, current_id)
-
-            if not found_messages:
-                try:
-                    async for m in cls.user_client.get_chat_history(channel_id, limit=1):
-                        top_id = m.id
-                        break
-                    else:
-                        top_id = 0
-
-                    if current_id >= top_id:
-                        break
-                except:
-                    break
-
             await asyncio.sleep(2)
 
         return local_scanned, local_copied

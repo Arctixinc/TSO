@@ -95,6 +95,7 @@ async def scrapper_handler(client: Client, message: Message):
 
 @Client.on_callback_query(filters.regex(r"^scrapper_"))
 async def scrapper_callback(client: Client, query: CallbackQuery):
+    await query.answer()
     data = query.data
 
     if data == "scrapper_start":
@@ -153,5 +154,3 @@ async def scrapper_callback(client: Client, query: CallbackQuery):
 
     elif data == "scrapper_close":
         await query.message.delete()
-
-    await query.answer()
