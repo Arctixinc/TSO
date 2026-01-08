@@ -7,15 +7,11 @@ from pyrogram.types import (
     CallbackQuery
 )
 
+from pyrogram.errors.pyromod.listener_timeout import ListenerTimeout
+
 from Backend.helper.custom_filter import CustomFilters
 from Backend.scrapper import ScrapperService
 from Backend import db
-
-# ==================================================
-# INLINE STATE
-# ==================================================
-# user_id -> {action, chat_id, message_id}
-SCR_EDIT_STATE: dict[int, dict] = {}
 
 # ==================================================
 # UI BUILDERS
@@ -32,7 +28,6 @@ def scr_main_menu():
         [InlineKeyboardButton("❌ Close", callback_data="scr_close")]
     ])
 
-
 def scr_back_menu():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🔙 Back", callback_data="scr_menu")]
@@ -42,7 +37,10 @@ def scr_back_menu():
 # /scrapper ENTRY
 # ==================================================
 
-@Client.on_message(filters.command("scrapper") & filters.private & CustomFilters.owner)
+@Client.on_message(
+    filters.command("scrapper") & filters.private & CustomFilters.owner,
+    group=-10
+)
 async def scrapper_entry(client: Client, message: Message):
     await message.reply_text(
         "🤖 **Scrapper Manager**\n\n"
@@ -60,17 +58,14 @@ async def scrapper_callback(client: Client, query: CallbackQuery):
     await query.answer()
     data = query.data
     msg = query.message
-    uid = query.from_user.id
 
     # ---------------- CLOSE ----------------
     if data == "scr_close":
-        SCR_EDIT_STATE.pop(uid, None)
         await msg.delete()
         return
 
     # ---------------- BACK ----------------
     if data == "scr_menu":
-        SCR_EDIT_STATE.pop(uid, None)
         await msg.edit_text(
             "🤖 **Scrapper Manager**\n\nSelect an action:",
             reply_markup=scr_main_menu(),
@@ -115,113 +110,99 @@ async def scrapper_callback(client: Client, query: CallbackQuery):
 
     # ---------------- ADD SOURCE ----------------
     if data == "scr_add":
-        SCR_EDIT_STATE[uid] = {
-            "action": "add",
-            "chat_id": msg.chat.id,
-            "message_id": msg.id
-        }
+        try:
+            reply: Message = await client.ask(
+                chat_id=msg.chat.id,
+                text=(
+                    "➕ **Add Source Channel**\n\n"
+                    "Send the **Channel ID** now.\n\n"
+                    "`-100xxxxxxxxxx`\n"
+                    "⏱ Timeout: 60 seconds"
+                ),
+                filters=filters.text,
+                timeout=60,
+                parse_mode=enums.ParseMode.MARKDOWN
+            )
+        except ListenerTimeout:
+            await msg.edit_text(
+                "⌛ **Timed out**\n\nReturning to menu.",
+                reply_markup=scr_main_menu(),
+                parse_mode=enums.ParseMode.MARKDOWN
+            )
+            return
+
+        # cleanup ask messages
+        try:
+            prompt = reply.reply_to_message
+            await reply.delete()
+            if prompt:
+                await prompt.delete()
+        except Exception:
+            pass
+
+        try:
+            channel_id = int(reply.text.strip())
+            added = await db.add_source_channel(channel_id)
+            result = (
+                f"✅ Source `{channel_id}` added."
+                if added else
+                "⚠️ Channel already exists."
+            )
+        except ValueError:
+            result = "❌ **Invalid Channel ID**"
 
         await msg.edit_text(
-            "➕ **Add Source Channel**\n\n"
-            "Send the **Channel ID** now.\n"
-            "⏱ Timeout: 60 seconds",
+            result,
             reply_markup=scr_back_menu(),
             parse_mode=enums.ParseMode.MARKDOWN
         )
-
-        asyncio.create_task(scr_timeout(client, uid))
         return
 
     # ---------------- REMOVE SOURCE ----------------
     if data == "scr_del":
-        SCR_EDIT_STATE[uid] = {
-            "action": "del",
-            "chat_id": msg.chat.id,
-            "message_id": msg.id
-        }
+        try:
+            reply: Message = await client.ask(
+                chat_id=msg.chat.id,
+                text=(
+                    "➖ **Remove Source Channel**\n\n"
+                    "Send the **Channel ID** now.\n\n"
+                    "⏱ Timeout: 60 seconds"
+                ),
+                filters=filters.text,
+                timeout=60,
+                parse_mode=enums.ParseMode.MARKDOWN
+            )
+        except ListenerTimeout:
+            await msg.edit_text(
+                "⌛ **Timed out**\n\nReturning to menu.",
+                reply_markup=scr_main_menu(),
+                parse_mode=enums.ParseMode.MARKDOWN
+            )
+            return
+
+        # cleanup
+        try:
+            prompt = reply.reply_to_message
+            await reply.delete()
+            if prompt:
+                await prompt.delete()
+        except Exception:
+            pass
+
+        try:
+            channel_id = int(reply.text.strip())
+            removed = await db.remove_source_channel(channel_id)
+            result = (
+                f"✅ Source `{channel_id}` removed."
+                if removed else
+                "⚠️ Channel not found."
+            )
+        except ValueError:
+            result = "❌ **Invalid Channel ID**"
 
         await msg.edit_text(
-            "➖ **Remove Source Channel**\n\n"
-            "Send the **Channel ID** now.\n"
-            "⏱ Timeout: 60 seconds",
+            result,
             reply_markup=scr_back_menu(),
             parse_mode=enums.ParseMode.MARKDOWN
         )
-
-        asyncio.create_task(scr_timeout(client, uid))
         return
-
-# ==================================================
-# TEXT INPUT HANDLER (INLINE ONLY)
-# ==================================================
-
-@Client.on_message(filters.private & filters.text & CustomFilters.owner)
-async def scrapper_text_input(client: Client, message: Message):
-    uid = message.from_user.id
-    state = SCR_EDIT_STATE.get(uid)
-
-    if not state:
-        return
-
-    await message.delete()  # ❌ no extra messages
-
-    raw = message.text.strip()
-    try:
-        channel_id = int(raw)
-    except ValueError:
-        await client.edit_message_text(
-            state["chat_id"],
-            state["message_id"],
-            "❌ **Invalid Channel ID**",
-            reply_markup=scr_back_menu(),
-            parse_mode=enums.ParseMode.MARKDOWN
-        )
-        SCR_EDIT_STATE.pop(uid, None)
-        return
-
-    if state["action"] == "add":
-        ok = await db.add_source_channel(channel_id)
-        result = (
-            f"✅ Source `{channel_id}` added."
-            if ok else
-            "⚠️ Channel already exists."
-        )
-
-    else:  # del
-        ok = await db.remove_source_channel(channel_id)
-        result = (
-            f"✅ Source `{channel_id}` removed."
-            if ok else
-            "⚠️ Channel not found."
-        )
-
-    await client.edit_message_text(
-        state["chat_id"],
-        state["message_id"],
-        result,
-        reply_markup=scr_back_menu(),
-        parse_mode=enums.ParseMode.MARKDOWN
-    )
-
-    SCR_EDIT_STATE.pop(uid, None)
-
-# ==================================================
-# TIMEOUT HANDLER
-# ==================================================
-
-async def scr_timeout(client: Client, user_id: int):
-    await asyncio.sleep(60)
-
-    state = SCR_EDIT_STATE.get(user_id)
-    if not state:
-        return
-
-    await client.edit_message_text(
-        state["chat_id"],
-        state["message_id"],
-        "⌛ **Timed Out**\n\nReturning to Scrapper Menu.",
-        reply_markup=scr_main_menu(),
-        parse_mode=enums.ParseMode.MARKDOWN
-    )
-
-    SCR_EDIT_STATE.pop(user_id, None)
