@@ -1,156 +1,201 @@
-from pyrogram import filters, Client
-from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
-from pyrogram.enums.parse_mode import ParseMode
+import asyncio
+from pyrogram import Client, filters, enums
+from pyrogram.types import (
+    Message,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    CallbackQuery
+)
 
 from Backend.helper.custom_filter import CustomFilters
-from Backend.logger import LOGGER
-from Backend import db
 from Backend.scrapper import ScrapperService
-import asyncio
+from Backend import db
 
-SCRAPPER_MENU = InlineKeyboardMarkup([
-    [InlineKeyboardButton("🚀 Start Scan", callback_data="scrapper_start")],
-    [InlineKeyboardButton("📋 List Sources", callback_data="scrapper_list")],
+# ==================================================
+# UI MARKUPS
+# ==================================================
+
+SCRAPPER_MAIN_MENU = InlineKeyboardMarkup([
+    [InlineKeyboardButton("🚀 Start Scan", callback_data="scr_start")],
+    [InlineKeyboardButton("📋 View Sources", callback_data="scr_list")],
     [
-        InlineKeyboardButton("➕ Add Source", callback_data="scrapper_add"),
-        InlineKeyboardButton("➖ Remove Source", callback_data="scrapper_del")
+        InlineKeyboardButton("➕ Add Source", callback_data="scr_add"),
+        InlineKeyboardButton("➖ Remove Source", callback_data="scr_del")
     ],
-    [InlineKeyboardButton("❌ Close", callback_data="scrapper_close")]
+    [InlineKeyboardButton("❌ Close", callback_data="scr_close")]
 ])
 
-@Client.on_message(filters.command('scrapper') & filters.private & CustomFilters.owner)
-async def scrapper_handler(client: Client, message: Message):
-    """
-    Manage Scrapper Service.
-    Usage:
-        /scrapper - Show Menu
-        /scrapper start - Start scanning
-        /scrapper add <channel_id> - Add source channel
-        /scrapper del <channel_id> - Remove source channel
-        /scrapper list - List source channels
-    """
-    args = message.text.split()
+BACK_MENU = InlineKeyboardMarkup([
+    [InlineKeyboardButton("🔙 Back", callback_data="scr_menu")]
+])
 
-    # If no args, show menu
-    if len(args) < 2:
-        return await message.reply_text(
-            "🤖 **Scrapper Manager**\n\nSelect an action:",
-            reply_markup=SCRAPPER_MENU,
-            parse_mode=ParseMode.MARKDOWN
-        )
+# ==================================================
+# ENTRY COMMAND
+# ==================================================
 
-    cmd = args[1].lower()
+@Client.on_message(filters.command("scrapper") & filters.private & CustomFilters.owner)
+async def scrapper_entry(client: Client, message: Message):
+    await message.reply_text(
+        "🤖 **Scrapper Manager**\n\n"
+        "Manage and control the scrapper service using the buttons below.",
+        reply_markup=SCRAPPER_MAIN_MENU,
+        parse_mode=enums.ParseMode.MARKDOWN
+    )
 
-    if cmd == "start":
-        if not ScrapperService.user_client:
-            await ScrapperService.start_user_client()
+# ==================================================
+# CALLBACK HANDLER
+# ==================================================
 
-        if not ScrapperService.user_client:
-             return await message.reply_text("❌ Failed to start User Client. Check USER_SESSION_STRING.")
-
-        msg = await message.reply_text("🚀 **Starting Scrapper...**")
-        asyncio.create_task(ScrapperService.scan_sources(status_msg=msg))
-
-    elif cmd == "add":
-        if len(args) < 3:
-             return await message.reply_text("Usage: `/scrapper add <channel_id>`")
-        try:
-            channel_id = int(args[2])
-            if await db.add_source_channel(channel_id):
-                await message.reply_text(f"✅ Source channel {channel_id} added.")
-            else:
-                await message.reply_text(f"❌ Failed to add channel {channel_id}.")
-        except ValueError:
-            await message.reply_text("⚠️ Invalid Channel ID.")
-
-    elif cmd == "del":
-        if len(args) < 3:
-             return await message.reply_text("Usage: `/scrapper del <channel_id>`")
-        try:
-            channel_id = int(args[2])
-            if await db.remove_source_channel(channel_id):
-                await message.reply_text(f"✅ Source channel {channel_id} removed.")
-            else:
-                await message.reply_text(f"❌ Failed to remove channel {channel_id} (or not found).")
-        except ValueError:
-            await message.reply_text("⚠️ Invalid Channel ID.")
-
-    elif cmd == "list":
-        channels = await db.get_source_channels()
-        if not channels:
-            await message.reply_text("ℹ️ No source channels configured.")
-        else:
-            text = "**Source Channels:**\n\n"
-            for ch in channels:
-                text += f"• `{ch}`\n"
-            await message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
-
-    else:
-        # Unknown command, show menu fallback
-        await message.reply_text(
-            "⚠️ Unknown command. Select an action:",
-            reply_markup=SCRAPPER_MENU,
-            parse_mode=ParseMode.MARKDOWN
-        )
-
-@Client.on_callback_query(filters.regex(r"^scrapper_"))
+@Client.on_callback_query(filters.regex("^scr_"))
 async def scrapper_callback(client: Client, query: CallbackQuery):
     await query.answer()
     data = query.data
 
-    if data == "scrapper_start":
+    # --------------------------------------------------
+    # CLOSE
+    # --------------------------------------------------
+    if data == "scr_close":
+        await query.message.delete()
+        return
+
+    # --------------------------------------------------
+    # BACK TO MAIN MENU
+    # --------------------------------------------------
+    if data == "scr_menu":
+        await query.message.edit_text(
+            "🤖 **Scrapper Manager**\n\nSelect an action:",
+            reply_markup=SCRAPPER_MAIN_MENU,
+            parse_mode=enums.ParseMode.MARKDOWN
+        )
+        return
+
+    # --------------------------------------------------
+    # START SCRAPPER
+    # --------------------------------------------------
+    if data == "scr_start":
         if not ScrapperService.user_client:
             await ScrapperService.start_user_client()
             if not ScrapperService.user_client:
-                return await query.message.edit_text("❌ Failed to start User Client. Check `USER_SESSION_STRING`.")
+                await query.message.edit_text(
+                    "❌ **Failed to start User Client**\n\n"
+                    "Check `USER_SESSION_STRING`.",
+                    reply_markup=BACK_MENU,
+                    parse_mode=enums.ParseMode.MARKDOWN
+                )
+                return
 
-        await query.message.edit_text("🚀 **Starting Scrapper...**")
-        # Start task and pass the message for progress updates
-        asyncio.create_task(ScrapperService.scan_sources(status_msg=query.message))
+        await query.message.edit_text("🚀 **Starting Scrapper Scan...**")
+        asyncio.create_task(
+            ScrapperService.scan_sources(status_msg=query.message)
+        )
+        return
 
-    elif data == "scrapper_list":
+    # --------------------------------------------------
+    # LIST SOURCES
+    # --------------------------------------------------
+    if data == "scr_list":
         channels = await db.get_source_channels()
+
         if not channels:
-            text = "ℹ️ No source channels configured."
+            text = "ℹ️ **No source channels configured.**"
         else:
-            text = "**Source Channels:**\n\n"
+            text = "📋 **Source Channels**\n\n"
             for ch in channels:
                 text += f"• `{ch}`\n"
 
-        # Add back button
-        back_markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 Back", callback_data="scrapper_menu")]
-        ])
-        await query.message.edit_text(text, reply_markup=back_markup, parse_mode=ParseMode.MARKDOWN)
-
-    elif data == "scrapper_add":
-        text = (
-            "➕ **Add Source Channel**\n\n"
-            "To add a channel, send the command:\n"
-            "`/scrapper add <channel_id>`\n\n"
-            "Example: `/scrapper add -1001234567890`"
-        )
-        await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 Back", callback_data="scrapper_menu")]
-        ]), parse_mode=ParseMode.MARKDOWN)
-
-    elif data == "scrapper_del":
-        text = (
-            "➖ **Remove Source Channel**\n\n"
-            "To remove a channel, send the command:\n"
-            "`/scrapper del <channel_id>`\n\n"
-            "Example: `/scrapper del -1001234567890`"
-        )
-        await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 Back", callback_data="scrapper_menu")]
-        ]), parse_mode=ParseMode.MARKDOWN)
-
-    elif data == "scrapper_menu":
         await query.message.edit_text(
-            "🤖 **Scrapper Manager**\n\nSelect an action:",
-            reply_markup=SCRAPPER_MENU,
-            parse_mode=ParseMode.MARKDOWN
+            text,
+            reply_markup=BACK_MENU,
+            parse_mode=enums.ParseMode.MARKDOWN
         )
+        return
 
-    elif data == "scrapper_close":
-        await query.message.delete()
+    # --------------------------------------------------
+    # ADD SOURCE (ASK)
+    # --------------------------------------------------
+    if data == "scr_add":
+        try:
+            reply = await client.ask(
+                chat_id=query.message.chat.id,
+                text=(
+                    "➕ **Add Source Channel**\n\n"
+                    "Send the **Channel ID** to add:\n\n"
+                    "`-100xxxxxxxxxx`"
+                ),
+                filters=filters.text,
+                timeout=60,
+                parse_mode=enums.ParseMode.MARKDOWN
+            )
+        except TimeoutError:
+            await query.message.edit_text("❌ Timeout.", reply_markup=BACK_MENU)
+            return
+
+        try:
+            channel_id = int(reply.text.strip())
+            added = await db.add_source_channel(channel_id)
+            result = (
+                f"✅ Source `{channel_id}` added."
+                if added else
+                "⚠️ Channel already exists."
+            )
+        except ValueError:
+            result = "❌ Invalid Channel ID."
+
+        # 🧹 cleanup ask messages
+        try:
+            await reply.delete()
+            if reply.reply_to_message:
+                await reply.reply_to_message.delete()
+        except:
+            pass
+
+        await query.message.edit_text(
+            result,
+            reply_markup=BACK_MENU,
+            parse_mode=enums.ParseMode.MARKDOWN
+        )
+        return
+
+    # --------------------------------------------------
+    # REMOVE SOURCE (ASK)
+    # --------------------------------------------------
+    if data == "scr_del":
+        try:
+            reply = await client.ask(
+                chat_id=query.message.chat.id,
+                text=(
+                    "➖ **Remove Source Channel**\n\n"
+                    "Send the **Channel ID** to remove:"
+                ),
+                filters=filters.text,
+                timeout=60,
+                parse_mode=enums.ParseMode.MARKDOWN
+            )
+        except TimeoutError:
+            await query.message.edit_text("❌ Timeout.", reply_markup=BACK_MENU)
+            return
+
+        try:
+            channel_id = int(reply.text.strip())
+            removed = await db.remove_source_channel(channel_id)
+            result = (
+                f"✅ Source `{channel_id}` removed."
+                if removed else
+                "⚠️ Channel not found."
+            )
+        except ValueError:
+            result = "❌ Invalid Channel ID."
+
+        # 🧹 cleanup
+        try:
+            await reply.delete()
+            if reply.reply_to_message:
+                await reply.reply_to_message.delete()
+        except:
+            pass
+
+        await query.message.edit_text(
+            result,
+            reply_markup=BACK_MENU,
+            parse_mode=enums.ParseMode.MARKDOWN
+        )
