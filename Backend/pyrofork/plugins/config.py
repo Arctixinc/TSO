@@ -67,7 +67,6 @@ def build_main_menu(page: int = 0, page_size: int = 6):
 def build_variable_menu(key: str):
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("✏️ Edit Value", callback_data=f"cfg_edit_{key}")],
-        [InlineKeyboardButton("📌 Show Default", callback_data=f"cfg_default_{key}")],
         [
             InlineKeyboardButton("🔄 Restart", callback_data="cfg_restart"),
             InlineKeyboardButton("🔙 Back", callback_data="cfg_back")
@@ -172,20 +171,6 @@ async def config_callback(client: Client, query: CallbackQuery):
 
         await msg.edit_text(
             f"⚙️ **{key}**\n\nCurrent Value:\n`{value}`",
-            reply_markup=build_variable_menu(key),
-            parse_mode=enums.ParseMode.MARKDOWN
-        )
-        return
-
-    # Show default
-    if data.startswith("cfg_default_"):
-        key = data.replace("cfg_default_", "")
-        default = getattr(Telegram.__class__, key, "Unknown")
-
-        await msg.edit_text(
-            f"📌 **Default Value**\n\n"
-            f"🔧 `{key}`\n"
-            f"`{default}`",
             reply_markup=build_variable_menu(key),
             parse_mode=enums.ParseMode.MARKDOWN
         )
