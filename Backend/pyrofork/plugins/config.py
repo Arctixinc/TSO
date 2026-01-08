@@ -17,6 +17,41 @@ from Backend.logger import LOGGER
 from Backend import db
 
 # ==================================================
+# UI TEXT TEMPLATES
+# ==================================================
+
+CONFIG_HEADER = (
+    "🧠 **Backend Configuration Panel**\n"
+    "━━━━━━━━━━━━━━━━━━━━━━\n"
+    "Manage system variables dynamically.\n\n"
+    "Select a setting below:"
+)
+
+EDIT_TEMPLATE = (
+    "✏️ **Edit Configuration**\n"
+    "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+    "🔧 **Variable:** `{key}`\n"
+    "📌 **Current Value:** `{current}`\n\n"
+    "📝 Send the **new value** below.\n"
+    "⏱ Timeout: 60 seconds"
+)
+
+SUCCESS_TEMPLATE = (
+    "✅ **Configuration Updated**\n"
+    "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+    "🔧 **Variable:** `{key}`\n"
+    "🆕 **New Value:** `{value}`\n\n"
+    "⚠️ Restart required to apply changes."
+)
+
+TIMEOUT_TEMPLATE = (
+    "⌛ **Timed Out**\n"
+    "━━━━━━━━━━━━━━━━━━━━━━\n\n"
+    "No input received.\n"
+    "Please try again."
+)
+
+# ==================================================
 # CONFIG HELPERS
 # ==================================================
 
@@ -38,31 +73,39 @@ def build_config_markup(page: int = 0, page_size: int = 6):
     start = page * page_size
     batch = configs[start:start + page_size]
 
-    buttons = [
-        [InlineKeyboardButton(f"⚙️ {key}", callback_data=f"conf_edit_{key}")]
-        for key in batch
-    ]
+    buttons = []
 
+    # Config buttons (2 per row)
+    row = []
+    for key in batch:
+        row.append(
+            InlineKeyboardButton(f"⚙️ {key}", callback_data=f"conf_edit_{key}")
+        )
+        if len(row) == 2:
+            buttons.append(row)
+            row = []
+    if row:
+        buttons.append(row)
+
+    # Navigation
     nav = []
     if page > 0:
-        nav.append(
-            InlineKeyboardButton("⬅️ Prev", callback_data=f"conf_page_{page-1}")
-        )
+        nav.append(InlineKeyboardButton("⬅️ Previous", callback_data=f"conf_page_{page-1}"))
     if page < total_pages - 1:
-        nav.append(
-            InlineKeyboardButton("Next ➡️", callback_data=f"conf_page_{page+1}")
-        )
-
+        nav.append(InlineKeyboardButton("Next ➡️", callback_data=f"conf_page_{page+1}"))
     if nav:
         buttons.append(nav)
 
-    buttons.append([InlineKeyboardButton("❌ Close", callback_data="conf_close")])
-    buttons.append([InlineKeyboardButton("🔄 Restart", callback_data="conf_restart")])
+    # Footer
+    buttons.append([
+        InlineKeyboardButton("🔄 Restart Backend", callback_data="conf_restart"),
+        InlineKeyboardButton("❌ Close Panel", callback_data="conf_close")
+    ])
 
     return InlineKeyboardMarkup(buttons)
 
 # ==================================================
-# SHARED RESTART LOGIC
+# RESTART LOGIC
 # ==================================================
 
 async def perform_restart(client: Client, chat_id: int, message_id: int | None = None):
@@ -94,20 +137,16 @@ async def perform_restart(client: Client, chat_id: int, message_id: int | None =
         async with aiopen(".restartmsg", "w") as f:
             await f.write(f"{restart_message.chat.id}\n{restart_message.id}\n")
 
-        LOGGER.info("Restarting the bot using uv package manager...")
-
         uv_path = shutil.which("uv")
         if not uv_path:
             raise RuntimeError("uv not found in PATH")
 
+        LOGGER.info("Restarting backend using uv…")
         osexecl(uv_path, uv_path, "run", "-m", "Backend")
 
     except Exception as e:
-        LOGGER.error(f"Error during restart: {e}")
-        await client.send_message(
-            chat_id,
-            "❌ **Failed to restart. Check logs for details.**"
-        )
+        LOGGER.error(f"Restart failed: {e}")
+        await client.send_message(chat_id, "❌ **Restart failed. Check logs.**")
 
 # ==================================================
 # /restart COMMAND
@@ -124,20 +163,20 @@ async def restart_command(client: Client, message: Message):
 @Client.on_message(filters.command("config") & filters.private & CustomFilters.owner)
 async def config_handler(client: Client, message: Message):
     await message.reply_text(
-        "🛠 **Configuration Manager**\n\nSelect a variable to edit:",
+        CONFIG_HEADER,
         reply_markup=build_config_markup(0),
         parse_mode=enums.ParseMode.MARKDOWN
     )
 
 # ==================================================
-# CONFIG CALLBACK HANDLER
+# CALLBACK HANDLER
 # ==================================================
 
 @Client.on_callback_query(filters.regex("^conf_"))
 async def config_callback(client: Client, query: CallbackQuery):
     data = query.data
 
-    # Close panel
+    # Close
     if data == "conf_close":
         await query.message.delete()
         await query.answer()
@@ -147,27 +186,20 @@ async def config_callback(client: Client, query: CallbackQuery):
     if data.startswith("conf_page_"):
         page = int(data.split("_")[-1])
         await query.message.edit_text(
-            "🛠 **Configuration Manager**\n\nSelect a variable to edit:",
+            CONFIG_HEADER,
             reply_markup=build_config_markup(page),
             parse_mode=enums.ParseMode.MARKDOWN
         )
         await query.answer()
         return
 
-    # Restart button
+    # Restart
     if data == "conf_restart":
         await query.answer()
-        await perform_restart(
-            client,
-            chat_id=query.message.chat.id,
-            message_id=query.message.id
-        )
+        await perform_restart(client, query.message.chat.id, query.message.id)
         return
 
-    # ==================================================
-    # EDIT CONFIG (CLEAN ask UX)
-    # ==================================================
-
+    # Edit
     if data.startswith("conf_edit_"):
         key = data.replace("conf_edit_", "")
         current = getattr(Telegram, key, "N/A")
@@ -175,34 +207,29 @@ async def config_callback(client: Client, query: CallbackQuery):
         await query.answer()
 
         try:
-            reply_msg: Message = await client.ask(
+            reply: Message = await client.ask(
                 chat_id=query.message.chat.id,
-                text=(
-                    f"✏️ **Edit Configuration**\n\n"
-                    f"**Variable:** `{key}`\n"
-                    f"**Current Value:** `{current}`\n\n"
-                    f"Send the new value (timeout: 60s)"
-                ),
+                text=EDIT_TEMPLATE.format(key=key, current=current),
                 filters=filters.text,
                 timeout=60,
                 parse_mode=enums.ParseMode.MARKDOWN
             )
         except TimeoutError:
             await query.message.edit_text(
-                "❌ **Timeout**\n\nNo input received.",
+                TIMEOUT_TEMPLATE,
                 reply_markup=build_config_markup(0),
                 parse_mode=enums.ParseMode.MARKDOWN
             )
             return
 
-        raw = reply_msg.text.strip()
+        raw = reply.text.strip()
 
-        # 🧹 CLEANUP (remove ask prompt + user reply)
+        # Cleanup
         try:
-            await reply_msg.delete()
-            if reply_msg.reply_to_message:
-                await reply_msg.reply_to_message.delete()
-        except Exception:
+            await reply.delete()
+            if reply.reply_to_message:
+                await reply.reply_to_message.delete()
+        except:
             pass
 
         # Type inference
@@ -221,19 +248,16 @@ async def config_callback(client: Client, query: CallbackQuery):
         except Exception as e:
             LOGGER.error(f"Config update failed: {e}")
             await query.message.edit_text(
-                "❌ Failed to update configuration.",
+                "❌ **Failed to update configuration.**",
                 reply_markup=build_config_markup(0)
             )
             return
 
-        # Update SAME panel message
         await query.message.edit_text(
-            f"✅ **Configuration Updated**\n\n"
-            f"`{key}` → `{value}`\n\n"
-            f"⚠️ Restart required to apply changes.",
+            SUCCESS_TEMPLATE.format(key=key, value=value),
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔄 Restart", callback_data="conf_restart")],
-                [InlineKeyboardButton("🔙 Back", callback_data="conf_page_0")]
+                [InlineKeyboardButton("🔄 Restart Now", callback_data="conf_restart")],
+                [InlineKeyboardButton("🔙 Back to Settings", callback_data="conf_page_0")]
             ]),
             parse_mode=enums.ParseMode.MARKDOWN
         )
