@@ -56,8 +56,10 @@ async def scrapper_entry(client: Client, message: Message):
 @Client.on_callback_query(filters.regex("^scr_"))
 async def scrapper_callback(client: Client, query: CallbackQuery):
     await query.answer()
+
     data = query.data
     msg = query.message
+    user_id = query.from_user.id
 
     # ---------------- CLOSE ----------------
     if data == "scr_close":
@@ -81,7 +83,7 @@ async def scrapper_callback(client: Client, query: CallbackQuery):
                 await msg.edit_text(
                     "❌ **Failed to start User Client**\n\n"
                     "Check `USER_SESSION_STRING`.",
-                    reply_markup=scr_back_menu(),
+                    reply_markup=scr_main_menu(),
                     parse_mode=enums.ParseMode.MARKDOWN
                 )
                 return
@@ -94,12 +96,11 @@ async def scrapper_callback(client: Client, query: CallbackQuery):
     if data == "scr_list":
         channels = await db.get_source_channels()
 
-        if not channels:
-            text = "ℹ️ **No source channels configured.**"
-        else:
-            text = "📋 **Source Channels**\n\n"
-            for ch in channels:
-                text += f"• `{ch}`\n"
+        text = (
+            "ℹ️ **No source channels configured.**"
+            if not channels
+            else "📋 **Source Channels**\n\n" + "\n".join(f"• `{c}`" for c in channels)
+        )
 
         await msg.edit_text(
             text,
@@ -110,35 +111,30 @@ async def scrapper_callback(client: Client, query: CallbackQuery):
 
     # ---------------- ADD SOURCE ----------------
     if data == "scr_add":
+        await msg.edit_text(
+            "➕ **Add Source Channel**\n\n"
+            "Send the **Channel ID** now.\n"
+            "`-100xxxxxxxxxx`\n"
+            "⏱ Timeout: 60 seconds",
+            reply_markup=scr_back_menu(),
+            parse_mode=enums.ParseMode.MARKDOWN
+        )
+
         try:
             reply: Message = await client.ask(
                 chat_id=msg.chat.id,
-                text=(
-                    "➕ **Add Source Channel**\n\n"
-                    "Send the **Channel ID** now.\n\n"
-                    "`-100xxxxxxxxxx`\n"
-                    "⏱ Timeout: 60 seconds"
-                ),
+                text="",                   # ✅ REQUIRED (silent)
+                user_id=user_id,
                 filters=filters.text,
-                timeout=60,
-                parse_mode=enums.ParseMode.MARKDOWN
+                timeout=60
             )
         except ListenerTimeout:
             await msg.edit_text(
-                "⌛ **Timed out**\n\nReturning to menu.",
+                "⌛ **Timed out**\n\nSelect an action:",
                 reply_markup=scr_main_menu(),
                 parse_mode=enums.ParseMode.MARKDOWN
             )
             return
-
-        # cleanup ask messages
-        try:
-            prompt = reply.reply_to_message
-            await reply.delete()
-            if prompt:
-                await prompt.delete()
-        except Exception:
-            pass
 
         try:
             channel_id = int(reply.text.strip())
@@ -151,43 +147,43 @@ async def scrapper_callback(client: Client, query: CallbackQuery):
         except ValueError:
             result = "❌ **Invalid Channel ID**"
 
+        try:
+            await reply.delete()
+        except Exception:
+            pass
+
         await msg.edit_text(
-            result,
-            reply_markup=scr_back_menu(),
+            result + "\n\nSelect an action:",
+            reply_markup=scr_main_menu(),
             parse_mode=enums.ParseMode.MARKDOWN
         )
         return
 
     # ---------------- REMOVE SOURCE ----------------
     if data == "scr_del":
+        await msg.edit_text(
+            "➖ **Remove Source Channel**\n\n"
+            "Send the **Channel ID** now.\n"
+            "⏱ Timeout: 60 seconds",
+            reply_markup=scr_back_menu(),
+            parse_mode=enums.ParseMode.MARKDOWN
+        )
+
         try:
             reply: Message = await client.ask(
                 chat_id=msg.chat.id,
-                text=(
-                    "➖ **Remove Source Channel**\n\n"
-                    "Send the **Channel ID** now.\n\n"
-                    "⏱ Timeout: 60 seconds"
-                ),
+                text="",                   # ✅ REQUIRED (silent)
+                user_id=user_id,
                 filters=filters.text,
-                timeout=60,
-                parse_mode=enums.ParseMode.MARKDOWN
+                timeout=60
             )
         except ListenerTimeout:
             await msg.edit_text(
-                "⌛ **Timed out**\n\nReturning to menu.",
+                "⌛ **Timed out**\n\nSelect an action:",
                 reply_markup=scr_main_menu(),
                 parse_mode=enums.ParseMode.MARKDOWN
             )
             return
-
-        # cleanup
-        try:
-            prompt = reply.reply_to_message
-            await reply.delete()
-            if prompt:
-                await prompt.delete()
-        except Exception:
-            pass
 
         try:
             channel_id = int(reply.text.strip())
@@ -200,9 +196,14 @@ async def scrapper_callback(client: Client, query: CallbackQuery):
         except ValueError:
             result = "❌ **Invalid Channel ID**"
 
+        try:
+            await reply.delete()
+        except Exception:
+            pass
+
         await msg.edit_text(
-            result,
-            reply_markup=scr_back_menu(),
+            result + "\n\nSelect an action:",
+            reply_markup=scr_main_menu(),
             parse_mode=enums.ParseMode.MARKDOWN
         )
         return
