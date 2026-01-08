@@ -61,7 +61,6 @@ async def config_handler(client: Client, message: Message):
 
 @Client.on_callback_query(filters.regex(r"^conf_"))
 async def config_callback(client: Client, query: CallbackQuery):
-    await query.answer() # Acknowledge immediately to prevent timeout
     data = query.data
 
     if data == "conf_close":
@@ -174,3 +173,5 @@ async def config_callback(client: Client, query: CallbackQuery):
         except Exception as e:
             LOGGER.error(f"Config Edit Error: {e}")
             await query.message.edit_text("❌ Error during input handling. Try again.")
+
+    await query.answer()
