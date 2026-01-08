@@ -237,6 +237,7 @@ commands = [
     BotCommand("users",       "👥 Manage users"),
     BotCommand("eval",        "🧠 Run Python code"),
     BotCommand("shell",       "💻 Run shell commands"),
+    BotCommand("scrapper",    "👾 Scrape Media"),
     BotCommand("restart",     "♻️ Restart the bot"),
 ]
 
