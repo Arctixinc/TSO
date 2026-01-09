@@ -11,7 +11,7 @@ from Backend.helper.custom_filter import CustomFilters
 from Backend.logger import LOGGER
 from Backend import db
 
-# === CONFIG ===
+# ================= CONFIG =================
 INITIAL_CONCURRENCY = 10
 MAX_CONCURRENCY = 20
 MIN_CONCURRENCY = 2
@@ -20,10 +20,19 @@ BATCH_SIZE = 20
 
 CANCEL_FLAGS = {}
 
-# ==================================================
-# UI BUILDERS
-# ==================================================
-def build_status_ui(mode, checked, broken, deleted, movies, tv, concurrency, elapsed):
+# ================= UI BUILDERS =================
+def build_status_ui(
+    mode,
+    checked,
+    broken,
+    deleted,
+    movies_done,
+    total_movies,
+    tv_done,
+    total_tv,
+    concurrency,
+    elapsed
+):
     return (
         f"🧹 **SMART CLEANER**\n"
         f"━━━━━━━━━━━━━━\n\n"
@@ -34,34 +43,43 @@ def build_status_ui(mode, checked, broken, deleted, movies, tv, concurrency, ela
         f"• Broken   : `{broken}`\n"
         f"• Deleted  : `{deleted}`\n\n"
         f"📦 **Content**\n"
-        f"• Movies   : `{movies}`\n"
-        f"• TV Shows : `{tv}`\n\n"
+        f"• Movies   : `{movies_done} / {total_movies}`\n"
+        f"• TV Shows : `{tv_done} / {total_tv}`\n\n"
         f"⏱️ **Time** : `{elapsed}`\n"
         f"━━━━━━━━━━━━━━"
     )
 
 
-def build_final_report(mode, checked, broken, deleted, movies, tv, concurrency, elapsed):
+def build_final_report(
+    mode,
+    checked,
+    broken,
+    deleted,
+    movies_done,
+    total_movies,
+    tv_done,
+    total_tv,
+    concurrency,
+    elapsed
+):
     return (
         f"🏁 **SMART CLEAN REPORT**\n"
         f"━━━━━━━━━━━━━━\n\n"
         f"🟢 **Mode** : {mode}\n\n"
         f"📊 **Summary**\n"
-        f"• Checked       : `{checked}`\n"
-        f"• Broken Links  : `{broken}`\n"
-        f"• Deleted       : `{deleted}`\n\n"
+        f"• Checked      : `{checked}`\n"
+        f"• Broken Links : `{broken}`\n"
+        f"• Deleted      : `{deleted}`\n\n"
         f"📦 **Content**\n"
-        f"• Movies        : `{movies}`\n"
-        f"• TV Shows      : `{tv}`\n\n"
+        f"• Movies   : `{movies_done} / {total_movies}`\n"
+        f"• TV Shows : `{tv_done} / {total_tv}`\n\n"
         f"⚙️ **Final Concurrency** : `{concurrency}`\n"
         f"⏱️ **Time Taken**        : `{elapsed}`\n"
         f"━━━━━━━━━━━━━━\n"
-        f"✅ **Task Completed Successfully**"
+        f"✅ **Completed Successfully**"
     )
 
-# ==================================================
-# MAIN COMMAND
-# ==================================================
+# ================= MAIN COMMAND =================
 @Client.on_message(filters.command("smartclean") & filters.private & CustomFilters.owner, group=10)
 async def smartclean(client: Client, message: Message):
     cancel_id = f"{message.chat.id}_{message.id}"
@@ -71,15 +89,30 @@ async def smartclean(client: Client, message: Message):
         overall_start = time()
 
         def format_elapsed():
-            elapsed = time() - overall_start
-            return f"{int(elapsed//60)}m {int(elapsed%60)}s"
+            t = time() - overall_start
+            return f"{int(t // 60)}m {int(t % 60)}s"
 
         args = message.text.split()
         delete_mode = len(args) > 1 and args[1].lower() == "delete"
         mode_text = "Cleanup (Delete)" if delete_mode else "Scan Only"
 
+        # Counters
+        checked = total_deleted = 0
+        total_movies = total_tv = 0
+        movies_done = tv_done = 0
+        broken_entries = []
+
+        concurrency = INITIAL_CONCURRENCY
+        semaphore = Semaphore(concurrency)
+        adaptive_lock = asyncio.Lock()
+        last_update = 0
+
         status_msg = await message.reply_text(
-            build_status_ui(mode_text, 0, 0, 0, 0, 0, INITIAL_CONCURRENCY, "0m 0s"),
+            build_status_ui(
+                mode_text, 0, 0, 0,
+                0, 0, 0, 0,
+                concurrency, "0m 0s"
+            ),
             parse_mode=ParseMode.MARKDOWN,
             reply_markup=InlineKeyboardMarkup(
                 [[InlineKeyboardButton("❌ Cancel", callback_data=f"smartclean_cancel:{cancel_id}")]]
@@ -88,23 +121,14 @@ async def smartclean(client: Client, message: Message):
 
         from Backend.helper.encrypt import decode_string
 
-        broken_entries = []
-        checked = total_deleted = total_movies = total_tv = 0
-        last_update = 0
-
-        concurrency = INITIAL_CONCURRENCY
-        semaphore = Semaphore(concurrency)
-        adaptive_lock = asyncio.Lock()
-
         async def adjust_concurrency(success=True, flood_wait=None):
             nonlocal concurrency, semaphore
             async with adaptive_lock:
                 if flood_wait:
                     concurrency = max(MIN_CONCURRENCY, concurrency // 2)
-                    semaphore = Semaphore(concurrency)
                 elif success and concurrency < MAX_CONCURRENCY:
                     concurrency += 1
-                    semaphore = Semaphore(concurrency)
+                semaphore = Semaphore(concurrency)
 
         async def safe_get_message(chat_id, msg_id):
             async with semaphore:
@@ -132,14 +156,13 @@ async def smartclean(client: Client, message: Message):
                 checked += 1
                 if msg:
                     return entry
-                raise Exception("Message missing")
+                raise Exception("Message not found")
             except Exception as e:
                 broken_entries.append({
                     "type": ctype,
-                    "tmdb_id": tmdb_id,
-                    "db": db_index,
                     "title": meta.get("title", "Unknown"),
                     "quality": entry.get("quality"),
+                    "db": db_index,
                     "error": str(e)
                 })
                 return None
@@ -151,7 +174,9 @@ async def smartclean(client: Client, message: Message):
                     checked,
                     len(broken_entries),
                     total_deleted,
+                    movies_done,
                     total_movies,
+                    tv_done,
                     total_tv,
                     concurrency,
                     format_elapsed()
@@ -170,6 +195,7 @@ async def smartclean(client: Client, message: Message):
 
             db_key = f"storage_{idx}"
 
+            # ================= MOVIES =================
             movies = await db.dbs[db_key]["movie"].find({}, {"_id": 0}).to_list(None)
             total_movies += len(movies)
 
@@ -191,6 +217,38 @@ async def smartclean(client: Client, message: Message):
                     else:
                         await db.dbs[db_key]["movie"].delete_one({"tmdb_id": movie["tmdb_id"]})
 
+                movies_done += 1
+
+                if time() - last_update > STATUS_UPDATE_INTERVAL:
+                    await update_ui()
+                    last_update = time()
+
+            # ================= TV =================
+            shows = await db.dbs[db_key]["tv"].find({}, {"_id": 0}).to_list(None)
+            total_tv += len(shows)
+
+            for show in shows:
+                for season in show.get("seasons", []):
+                    for ep in season.get("episodes", []):
+                        tasks = [
+                            validate_quality(q, show["tmdb_id"], idx, "tv", show)
+                            for q in ep.get("telegram", [])
+                        ]
+                        results = await asyncio.gather(*tasks)
+                        valid = [r for r in results if r]
+
+                        if delete_mode:
+                            total_deleted += len(ep.get("telegram", [])) - len(valid)
+                            ep["telegram"] = valid
+
+                if delete_mode:
+                    await db.dbs[db_key]["tv"].update_one(
+                        {"tmdb_id": show["tmdb_id"]},
+                        {"$set": {"seasons": show["seasons"]}}
+                    )
+
+                tv_done += 1
+
                 if time() - last_update > STATUS_UPDATE_INTERVAL:
                     await update_ui()
                     last_update = time()
@@ -201,7 +259,9 @@ async def smartclean(client: Client, message: Message):
                 checked,
                 len(broken_entries),
                 total_deleted,
+                movies_done,
                 total_movies,
+                tv_done,
                 total_tv,
                 concurrency,
                 format_elapsed()
@@ -209,7 +269,7 @@ async def smartclean(client: Client, message: Message):
             parse_mode=ParseMode.MARKDOWN
         )
 
-        # === REPORT FILE ===
+        # ================= REPORT FILE =================
         if broken_entries:
             buffer = io.StringIO()
             buffer.write("SMART CLEAN REPORT\n" + "=" * 50 + "\n\n")
@@ -238,9 +298,7 @@ async def smartclean(client: Client, message: Message):
     finally:
         CANCEL_FLAGS.pop(cancel_id, None)
 
-# ==================================================
-# CANCEL HANDLER
-# ==================================================
+# ================= CANCEL HANDLER =================
 @Client.on_callback_query(filters.regex(r"smartclean_cancel:(.+)"))
 async def cancel_smartclean(_, query: CallbackQuery):
     CANCEL_FLAGS[query.data.split(":")[1]] = True
