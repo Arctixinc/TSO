@@ -31,70 +31,105 @@ async def shell_handler(client, message):
                 cmd = reply.caption.strip()
             elif (
                 reply.document
+                and reply.document.file_name
                 and reply.document.file_name.endswith(('.sh', '.txt'))
             ):
                 path = await reply.download()
-                with open(path, "r") as f:
-                    cmd = f.read().strip()
-                os.remove(path)
+                try:
+                    with open(path, "r", encoding='utf-8') as f:
+                        cmd = f.read().strip()
+                finally:
+                    if os.path.exists(path):
+                        os.remove(path)
 
         # Fallback to inline command
         if not cmd:
-            parts = message.text.split(maxsplit=1)
-            if len(parts) < 2:
+            if not message.text:
                 await status_message.edit(
                     "❗**Usage:** `/sh <command>`",
                     parse_mode=ParseMode.MARKDOWN
                 )
                 return
-            cmd = parts[1]
+            parts = message.text.split(maxsplit=1)
+            if len(parts) < 2:
+                await status_message.edit(
+                    "❗**Usage:** `/sh <command>`\n\nExample: `/sh ls -la`",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                return
+            cmd = parts[1].strip()
 
-        LOGGER.info(f"Executing shell command: {cmd}")
+        LOGGER.info(f"Executing shell command: {cmd[:100]}...")
 
-        # Execute command
+        # Execute command with timeout
         start_time = time.time()
-        process = await asyncio.create_subprocess_shell(
-            cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-        stdout, stderr = await process.communicate()
+        try:
+            process = await asyncio.wait_for(
+                asyncio.create_subprocess_shell(
+                    cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    limit=1024 * 1024  # 1MB buffer limit
+                ),
+                timeout=2.0
+            )
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(),
+                timeout=300.0  # 5 minute timeout
+            )
+        except asyncio.TimeoutError:
+            await message.reply_text(
+                "⚠️ Command execution timed out",
+                parse_mode=ParseMode.HTML
+            )
+            return
+        
         end_time = time.time()
         execution_time = round(end_time - start_time, 2)
 
-        # Raw outputs
-        o = stdout.decode().strip() or "No Output"
-        e = stderr.decode().strip() or "No Error"
+        # Decode outputs with error handling
+        try:
+            o = stdout.decode('utf-8').strip() if stdout else ""
+        except UnicodeDecodeError:
+            o = stdout.decode('utf-8', errors='replace').strip() if stdout else ""
+        
+        try:
+            e = stderr.decode('utf-8').strip() if stderr else ""
+        except UnicodeDecodeError:
+            e = stderr.decode('utf-8', errors='replace').strip() if stderr else ""
+
+        o = o or "No Output"
+        e = e or "No Error"
 
         # HTML escaped for Telegram
-        cmd_html = html.escape(cmd)
-        o_html = html.escape(o)
-        e_html = html.escape(e)
+        cmd_html = html.escape(cmd[:500])  # Limit command display length
+        o_html = html.escape(o[:2000])  # Limit output display length
+        e_html = html.escape(e[:2000])  # Limit error display length
 
         output = (
             f"<b>💻 Shell Executed</b>\n\n"
             f"<b>🧾 Command:</b> <code>{cmd_html}</code>\n"
-            f"<b>📌 PID:</b> <code>{process.pid}</code>\n"
+            f"<b>📌 Return Code:</b> <code>{process.returncode}</code>\n"
             f"<b>⏱️ Time:</b> <code>{execution_time}s</code>\n\n"
             f"<b>⚠️ STDERR:</b>\n<code>{e_html}</code>\n\n"
             f"<b>✅ STDOUT:</b>\n<code>{o_html}</code>"
         )
 
-        # If too long — send file with RAW text (no HTML escape!)
+        # If too long — send file with RAW text
         if len(output) > 4096:
             raw_output = (
                 f"Command:\n{cmd}\n\n"
-                f"PID: {process.pid}\n"
+                f"Return Code: {process.returncode}\n"
                 f"Time: {execution_time}s\n\n"
                 f"STDERR:\n{e}\n\n"
                 f"STDOUT:\n{o}"
             )
 
-            with BytesIO(raw_output.encode()) as out_file:
+            with BytesIO(raw_output.encode('utf-8')) as out_file:
                 out_file.name = "shell_output.txt"
                 await message.reply_document(
                     document=out_file,
-                    caption=f"💻 Command: {cmd}",
+                    caption=f"💻 Command: {html.escape(cmd[:100])}...",
                     disable_notification=True
                 )
         else:
@@ -133,42 +168,66 @@ async def eval_handler(client, message):
                 cmd = reply.caption.strip()
             elif (
                 reply.document
+                and reply.document.file_name
                 and reply.document.file_name.endswith(('.py', '.txt'))
             ):
                 path = await reply.download()
-                with open(path, "r") as f:
-                    cmd = f.read()
-                os.remove(path)
+                try:
+                    with open(path, "r", encoding='utf-8') as f:
+                        cmd = f.read()
+                finally:
+                    if os.path.exists(path):
+                        os.remove(path)
 
         # Inline fallback
         if not cmd:
-            parts = message.text.split(maxsplit=1)
-            if len(parts) < 2:
+            if not message.text:
                 await status_message.edit(
                     "❗**Usage:** `/eval <code>`",
                     parse_mode=ParseMode.MARKDOWN
                 )
                 return
-            cmd = parts[1]
+            parts = message.text.split(maxsplit=1)
+            if len(parts) < 2:
+                await status_message.edit(
+                    "❗**Usage:** `/eval <code>`\n\nExample: `/eval print('Hello')`",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                return
+            cmd = parts[1].strip()
 
         LOGGER.info(f"Executing eval code: {cmd[:80]}...")
 
         # Capture stdout/stderr
         old_stdout, old_stderr = sys.stdout, sys.stderr
-        sys.stdout, sys.stderr = io.StringIO(), io.StringIO()
+        redirected_stdout = io.StringIO()
+        redirected_stderr = io.StringIO()
+        sys.stdout = redirected_stdout
+        sys.stderr = redirected_stderr
+        
         exc = None
-
         start_time = time.time()
+        
         try:
-            await aexec(cmd, client, message)
+            # Execute with timeout
+            await asyncio.wait_for(
+                aexec(cmd, client, message),
+                timeout=60.0  # 1 minute timeout
+            )
+        except asyncio.TimeoutError:
+            exc = "⚠️ Execution timed out (60s limit)"
         except Exception:
             exc = traceback.format_exc()
-        end_time = time.time()
-        execution_time = round(end_time - start_time, 2)
+        finally:
+            end_time = time.time()
+            execution_time = round(end_time - start_time, 2)
+            
+            # Restore stdout/stderr
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
 
-        stdout = sys.stdout.getvalue().strip()
-        stderr = sys.stderr.getvalue().strip()
-        sys.stdout, sys.stderr = old_stdout, old_stderr
+        stdout = redirected_stdout.getvalue().strip()
+        stderr = redirected_stderr.getvalue().strip()
 
         if exc:
             evaluation = exc
@@ -180,8 +239,8 @@ async def eval_handler(client, message):
             evaluation = "✅ Success"
 
         # Escape for Telegram (HTML mode)
-        cmd_html = html.escape(cmd)
-        evaluation_html = html.escape(evaluation)
+        cmd_html = html.escape(cmd[:500])  # Limit code display
+        evaluation_html = html.escape(evaluation[:3000])  # Limit output display
 
         final_output = (
             f"<b>🧠 EVAL</b>\n\n"
@@ -198,7 +257,7 @@ async def eval_handler(client, message):
                 f"Output:\n{evaluation}"
             )
 
-            with BytesIO(raw_output.encode()) as out_file:
+            with BytesIO(raw_output.encode('utf-8')) as out_file:
                 out_file.name = "eval_output.txt"
                 await message.reply_document(
                     document=out_file,
@@ -225,10 +284,25 @@ async def eval_handler(client, message):
 # ------------------ ASYNC EXECUTOR ------------------
 async def aexec(code, client, message):
     """Execute async code dynamically in eval context"""
-    env = {"client": client, "message": message}
-    exec(
-        "async def __aexec(client, message):\n"
-        + "\n".join(f"    {line}" for line in code.split("\n")),
-        env
-    )
-    return await env["__aexec"](client, message)
+    # Create execution environment with available objects
+    exec_globals = {
+        "__builtins__": __builtins__,
+        "client": client,
+        "message": message,
+        "asyncio": asyncio,
+        "os": os,
+        "sys": sys,
+        "time": time,
+    }
+    
+    # Properly indent the code
+    indented_code = "\n".join(f"    {line}" for line in code.split("\n"))
+    
+    # Wrap code in async function
+    wrapped_code = f"async def __aexec(client, message):\n{indented_code}"
+    
+    # Execute the function definition
+    exec(wrapped_code, exec_globals)
+    
+    # Call and await the function
+    return await exec_globals["__aexec"](client, message)
