@@ -45,19 +45,46 @@ async def shell_handler(client, message):
         # Fallback to inline command
         if not cmd:
             if not message.text:
-                await status_message.edit(
-                    "❗**Usage:** `/sh <command>`",
-                    parse_mode=ParseMode.MARKDOWN
-                )
+                try:
+                    await status_message.edit(
+                        "❗**Usage:** `/sh <command>`\n\nExample: `/sh ls -la`",
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                except Exception:
+                    await message.reply_text(
+                        "❗**Usage:** `/sh <command>`\n\nExample: `/sh ls -la`",
+                        parse_mode=ParseMode.MARKDOWN
+                    )
                 return
+            
             parts = message.text.split(maxsplit=1)
-            if len(parts) < 2:
+            if len(parts) < 2 or not parts[1].strip():
+                try:
+                    await status_message.edit(
+                        "❗**Usage:** `/sh <command>`\n\nExample: `/sh ls -la`",
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                except Exception:
+                    await message.reply_text(
+                        "❗**Usage:** `/sh <command>`\n\nExample: `/sh ls -la`",
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                return
+            
+            cmd = parts[1].strip()
+
+        if not cmd:
+            try:
                 await status_message.edit(
                     "❗**Usage:** `/sh <command>`\n\nExample: `/sh ls -la`",
                     parse_mode=ParseMode.MARKDOWN
                 )
-                return
-            cmd = parts[1].strip()
+            except Exception:
+                await message.reply_text(
+                    "❗**Usage:** `/sh <command>`\n\nExample: `/sh ls -la`",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+            return
 
         LOGGER.info(f"Executing shell command: {cmd[:100]}...")
 
@@ -182,19 +209,46 @@ async def eval_handler(client, message):
         # Inline fallback
         if not cmd:
             if not message.text:
-                await status_message.edit(
-                    "❗**Usage:** `/eval <code>`",
-                    parse_mode=ParseMode.MARKDOWN
-                )
+                try:
+                    await status_message.edit(
+                        "❗**Usage:** `/eval <code>`\n\nExample: `/eval print('Hello')`",
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                except Exception:
+                    await message.reply_text(
+                        "❗**Usage:** `/eval <code>`\n\nExample: `/eval print('Hello')`",
+                        parse_mode=ParseMode.MARKDOWN
+                    )
                 return
+            
             parts = message.text.split(maxsplit=1)
-            if len(parts) < 2:
+            if len(parts) < 2 or not parts[1].strip():
+                try:
+                    await status_message.edit(
+                        "❗**Usage:** `/eval <code>`\n\nExample: `/eval print('Hello')`",
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                except Exception:
+                    await message.reply_text(
+                        "❗**Usage:** `/eval <code>`\n\nExample: `/eval print('Hello')`",
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                return
+            
+            cmd = parts[1].strip()
+
+        if not cmd:
+            try:
                 await status_message.edit(
                     "❗**Usage:** `/eval <code>`\n\nExample: `/eval print('Hello')`",
                     parse_mode=ParseMode.MARKDOWN
                 )
-                return
-            cmd = parts[1].strip()
+            except Exception:
+                await message.reply_text(
+                    "❗**Usage:** `/eval <code>`\n\nExample: `/eval print('Hello')`",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+            return
 
         LOGGER.info(f"Executing eval code: {cmd[:80]}...")
 
