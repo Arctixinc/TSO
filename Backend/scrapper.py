@@ -218,6 +218,17 @@ class ScrapperService:
         if last_id == 0:
             last_id = max(1, top_id - 2000)
 
+        start_id = last_id
+        total_to_scan = max(1, top_id - start_id)
+
+        # Notify Start of Channel
+        if progress_callback:
+            await progress_callback({
+                "status": "channel_start",
+                "channel_name": channel_name,
+                "total_to_scan": total_to_scan
+            })
+
         current_id = last_id
         batch_size = 200
 
@@ -240,7 +251,10 @@ class ScrapperService:
                     "channel_name": channel_name,
                     "scanned": global_scanned + local_scanned,
                     "copied": global_copied + local_copied,
-                    "remaining": remaining
+                    "remaining": remaining,
+                    "total_to_scan": total_to_scan,
+                    "start_id": start_id,
+                    "current_id": current_id
                 })
 
             try:

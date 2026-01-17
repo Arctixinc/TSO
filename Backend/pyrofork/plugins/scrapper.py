@@ -1,6 +1,7 @@
 import asyncio
 import time
 from datetime import datetime
+import pytz
 
 from pyrogram import Client, filters, enums
 from pyrogram.types import (
@@ -99,6 +100,15 @@ def scr_running_menu():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🛑 Cancel Scan", callback_data=cb("c"))]
     ])
+
+def generate_progress_bar(current, total, length=10):
+    if total <= 0:
+        return "░" * length
+
+    percent = min(1.0, current / total)
+    filled_length = int(length * percent)
+    bar = "▓" * filled_length + "░" * (length - filled_length)
+    return f"[{bar}] {int(percent * 100)}%"
 
 # ==================================================
 # ENTRY
@@ -276,6 +286,7 @@ async def scrapper_callback(client: Client, query: CallbackQuery):
         SCR_CANCEL_EVENTS[user_id] = cancel_event
 
         start_ts = time.time()
+        last_update_ts = 0
 
         await msg.edit_text(
             "🚀 **Initializing Scan...**",
@@ -284,6 +295,7 @@ async def scrapper_callback(client: Client, query: CallbackQuery):
         )
 
         async def progress_callback(payload: dict):
+            nonlocal last_update_ts
             status = payload.get("status", "")
 
             # Cleanup event on completion or failure/cancellation
@@ -292,16 +304,83 @@ async def scrapper_callback(client: Client, query: CallbackQuery):
                     del SCR_CANCEL_EVENTS[user_id]
 
             try:
-                if status == "completed":
+                # ---------------- STARTING ----------------
+                if status == "starting":
+                    await msg.edit_text(
+                        f"🚀 **Starting Scan...**\n\n🔎 **Channels Found:** `{payload.get('channel_count', 0)}`",
+                        reply_markup=scr_running_menu(),
+                        parse_mode=enums.ParseMode.MARKDOWN
+                    )
+
+                # ---------------- CHANNEL START ----------------
+                elif status == "channel_start":
+                    ch_name = payload.get("channel_name", "Unknown")
+                    total = payload.get("total_to_scan", 0)
+                    await msg.edit_text(
+                        f"🚀 **Scanning Channel:** `{ch_name}`\n\n"
+                        f"📥 **Total to Scan:** `{total}`",
+                        reply_markup=scr_running_menu(),
+                        parse_mode=enums.ParseMode.MARKDOWN
+                    )
+
+                # ---------------- RUNNING ----------------
+                elif status == "running":
+                    now = time.time()
+                    if now - last_update_ts < 2.0:  # Rate limit updates
+                        return
+
+                    last_update_ts = now
+
+                    ch_name = payload.get("channel_name", "Unknown")
+                    scanned = payload.get("scanned", 0)
+                    copied = payload.get("copied", 0)
+                    remaining = payload.get("remaining", 0)
+                    total_scan = payload.get("total_to_scan", 1)
+                    current_scan = payload.get("current_id", 0) - payload.get("start_id", 0)
+
+                    # Calculate progress for current channel
+                    progress_bar = generate_progress_bar(current_scan, total_scan)
+
+                    duration = int(now - start_ts)
+                    mins, secs = divmod(duration, 60)
+
+                    text = (
+                        f"🚀 **Scanning:** `{ch_name}`\n"
+                        f"{progress_bar}\n\n"
+                        f"📥 **Scanned (Total):** `{scanned}`\n"
+                        f"💾 **Copied (Total):** `{copied}`\n"
+                        f"⏳ **Remaining (This Channel):** `{remaining}`\n\n"
+                        f"⏱ **Time Elapsed:** `{mins}m {secs}s`"
+                    )
+
+                    await msg.edit_text(
+                        text,
+                        reply_markup=scr_running_menu(),
+                        parse_mode=enums.ParseMode.MARKDOWN
+                    )
+
+                # ---------------- FLOODWAIT ----------------
+                elif status == "floodwait":
+                    wait_time = payload.get("wait_time", 0)
+                    await msg.edit_text(
+                        f"⏳ **FloodWait Triggered**\n\nSleeping for `{wait_time}s`...",
+                        reply_markup=scr_running_menu(),
+                        parse_mode=enums.ParseMode.MARKDOWN
+                    )
+
+                # ---------------- COMPLETED ----------------
+                elif status == "completed":
                     end_ts = time.time()
                     duration = int(end_ts - start_ts)
                     mins, secs = divmod(duration, 60)
-                    finished_at = datetime.now().strftime("%d %b %Y, %H:%M:%S")
+
+                    ist = pytz.timezone("Asia/Kolkata")
+                    finished_at = datetime.now(ist).strftime("%d %b %Y, %I:%M:%S %p")
 
                     text = (
                         "✅ **Scan Completed**\n\n"
                         f"⏱ **Duration:** {mins}m {secs}s\n"
-                        f"🕒 **Finished At:** `{finished_at}`\n"
+                        f"🕒 **Finished At:** `{finished_at}` (IST)\n"
                         f"📊 **Total Scanned:** `{payload.get('total_scanned', 0)}`\n"
                         f"📤 **Total Copied:** `{payload.get('total_copied', 0)}`"
                     )
@@ -311,14 +390,34 @@ async def scrapper_callback(client: Client, query: CallbackQuery):
                         reply_markup=back_btn("m"),
                         parse_mode=enums.ParseMode.MARKDOWN
                     )
-                else:
+
+                # ---------------- CANCELLED ----------------
+                elif status == "cancelled":
                     await msg.edit_text(
-                        payload.get("message", status),
-                        reply_markup=scr_running_menu(),
+                        "🛑 **Scan Cancelled.**",
+                        reply_markup=back_btn("m"),
                         parse_mode=enums.ParseMode.MARKDOWN
                     )
+
+                # ---------------- ERROR ----------------
+                elif status == "error":
+                    error_msg = payload.get("message", "Unknown error")
+                    await msg.edit_text(
+                        f"❌ **Error Occurred:**\n`{error_msg}`",
+                        reply_markup=back_btn("m"),
+                        parse_mode=enums.ParseMode.MARKDOWN
+                    )
+
+                # ---------------- DEFAULT ----------------
+                else:
+                    # Fallback for other statuses
+                    pass
+
             except MessageNotModified:
                 pass
+            except Exception as e:
+                # Log other UI errors to prevent silent failure
+                print(f"UI Update Error: {e}")
 
         asyncio.create_task(
             ScrapperService.scan_sources(
@@ -336,6 +435,15 @@ async def scrapper_callback(client: Client, query: CallbackQuery):
         if evt:
             evt.set()
             await query.answer("🛑 Cancelling...", show_alert=True)
+            # Immediate feedback to prevent confusion
+            try:
+                await msg.edit_text(
+                    "🛑 **Cancelling scan... Please wait.**",
+                    reply_markup=InlineKeyboardMarkup([]),  # Remove buttons
+                    parse_mode=enums.ParseMode.MARKDOWN
+                )
+            except Exception:
+                pass
         else:
             await query.answer("⚠️ No active scan.", show_alert=True)
         return
