@@ -13,7 +13,7 @@ from Backend.helper.pyro import clean_filename
 SCR_RUNNING_TASKS: Dict[int, asyncio.Task] = {}
 
 
-async def interruptible_sleep(seconds: float, cancel_event: asyncio.Event):
+async def interruptible_sleep(seconds: float, cancel_event: asyncio.Event = None):
     """
     Sleeps for `seconds` but wakes up immediately if `cancel_event` is set.
     """
@@ -21,25 +21,24 @@ async def interruptible_sleep(seconds: float, cancel_event: asyncio.Event):
         return
 
     # Check initially
-    if cancel_event.is_set():
+    if cancel_event and cancel_event.is_set():
         raise asyncio.CancelledError
 
-    # Create a sleep task and an event waiter
     sleep_task = asyncio.create_task(asyncio.sleep(seconds))
-    wait_event = asyncio.create_task(cancel_event.wait())
 
-    done, pending = await asyncio.wait(
-        [sleep_task, wait_event],
-        return_when=asyncio.FIRST_COMPLETED
-    )
+    if cancel_event:
+        wait_event = asyncio.create_task(cancel_event.wait())
+        done, pending = await asyncio.wait(
+            [sleep_task, wait_event],
+            return_when=asyncio.FIRST_COMPLETED
+        )
+        for task in pending:
+            task.cancel()
 
-    # Cancel pending tasks to clean up
-    for task in pending:
-        task.cancel()
-
-    # If the event was set, raise CancelledError
-    if cancel_event.is_set():
-        raise asyncio.CancelledError
+        if cancel_event.is_set():
+            raise asyncio.CancelledError
+    else:
+        await sleep_task
 
 
 class ScrapperService:

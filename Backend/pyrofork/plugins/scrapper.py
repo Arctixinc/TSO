@@ -16,6 +16,9 @@ from Backend.helper.custom_filter import CustomFilters
 from Backend.scrapper import ScrapperService, SCR_RUNNING_TASKS
 from Backend import db
 
+# Global tracker for cancel events (distinct from SCR_RUNNING_TASKS which tracks Tasks)
+SCR_CANCEL_EVENTS = {}
+
 # ==================================================
 # CALLBACK DATA (COMPRESSED & SAFE)
 # ==================================================
@@ -270,7 +273,7 @@ async def scrapper_callback(client: Client, query: CallbackQuery):
             target_channels = [int(parts[1])]
 
         cancel_event = asyncio.Event()
-        SCR_RUNNING_TASKS[user_id] = cancel_event
+        SCR_CANCEL_EVENTS[user_id] = cancel_event
 
         start_ts = time.time()
 
@@ -282,6 +285,11 @@ async def scrapper_callback(client: Client, query: CallbackQuery):
 
         async def progress_callback(payload: dict):
             status = payload.get("status", "")
+
+            # Cleanup event on completion or failure/cancellation
+            if status in ("completed", "cancelled", "error"):
+                if user_id in SCR_CANCEL_EVENTS:
+                    del SCR_CANCEL_EVENTS[user_id]
 
             try:
                 if status == "completed":
@@ -324,7 +332,7 @@ async def scrapper_callback(client: Client, query: CallbackQuery):
 
     # ---------------- CANCEL ----------------
     if action == "c":
-        evt = SCR_RUNNING_TASKS.get(user_id)
+        evt = SCR_CANCEL_EVENTS.get(user_id)
         if evt:
             evt.set()
             await query.answer("🛑 Cancelling...", show_alert=True)
