@@ -1,430 +1,433 @@
 import asyncio
 import time
+import argparse
+import difflib
+import re
+import uuid
 from collections import deque
 from pyrogram import Client, filters
 from pyrogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from Backend.helper.custom_filter import CustomFilters
 from Backend.helper.database import Database
-from Backend.helper.metadata import fetch_movie_metadata, fetch_tv_metadata
+from Backend.helper.metadata import fetch_movie_metadata, fetch_tv_metadata, safe_tmdb_search
 from Backend.logger import LOGGER
 
 # Global state
 fix_task = None
-is_fixing = False
-should_cancel = False
+fixer_instance = None
 
 # Concurrency Limit
-SEMAPHORE = asyncio.Semaphore(50)
+SEMAPHORE = asyncio.Semaphore(30)
 
-@Client.on_message(filters.command("fixmetadata") & CustomFilters.owner)
-async def fix_metadata_command(client: Client, message: Message):
-    global fix_task, is_fixing, should_cancel
+class ArgumentParserError(Exception): 
+    pass
 
-    if is_fixing:
-        await message.reply_text("⚠️ **Metadata fix is already running.**")
-        return
+class ThrowingArgumentParser(argparse.ArgumentParser):
+    def error(self, message):
+        raise ArgumentParserError(message)
 
-    # Initial interaction - Start Button
-    start_btn = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🚀 Start Metadata Fix", callback_data="start_fix_menu")]
-    ])
+class MetadataFixer:
+    def __init__(self, client: Client, message: Message, args):
+        self.client = client
+        self.status_msg = message
+        self.args = args
+        self.should_cancel = False
+        self.db = Database()
+        
+        # Stats
+        self.stats = {
+            "processed": 0,
+            "updated": 0,
+            "skipped": 0,
+            "errors": 0,
+            "manual_pending": 0,
+            "auto_fixed": 0,
+            "current_name": "Initializing..."
+        }
+        self.total_items = 0
+        self.start_time = time.time()
+        self.pending_approvals = {}  # Map callback_id -> asyncio.Future
 
-    await message.reply_text(
-        "**🔧 Metadata Fixer System**\n\n"
-        "This tool will backfill missing metadata (Cast, Runtime, Overview, Released) "
-        "for your existing media library.\n\n"
-        "Tap below to begin.",
-        reply_markup=start_btn
-    )
-
-@Client.on_callback_query(filters.regex("^start_fix_menu$") & CustomFilters.owner)
-async def start_fix_menu_callback(client: Client, callback_query: CallbackQuery):
-    menu_btns = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("🎬 Movies", callback_data="fix_movies"),
-            InlineKeyboardButton("📺 TV Shows", callback_data="fix_tv")
-        ],
-        [InlineKeyboardButton("🔄 Fix All Media", callback_data="fix_all")]
-    ])
-
-    await callback_query.message.edit_text(
-        "**📂 Select Category to Fix**\n\n"
-        "Choose a category to start the metadata update process. "
-        "This process allows you to update existing entries without affecting file links.",
-        reply_markup=menu_btns
-    )
-
-@Client.on_callback_query(filters.regex(r"^fix_(movies|tv|all)$") & CustomFilters.owner)
-async def fix_action_callback(client: Client, callback_query: CallbackQuery):
-    global fix_task, is_fixing, should_cancel
-
-    if is_fixing:
-        await callback_query.answer("⚠️ Fix already in progress.", show_alert=True)
-        return
-
-    mode = callback_query.data.split("_")[1]
-    is_fixing = True
-    should_cancel = False
-
-    cancel_btn = InlineKeyboardMarkup([
-        [InlineKeyboardButton("❌ Cancel Operation", callback_data="cancel_fix")]
-    ])
-
-    mode_display = "Movies" if mode == "movies" else "TV Shows" if mode == "tv" else "Full Library"
-
-    await callback_query.message.edit_text(
-        f"**🔄 Initializing {mode_display} Fix...**\n"
-        "Please wait while we prepare the database...",
-        reply_markup=cancel_btn
-    )
-
-    try:
-        fix_task = asyncio.create_task(run_fix_process(client, callback_query.message, mode))
-    except Exception as e:
-        is_fixing = False
-        await callback_query.message.edit_text(f"❌ **Error starting fix process:**\n`{e}`")
-
-@Client.on_callback_query(filters.regex("^cancel_fix$") & CustomFilters.owner)
-async def cancel_fix_callback(client: Client, callback_query: CallbackQuery):
-    global should_cancel, is_fixing
-
-    if not is_fixing:
-        await callback_query.answer("⚠️ No process to cancel.", show_alert=True)
-        return
-
-    should_cancel = True
-    await callback_query.answer("🛑 Cancelling...", show_alert=True)
-    await callback_query.message.edit_text(
-        "**🛑 Cancellation Requested**\n\n"
-        "Stopping processes safely. Please wait..."
-    )
-
-async def get_total_counts(db, mode):
-    total_movies = 0
-    total_tv_shows = 0
-    total_episodes = 0
-
-    total_dbs = db.current_db_index
-    for db_idx in range(1, total_dbs + 1):
-        db_key = f"storage_{db_idx}"
-        database = db.dbs[db_key]
-
-        if mode in ["movies", "all"]:
-            total_movies += await database["movie"].count_documents({})
-
-        if mode in ["tv", "all"]:
-            tv_cursor = database["tv"].find({}, {"seasons": 1})
-            async for tv in tv_cursor:
-                total_tv_shows += 1
-                if "seasons" in tv:
-                    for s in tv["seasons"]:
-                        total_episodes += len(s.get("episodes", []))
-
-    return total_movies, total_tv_shows, total_episodes
-
-def format_time(seconds):
-    m, s = divmod(int(seconds), 60)
-    h, m = divmod(m, 60)
-    if h > 0:
-        return f"{h}h {m}m {s}s"
-    elif m > 0:
-        return f"{m}m {s}s"
-    return f"{s}s"
-
-async def process_movie_entry(db, db_idx, movie, stats):
-    if should_cancel: return
-
-    stats["current_name"] = f"🎬 {movie.get('title', 'Unknown')} ({movie.get('release_year', '')})"
-
-    async with SEMAPHORE:
+    async def start(self):
+        await self.db.connect()
+        total_dbs = self.db.current_db_index
+        
+        # Start status loop
+        status_task = asyncio.create_task(self.update_status_loop())
+        
         try:
-            title = movie.get("title")
-            year = movie.get("release_year")
-            tmdb_id = movie.get("tmdb_id")
+            tasks = []
+            targets = await self.get_targets()
+            self.total_items = len(targets)
+            
+            for item_data in targets:
+                if self.should_cancel: break
+                
+                # item_data = (db_idx, item_dict, media_type)
+                task = asyncio.create_task(self.process_item(*item_data))
+                tasks.append(task)
+                
+                # Clean up finished tasks to manage memory
+                if len(tasks) > 50:
+                    done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+                    tasks = list(pending)
 
-            metadata = await fetch_movie_metadata(title, "dummy", year, None)
-
-            if metadata:
-                update_fields = {
-                    "cast": metadata.get("cast"),
-                    "runtime": metadata.get("runtime"),
-                    "overview": metadata.get("description"),
-                    "released": metadata.get("year"),
-                }
-                update_fields = {k: v for k, v in update_fields.items() if v is not None}
-
-                if update_fields:
-                    await db.update_metadata_fields(tmdb_id, "movie", db_idx, update_fields)
-                    stats["updated"] += 1
-                else:
-                    stats["skipped"] += 1
-            else:
-                stats["skipped"] += 1
-
+            if tasks:
+                await asyncio.gather(*tasks)
+                
         except Exception as e:
-            LOGGER.error(f"Error fixing movie {movie.get('title')}: {e}")
-            stats["errors"] += 1
+            LOGGER.error(f"Fix process error: {e}")
+            self.stats["errors"] += 1
         finally:
-            stats["processed"] += 1
-
-async def process_tv_episode_entry(db, db_idx, tmdb_id, title, s_no, e_no, stats):
-    if should_cancel: return
-
-    stats["current_name"] = f"📺 {title}\n💿 Season {s_no} • Episode {e_no}"
-
-    async with SEMAPHORE:
-        try:
-            ep_meta = await fetch_tv_metadata(title, s_no, e_no, "dummy")
-
-            if ep_meta:
-                ep_fields = {
-                    "overview": ep_meta.get("episode_overview"),
-                    "released": ep_meta.get("episode_released")
-                }
-                ep_fields = {k: v for k, v in ep_fields.items() if v is not None}
-
-                if ep_fields:
-                    await db.update_metadata_fields(tmdb_id, "tv", db_idx, ep_fields, s_no, e_no)
-                    stats["updated"] += 1
-                else:
-                    stats["skipped"] += 1
-            else:
-                stats["skipped"] += 1
-
-        except Exception as e:
-            LOGGER.error(f"Error fixing episode {title} S{s_no}E{e_no}: {e}")
-            stats["errors"] += 1
-        finally:
-            stats["processed"] += 1
-
-async def run_fix_process(client: Client, status_msg: Message, mode: str):
-    global is_fixing, should_cancel
-
-    db = Database()
-    await db.connect()
-
-    stats = {
-        "processed": 0,
-        "updated": 0,
-        "skipped": 0,
-        "errors": 0,
-        "current_name": "Preparing..."
-    }
-
-    start_time = time.time()
-    last_update_time = time.time()
-
-    # History for smoothing ETA: Store (time, processed_count)
-    rate_history = deque(maxlen=20) # Approx 1 minute of history if updates are every 2-3s
-
-    try:
-        # Pre-count for progress bar
-        total_movies, total_tv_shows, total_episodes = await get_total_counts(db, mode)
-
-        total_items_to_process = 0
-        if mode == "movies": total_items_to_process = total_movies
-        elif mode == "tv": total_items_to_process = total_tv_shows + total_episodes # Shows + Episodes
-        elif mode == "all": total_items_to_process = total_movies + total_tv_shows + total_episodes
-
-        cancel_btn = InlineKeyboardMarkup([
-            [InlineKeyboardButton("❌ Cancel Operation", callback_data="cancel_fix")]
-        ])
-
-        async def update_status():
-            now = time.time()
-            rate_history.append((now, stats["processed"]))
-
-            # Calculate smoothed rate
-            current_rate = 0.0
-            if len(rate_history) > 1:
-                first = rate_history[0]
-                last = rate_history[-1]
-                time_diff = last[0] - first[0]
-                count_diff = last[1] - first[1]
-                if time_diff > 0:
-                    current_rate = count_diff / time_diff
-
-            # Fallback to global average if history is insufficient or rate is 0
-            if current_rate <= 0:
-                elapsed = now - start_time
-                current_rate = stats["processed"] / elapsed if elapsed > 0 else 0.0
-
-            remaining = total_items_to_process - stats["processed"]
-            eta_seconds = remaining / current_rate if current_rate > 0 else 0
-
-            elapsed_display = now - start_time
-
-            percent = (stats["processed"] / total_items_to_process * 100) if total_items_to_process > 0 else 0
-            bar_length = 10
-            filled_length = int(bar_length * percent / 100)
-            bar = "▰" * filled_length + "▱" * (bar_length - filled_length)
-
-            mode_display = "Movies" if mode == "movies" else "TV Shows" if mode == "tv" else "Full Library"
-
-            text = (
-                f"**🔄 Metadata Fix in Progress: {mode_display}**\n\n"
-                f"**Progress:** `{bar}` **{percent:.1f}%**\n"
-                f"➖➖➖➖➖➖➖➖➖➖\n"
-                f"✅ **Updated:** `{stats['updated']}`\n"
-                f"⚠️ **Skipped:** `{stats['skipped']}`\n"
-                f"❌ **Errors:** `{stats['errors']}`\n"
-                f"📥 **Processed:** `{stats['processed']}/{total_items_to_process}`\n"
-                f"➖➖➖➖➖➖➖➖➖➖\n"
-                f"⏱ **Elapsed:** `{format_time(elapsed_display)}`\n"
-                f"⏳ **ETA:** `{format_time(eta_seconds)}`\n\n"
-                f"**Currently Processing:**\n`{stats['current_name']}`"
+            status_task.cancel()
+            global fix_task
+            fix_task = None
+            
+            # Final Status Update
+            await self.status_msg.edit_text(
+                f"✅ **Metadata Fix Completed!**\n\n"
+                f"📊 **Total Scanned:** `{self.total_items}`\n"
+                f"✅ **Updated:** `{self.stats['updated']}`\n"
+                f"⚠️ **Skipped:** `{self.stats['skipped']}`\n"
+                f"❌ **Errors:** `{self.stats['errors']}`\n"
+                f"🤖 **Auto Fixed:** `{self.stats['auto_fixed']}`\n"
+                f"⏱ **Total Time:** `{time.time() - self.start_time:.1f}s`"
             )
 
+    async def get_targets(self):
+        targets = []
+        total_dbs = self.db.current_db_index
+        
+        # Determine filter
+        query = {}
+        if self.args.latest:
+            # Simple check for missing critical metadata
+            query = {"$or": [{"overview": {"$exists": False}}, {"cast": {"$exists": False}}]}
+        
+        sort_order = [("updated_on", -1)] if self.args.last else [("_id", 1)]
+        limit = self.args.last if self.args.last else 0
+        
+        media_types = []
+        if self.args.type in ["movies", "all"]: media_types.append("movie")
+        if self.args.type in ["tv", "all"]: media_types.append("tv")
+        
+        for m_type in media_types:
+            count = 0
+            for i in range(1, total_dbs + 1):
+                if limit and count >= limit: break
+                
+                db_key = f"storage_{i}"
+                database = self.db.dbs[db_key]
+                collection = database[m_type]
+                
+                cursor = collection.find(query).sort(sort_order)
+                if limit:
+                    cursor = cursor.limit(limit - count)
+                
+                items = await cursor.to_list(length=None)
+                for item in items:
+                    targets.append((i, item, m_type))
+                count += len(items)
+                
+        return targets
+
+    def clean_filename(self, name):
+        # Remove extension
+        name = re.sub(r'\.\w+$', '', name)
+        # Remove brackets first
+        name = re.sub(r'\[.*?\]', '', name)
+        name = re.sub(r'\(.*?\)', '', name)
+        # Remove common release tags
+        name = re.sub(r'(1080p|720p|2160p|480p|BluRay|WEB-DL|HDR|H\.265|x264|x265|HEVC|AAC|DDP|ATMOS).*', '', name, flags=re.IGNORECASE)
+        # Remove dots/underscores
+        name = name.replace('.', ' ').replace('_', ' ')
+        return name.strip()
+
+    async def process_item(self, db_idx, item, media_type):
+        if self.should_cancel: return
+        
+        async with SEMAPHORE:
             try:
-                await status_msg.edit_text(text, reply_markup=cancel_btn)
+                title = item.get("title", "Unknown")
+                tmdb_id = item.get("tmdb_id")
+                self.stats["current_name"] = f"{title}"
+                
+                should_update = False
+                new_meta = {}
+                confidence = 100
+                fix_reason = "Refresh"
+
+                # 1. Rename / Mismatch Detection Logic
+                if self.args.rename:
+                    filename = ""
+                    if media_type == "movie":
+                         if item.get("telegram"):
+                             filename = item["telegram"][0].get("name", "")
+                    else:
+                        # For TV, check first episode of first season
+                        if item.get("seasons") and item["seasons"][0].get("episodes"):
+                            ep = item["seasons"][0]["episodes"][0]
+                            if ep.get("telegram"):
+                                filename = ep["telegram"][0].get("name", "")
+
+                    if filename:
+                        clean_name = self.clean_filename(filename)
+                        # Similarity check
+                        ratio = difflib.SequenceMatcher(None, clean_name.lower(), title.lower()).ratio()
+                        
+                        if ratio < 0.6: # Mismatch detected
+                            # Search TMDB
+                            results = await safe_tmdb_search(clean_name, media_type)
+                            if results:
+                                candidate = results # safe_tmdb_search returns best match object
+                                candidate_title = candidate.title if media_type == "movie" else candidate.name
+                                candidate_year = getattr(candidate, "release_date" if media_type == "movie" else "first_air_date", None)
+                                if hasattr(candidate_year, "year"):
+                                    candidate_year = candidate_year.year
+                                elif isinstance(candidate_year, str):
+                                    candidate_year = int(candidate_year[:4]) if candidate_year else 0
+                                else:
+                                    candidate_year = 0
+                                
+                                new_ratio = difflib.SequenceMatcher(None, clean_name.lower(), candidate_title.lower()).ratio()
+                                
+                                if new_ratio > 0.8: # Found a good candidate
+                                    confidence = int(new_ratio * 100)
+                                    fix_reason = "Renamed (Mismatch Detected)"
+                                    
+                                    # Fetch full metadata for candidate
+                                    if media_type == "movie":
+                                        fetched = await fetch_movie_metadata(candidate_title, "dummy", candidate_year, None)
+                                    else:
+                                        fetched = await fetch_tv_metadata(candidate_title, 1, 1, "dummy", candidate_year)
+                                    
+                                    if fetched:
+                                        new_meta = fetched
+                                        should_update = True
+                
+                # 2. Normal Refresh Logic (if not renaming or no rename candidate found)
+                if not should_update:
+                    if self.args.rename: 
+                        # If rename mode but no better candidate found, skip
+                        self.stats["processed"] += 1
+                        self.stats["skipped"] += 1
+                        return
+
+                    year = item.get("release_year")
+                    # Fetch fresh using ID if possible, else Title
+                    if media_type == "movie":
+                        new_meta = await fetch_movie_metadata(title, "dummy", year, None, default_id=f"tmdb:{tmdb_id}" if tmdb_id else None)
+                    else:
+                        # For TV, we just need show level data mostly
+                        new_meta = await fetch_tv_metadata(title, 1, 1, "dummy", year, default_id=f"tmdb:{tmdb_id}" if tmdb_id else None)
+                    
+                    if new_meta:
+                        confidence = 100
+                        should_update = True
+
+                if should_update and new_meta:
+                    # Filter only necessary fields
+                    update_fields = {
+                        "cast": new_meta.get("cast"),
+                        "runtime": new_meta.get("runtime"),
+                        "overview": new_meta.get("description"),
+                        "released": new_meta.get("year"),
+                        "title": new_meta.get("title"),
+                        "tmdb_id": new_meta.get("tmdb_id"),
+                        "imdb_id": new_meta.get("imdb_id"),
+                        "genres": new_meta.get("genres"),
+                    }
+                    if media_type == "tv":
+                         update_fields.pop("seasons", None) # Don't overwrite structure, just fields
+
+                    # Clean None
+                    update_fields = {k: v for k, v in update_fields.items() if v is not None}
+                    
+                    # Logic 3: Decision
+                    action = "skip"
+                    
+                    if self.args.force or confidence >= 85:
+                        action = "auto"
+                    elif 70 <= confidence < 85:
+                        action = "ask"
+                    else:
+                        action = "ignore"
+
+                    if action == "auto":
+                        update_fields["auto_fixed"] = True
+                        update_fields["fix_reason"] = fix_reason
+                        await self.apply_fix(db_idx, tmdb_id, media_type, update_fields)
+                        self.stats["updated"] += 1
+                        self.stats["auto_fixed"] += 1
+                        
+                    elif action == "ask":
+                        self.stats["manual_pending"] += 1
+                        approved = await self.ask_approval(item, update_fields, confidence)
+                        self.stats["manual_pending"] -= 1
+                        
+                        if approved:
+                             await self.apply_fix(db_idx, tmdb_id, media_type, update_fields)
+                             self.stats["updated"] += 1
+                        else:
+                             self.stats["skipped"] += 1
+                    else:
+                        self.stats["skipped"] += 1
+
+            except Exception as e:
+                LOGGER.error(f"Error processing {item.get('title')}: {e}")
+                self.stats["errors"] += 1
+            finally:
+                self.stats["processed"] += 1
+
+    async def apply_fix(self, db_idx, tmdb_id, media_type, fields, season=None, episode=None):
+        await self.db.update_metadata_fields(tmdb_id, media_type, db_idx, fields, season, episode)
+
+    async def ask_approval(self, item, new_meta, confidence):
+        uid = str(uuid.uuid4())[:8]
+        loop = asyncio.get_running_loop()
+        future = loop.create_future()
+        self.pending_approvals[uid] = future
+        
+        current_title = item.get("title", "Unknown")
+        new_title = new_meta.get("title", "Unknown")
+        
+        text = (
+            f"⚠️ **Metadata Fix Approval Needed**\n\n"
+            f"**Current:** `{current_title}`\n"
+            f"**Proposed:** `{new_title}`\n"
+            f"**Confidence:** `{confidence}%`\n\n"
+            f"**Reason:** Found via filename scan."
+        )
+        
+        buttons = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("✅ Approve", callback_data=f"fix_appr_yes_{uid}"),
+                InlineKeyboardButton("❌ Skip", callback_data=f"fix_appr_no_{uid}")
+            ]
+        ])
+        
+        msg = await self.client.send_message(self.status_msg.chat.id, text, reply_markup=buttons)
+        
+        try:
+            result = await asyncio.wait_for(future, timeout=300)
+        except asyncio.TimeoutError:
+            result = False
+        finally:
+            self.pending_approvals.pop(uid, None)
+            try:
+                await msg.delete()
+            except Exception:
+                pass
+                
+        return result
+
+    async def update_status_loop(self):
+        while not self.should_cancel and fix_task:
+            await asyncio.sleep(3)
+            
+            elapsed = time.time() - self.start_time
+            if self.stats["processed"] > 0:
+                rate = self.stats["processed"] / elapsed
+                remaining = self.total_items - self.stats["processed"]
+                eta = remaining / rate if rate > 0 else 0
+            else:
+                eta = 0
+            
+            eta_str = time.strftime("%H:%M:%S", time.gmtime(eta))
+            elapsed_str = time.strftime("%H:%M:%S", time.gmtime(elapsed))
+            
+            percent = (self.stats["processed"] / self.total_items * 100) if self.total_items > 0 else 0
+            bar_len = 10
+            filled = int(bar_len * percent / 100)
+            bar = "▰" * filled + "▱" * (bar_len - filled)
+            
+            text = (
+                f"**🔄 Metadata Fix in Progress**\n\n"
+                f"**Progress:** `{bar}` **{percent:.1f}%**\n"
+                f"➖➖➖➖➖➖➖➖➖➖\n"
+                f"✅ **Updated:** `{self.stats['updated']}`\n"
+                f"⚠️ **Skipped:** `{self.stats['skipped']}`\n"
+                f"❌ **Errors:** `{self.stats['errors']}`\n"
+                f"🤖 **Auto Fixed:** `{self.stats['auto_fixed']}`\n"
+                f"⏳ **Pending Approval:** `{self.stats['manual_pending']}`\n"
+                f"📥 **Processed:** `{self.stats['processed']}/{self.total_items}`\n"
+                f"➖➖➖➖➖➖➖➖➖➖\n"
+                f"⏱ **Elapsed:** `{elapsed_str}`\n"
+                f"⏳ **ETA:** `{eta_str}`\n\n"
+                f"**Currently Processing:**\n`{self.stats['current_name']}`"
+            )
+            
+            cancel_btn = InlineKeyboardMarkup([
+                [InlineKeyboardButton("❌ Cancel Operation", callback_data="cancel_fix")]
+            ])
+            
+            try:
+                await self.status_msg.edit_text(text, reply_markup=cancel_btn)
             except Exception:
                 pass
 
-        total_dbs = db.current_db_index
+@Client.on_message(filters.command("fixmetadata") & CustomFilters.owner)
+async def fix_metadata_command(client: Client, message: Message):
+    global fix_task, fixer_instance
 
-        # --- Fix Movies ---
-        if mode in ["movies", "all"] and not should_cancel:
-            for db_idx in range(1, total_dbs + 1):
-                if should_cancel: break
+    if fix_task and not fix_task.done():
+        await message.reply_text("⚠️ **Metadata fix is already running.**")
+        return
 
-                db_key = f"storage_{db_idx}"
-                database = db.dbs[db_key]
+    # Argument Parsing
+    parser = ThrowingArgumentParser(description="Metadata Fixer", add_help=False)
+    parser.add_argument("type", nargs="?", choices=["movies", "tv", "all"], default="all", help="Media type")
+    parser.add_argument("--last", type=int, help="Fix only last N items")
+    parser.add_argument("--latest", action="store_true", help="Fix only items with missing metadata")
+    parser.add_argument("--force", action="store_true", help="Overwrite existing metadata")
+    parser.add_argument("--rename", action="store_true", help="Analyze filename to detect wrong matches")
 
-                try:
-                    movie_ids = await database["movie"].distinct("_id")
-                except Exception as e:
-                    LOGGER.error(f"Failed to fetch movie IDs: {e}")
-                    continue
+    try:
+        # message.command is ['fixmetadata', 'movies', '--last', '10']
+        args = parser.parse_args(message.command[1:])
+    except ArgumentParserError as e:
+        await message.reply_text(f"❌ **Invalid Arguments:**\n`{e}`\n\n"
+                                 "**Usage:**\n"
+                                 "`/fixmetadata [movies|tv|all] [--last N] [--latest] [--force] [--rename]`")
+        return
 
-                batch_size = 100
-                for i in range(0, len(movie_ids), batch_size):
-                    if should_cancel: break
+    status_msg = await message.reply_text(
+        f"**🔄 Initializing Metadata Fix...**\n"
+        f"Type: `{args.type}`\n"
+        f"Mode: `{'Rename/Deep Scan' if args.rename else 'Refresh'}`\n"
+        f"Target: `{'Last ' + str(args.last) if args.last else 'All'}`"
+    )
 
-                    batch_ids = movie_ids[i : i + batch_size]
+    fixer_instance = MetadataFixer(client, status_msg, args)
+    fix_task = asyncio.create_task(fixer_instance.start())
 
-                    # Fetch documents for this batch
-                    cursor = database["movie"].find({"_id": {"$in": batch_ids}})
-                    movie_batch = await cursor.to_list(length=batch_size)
+@Client.on_callback_query(filters.regex("^cancel_fix$") & CustomFilters.owner)
+async def cancel_fix_callback(client: Client, callback_query: CallbackQuery):
+    global fixer_instance
+    if fixer_instance:
+        fixer_instance.should_cancel = True
+        await callback_query.answer("🛑 Cancelling...", show_alert=True)
+    else:
+        await callback_query.answer("⚠️ No active process.", show_alert=True)
 
-                    await asyncio.gather(*[process_movie_entry(db, db_idx, m, stats) for m in movie_batch])
-
-                    if time.time() - last_update_time > 2:
-                        await update_status()
-                        last_update_time = time.time()
-
-        # --- Fix TV Shows ---
-        if mode in ["tv", "all"] and not should_cancel:
-            for db_idx in range(1, total_dbs + 1):
-                if should_cancel: break
-
-                db_key = f"storage_{db_idx}"
-                database = db.dbs[db_key]
-
-                # Fetch IDs first
-                try:
-                    tv_ids = await database["tv"].distinct("_id")
-                except Exception as e:
-                    LOGGER.error(f"Failed to fetch TV IDs: {e}")
-                    continue
-
-                # Process one TV show at a time
-                for tv_id in tv_ids:
-                    if should_cancel: break
-
-                    tv = await database["tv"].find_one({"_id": tv_id})
-                    if not tv: continue
-
-                    stats["current_name"] = f"📺 Fixing Show: {tv.get('title')}"
-
-                    # 1. Fix Show Level Metadata
-                    try:
-                        title = tv.get("title")
-                        tmdb_id = tv.get("tmdb_id")
-
-                        first_season = tv.get("seasons", [])[0] if tv.get("seasons") else None
-                        first_episode = first_season["episodes"][0] if first_season and first_season.get("episodes") else None
-                        s_num = first_season.get("season_number", 1) if first_season else 1
-                        e_num = first_episode.get("episode_number", 1) if first_episode else 1
-
-                        metadata = await fetch_tv_metadata(title, s_num, e_num, "dummy")
-
-                        if metadata:
-                            show_fields = {
-                                "cast": metadata.get("cast"),
-                                "runtime": metadata.get("runtime"),
-                            }
-                            show_fields = {k: v for k, v in show_fields.items() if v is not None}
-                            if show_fields:
-                                await db.update_metadata_fields(tmdb_id, "tv", db_idx, show_fields)
-                                stats["updated"] += 1
-                            else:
-                                stats["skipped"] += 1
-                        else:
-                            stats["skipped"] += 1
-
-                        stats["processed"] += 1 # Count show itself
-
-                    except Exception as e:
-                        LOGGER.error(f"Error fixing tv show level {tv.get('title')}: {e}")
-                        stats["errors"] += 1
-                        stats["processed"] += 1
-
-                    # 2. Fix Episodes
-                    episode_data_list = []
-                    if "seasons" in tv:
-                        for season in tv["seasons"]:
-                            s_no = season.get("season_number")
-                            for episode in season.get("episodes", []):
-                                e_no = episode.get("episode_number")
-                                episode_data_list.append((s_no, e_no))
-
-                    # Process episodes in chunks to update UI frequently
-                    if episode_data_list:
-                        chunk_size = 100
-                        for i in range(0, len(episode_data_list), chunk_size):
-                            if should_cancel: break
-
-                            chunk_data = episode_data_list[i:i + chunk_size]
-
-                            # Create coroutines just before awaiting them
-                            tasks = [
-                                process_tv_episode_entry(db, db_idx, tmdb_id, title, s_no, e_no, stats)
-                                for s_no, e_no in chunk_data
-                            ]
-
-                            await asyncio.gather(*tasks)
-
-                            if time.time() - last_update_time > 2:
-                                await update_status()
-                                last_update_time = time.time()
-
-        # Final Summary
-        summary_text = (
-            f"✅ **Metadata Fix Completed!**\n\n"
-            f"📊 **Total Scanned:** `{total_items_to_process}`\n"
-            f"✅ **Successfully Updated:** `{stats['updated']}`\n"
-            f"⚠️ **Skipped (No New Data):** `{stats['skipped']}`\n"
-            f"❌ **Errors:** `{stats['errors']}`\n"
-            f"⏱ **Total Time:** `{format_time(time.time() - start_time)}`"
-        )
-
-        back_btn = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 Back to Menu", callback_data="start_fix_menu")]
-        ])
-
-        if should_cancel:
-            summary_text = (
-                "🛑 **Operation Cancelled**\n\n"
-                f"The fix process was stopped by user.\n\n"
-                f"**Processed:** `{stats['processed']}/{total_items_to_process}`\n"
-                f"⏱ **Elapsed:** `{format_time(time.time() - start_time)}`"
-            )
-
-        await status_msg.edit_text(summary_text, reply_markup=back_btn)
-
+@Client.on_callback_query(filters.regex(r"^fix_appr_(.+)") & CustomFilters.owner)
+async def approval_callback(client: Client, callback_query: CallbackQuery):
+    global fixer_instance
+    try:
+        data_parts = callback_query.data.split("_")
+        action = data_parts[2] # yes/no
+        uid = data_parts[3]
+        
+        if fixer_instance and uid in fixer_instance.pending_approvals:
+            future = fixer_instance.pending_approvals[uid]
+            if not future.done():
+                future.set_result(action == "yes")
+                await callback_query.answer("Decision recorded.")
+        else:
+            await callback_query.answer("⚠️ Request expired or not found.", show_alert=True)
+            try:
+                await callback_query.message.delete()
+            except:
+                pass
     except Exception as e:
-        LOGGER.error(f"Fatal error in fix process: {e}")
-        await status_msg.edit_text(f"❌ **Fatal Error:**\n`{e}`")
-    finally:
-        is_fixing = False
-        should_cancel = False
+        LOGGER.error(f"Approval callback error: {e}")
