@@ -211,20 +211,8 @@ async def eval_handler(client, message):
 #                   ASYNC EXECUTOR
 # ==========================================================
 async def aexec(code, client, message):
-    exec_globals = {
-        "__builtins__": __builtins__,
-        "client": client,
-        "message": message,
-        "asyncio": asyncio,
-        "os": os,
-        "sys": sys,
-        "time": time,
-    }
-
-    wrapped_code = (
-        "async def __aexec(client, message):\n"
-        + "\n".join(f"    {line}" for line in code.splitlines())
+    exec(
+        'async def __aexec(client, message): ' +
+        ''.join(f'\n {l_}' for l_ in code.split('\n'))
     )
-
-    exec(wrapped_code, exec_globals)
-    return await exec_globals["__aexec"](client, message)
+    return await locals()['__aexec'](client, message)
