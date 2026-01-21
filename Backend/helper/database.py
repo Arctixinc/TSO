@@ -67,7 +67,16 @@ class Database:
     async def disconnect(self):
         for client in self.clients.values():
             client.close()
+        self.clients.clear()
+        self.dbs.clear()
         LOGGER.info("All database connections closed.")
+
+    async def switch_db(self, new_db_name: str):
+        """Switches the active database name and reconnects."""
+        LOGGER.info(f"Switching database to: {new_db_name}")
+        await self.disconnect()
+        self.db_name = new_db_name
+        await self.connect()
 
     async def update_current_db_index(self):
         await self.dbs["tracking"]["state"].update_one(

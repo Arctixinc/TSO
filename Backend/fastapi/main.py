@@ -139,27 +139,27 @@ async def search_suggestions(
     return await search_suggestions_api(media_type, query)
 
 @app.delete("/api/media/delete")
-async def delete_media(tmdb_id: int, db_index: int, media_type: str, _: bool = Depends(require_admin)):
+async def delete_media(tmdb_id: int, db_index: int, media_type: str, _: bool = Depends(require_auth)):
     return await delete_media_api(tmdb_id, db_index, media_type)
 
 @app.put("/api/media/update")
-async def update_media(request: Request, tmdb_id: int, db_index: int, media_type: str, _: bool = Depends(require_admin)):
+async def update_media(request: Request, tmdb_id: int, db_index: int, media_type: str, _: bool = Depends(require_auth)):
     return await update_media_api(request, tmdb_id, db_index, media_type)
 
 @app.delete("/api/media/delete-quality")
-async def delete_movie_quality(tmdb_id: int, db_index: int, quality_id: str, _: bool = Depends(require_admin)):
+async def delete_movie_quality(tmdb_id: int, db_index: int, quality_id: str, _: bool = Depends(require_auth)):
     return await delete_movie_quality_api(tmdb_id, db_index, quality_id)
 
 @app.delete("/api/media/delete-tv-quality")
-async def delete_tv_quality(tmdb_id: int, db_index: int, season: int, episode: int, quality_id: str, _: bool = Depends(require_admin)):
+async def delete_tv_quality(tmdb_id: int, db_index: int, season: int, episode: int, quality_id: str, _: bool = Depends(require_auth)):
     return await delete_tv_quality_api(tmdb_id, db_index, season, episode, quality_id)
 
 @app.delete("/api/media/delete-tv-episode")
-async def delete_tv_episode(tmdb_id: int, db_index: int, season: int, episode: int, _: bool = Depends(require_admin)):
+async def delete_tv_episode(tmdb_id: int, db_index: int, season: int, episode: int, _: bool = Depends(require_auth)):
     return await delete_tv_episode_api(tmdb_id, db_index, season, episode)
 
 @app.delete("/api/media/delete-tv-season")
-async def delete_tv_season(tmdb_id: int, db_index: int, season: int, _: bool = Depends(require_admin)):
+async def delete_tv_season(tmdb_id: int, db_index: int, season: int, _: bool = Depends(require_auth)):
     return await delete_tv_season_api(tmdb_id, db_index, season)
 
 

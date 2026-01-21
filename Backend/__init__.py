@@ -9,6 +9,14 @@ StartTime = time()
 
 
 USE_DEFAULT_ID: str = None
-db = Database()  
+
+import os
+if os.path.exists("dbname.txt"):
+    with open("dbname.txt", "r") as f:
+        db_name = f.read().strip()
+else:
+    db_name = "dbFyvio"
+
+db = Database(db_name=db_name)
 
 __version__ = "2.5.0"
