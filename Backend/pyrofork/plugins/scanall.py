@@ -7,7 +7,7 @@ from Backend.config import Telegram
 from Backend.helper.custom_filter import CustomFilters
 from Backend import db
 from Backend.helper.metadata import metadata
-from Backend.helper.pyro import clean_filename
+from Backend.helper.pyro import clean_filename, get_readable_file_size
 from Backend.helper.defaulter_helper import DefaulterManager
 from Backend.logger import LOGGER
 
@@ -141,6 +141,9 @@ async def scan_all_files(client, message):
                     file_name = file.file_name or msg.caption or "Unknown"
                     cleaned_name = clean_filename(file_name)
 
+                    # Fix: Convert size to readable string as expected by Pydantic model
+                    file_size_str = get_readable_file_size(getattr(file, "file_size", 0))
+
                     # Try to get metadata
                     meta = await metadata(cleaned_name, target_channel, msg.id)
 
@@ -150,7 +153,7 @@ async def scan_all_files(client, message):
                             metadata_info=meta,
                             channel=target_channel,
                             msg_id=msg.id,
-                            size=getattr(file, "file_size", 0),
+                            size=file_size_str,
                             name=file_name
                         )
                         added += 1

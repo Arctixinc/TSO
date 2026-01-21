@@ -1,5 +1,6 @@
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from pyrogram.errors import MessageNotModified
 from Backend import db
 from Backend.helper.custom_filter import CustomFilters
 from Backend.helper.db_manager import load_db_list, add_db_to_list, remove_db_from_list
@@ -34,7 +35,10 @@ async def show_setdb_menu(client, chat_id, message_id=None):
     ]
 
     if message_id:
-        await client.edit_message_text(chat_id, message_id, text, reply_markup=InlineKeyboardMarkup(buttons))
+        try:
+            await client.edit_message_text(chat_id, message_id, text, reply_markup=InlineKeyboardMarkup(buttons))
+        except MessageNotModified:
+            pass
     else:
         await client.send_message(chat_id, text, reply_markup=InlineKeyboardMarkup(buttons))
 
